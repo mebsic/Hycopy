@@ -6,7 +6,7 @@ Open-source Hypixel recreation built using Paper and Velocity with core services
 
 This is an unofficial project. It is not affiliated with or endorsed by Hypixel Inc.
 
-## Repository Structure
+## Project Structure
 
 - `core`: Shared Paper plugin services (profiles, ranks, punishments, menus, Mongo/Redis integration, server registry, queue support).
 - `murdermystery`: Murder Mystery hub and game plugin logic.
@@ -14,7 +14,7 @@ This is an unofficial project. It is not affiliated with or endorsed by Hypixel 
 - `proxy`: Velocity proxy plugin (routing, parties, friends, chat channels, maintenance, update hooks).
 - `docker`: Local deployment stack, runtime bootstrap, config, and map storage layout.
 
-## Build Outputs
+## Building
 
 Run:
 
@@ -45,8 +45,9 @@ This builds and copies these jars into `docker/plugins/`:
    ```bash
    ./gradlew shadowAll
    ```
-2. Set secrets in `.env`.
-3. Edit non-secret runtime config in `docker/config.json`.
+2. Set secrets in `.env` (Docker Compose injects these into containers as environment variables).
+3. Optionally edit non-secret runtime settings in `docker/config.json` (for example menus/MOTD/proxy defaults).  
+   You do not need to edit `mongo.uri` or `redis.password` because entrypoints override them from `.env` when starting.
 4. Start the stack:
    ```bash
    docker compose up --build
