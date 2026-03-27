@@ -47,10 +47,7 @@ public class ScoreboardService {
             return;
         }
         Board board = boards.computeIfAbsent(player.getUniqueId(), id -> createBoard(manager, title));
-        if (!board.title.equals(title)) {
-            board.objective.setDisplayName(title);
-            board.title = title;
-        }
+        applyTitle(board, title);
 
         List<String> safe = lines == null ? new ArrayList<>() : new ArrayList<>(lines);
         if (safe.size() > MAX_LINES) {
@@ -74,10 +71,22 @@ public class ScoreboardService {
         }
 
         board.lines = new ArrayList<>(safe);
-        player.setScoreboard(board.scoreboard);
+        assignBoardIfNeeded(player, board);
         if (tablistService != null) {
             tablistService.updateFor(player);
         }
+    }
+
+    public void updateTitle(Player player, String title) {
+        if (player == null) {
+            return;
+        }
+        Board board = boards.get(player.getUniqueId());
+        if (board == null) {
+            return;
+        }
+        applyTitle(board, title);
+        assignBoardIfNeeded(player, board);
     }
 
     private Board createBoard(ScoreboardManager manager, String title) {
@@ -135,6 +144,27 @@ public class ScoreboardService {
             }
         }
         return new String[]{prefix, suffix};
+    }
+
+    private void applyTitle(Board board, String title) {
+        if (board == null) {
+            return;
+        }
+        String safe = title == null ? "" : title;
+        if (safe.equals(board.title)) {
+            return;
+        }
+        board.objective.setDisplayName(safe);
+        board.title = safe;
+    }
+
+    private void assignBoardIfNeeded(Player player, Board board) {
+        if (player == null || board == null) {
+            return;
+        }
+        if (player.getScoreboard() != board.scoreboard) {
+            player.setScoreboard(board.scoreboard);
+        }
     }
 
     private static class Board {

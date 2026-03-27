@@ -58,3 +58,6 @@ docker/maps/*
 
 ### Docker plugins ###
 docker/plugins/*
+
+### Local upload marker ###
+.jar.upload

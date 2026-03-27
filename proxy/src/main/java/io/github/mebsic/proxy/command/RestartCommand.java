@@ -6,6 +6,7 @@ import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.ServerConnection;
 import com.velocitypowered.api.scheduler.ScheduledTask;
 import io.github.mebsic.core.util.CommonMessages;
+import io.github.mebsic.core.util.NetworkConstants;
 import io.github.mebsic.proxy.service.RankResolver;
 import io.github.mebsic.proxy.service.ServerRegistryService;
 import net.kyori.adventure.text.Component;
@@ -40,6 +41,7 @@ public class RestartCommand implements SimpleCommand {
     private static final String ROLLOUT_WEBHOOK_URL_ENV = "ROLLOUT_WEBHOOK_URL";
     private static final String ROLLOUT_WEBHOOK_TOKEN_ENV = "ROLLOUT_WEBHOOK_TOKEN";
     private static final String WARP_COMMAND = "/hub";
+    private static final String RECONNECT_HOST = "mc." + NetworkConstants.DOMAIN;
     private final ProxyServer proxy;
     private final Object plugin;
     private final RankResolver rankResolver;
@@ -264,7 +266,7 @@ public class RestartCommand implements SimpleCommand {
         restartInProgress.set(false);
         // Keep this lightweight/non-blocking so restart scheduling never stalls proxy work.
         scheduledTasks.clear();
-        Component disconnectReason = Component.text("This server is restarting!", NamedTextColor.RED);
+        Component disconnectReason = restartDisconnectReason();
         for (Player online : proxy.getAllPlayers()) {
             if (online == null) {
                 continue;
@@ -278,10 +280,16 @@ public class RestartCommand implements SimpleCommand {
                 logger.warn("Failed to disconnect {} during /restart shutdown!", online.getUsername(), ex);
             }
         }
-        triggerContainerRestart(targetService);
+        triggerContainerRestart(targetService, targetServer);
     }
 
-    private void triggerContainerRestart(String targetService) {
+    private Component restartDisconnectReason() {
+        return Component.text("This server is restarting. Please reconnect to ", NamedTextColor.RED)
+                .append(Component.text(RECONNECT_HOST, NamedTextColor.AQUA))
+                .append(Component.text("!", NamedTextColor.RED));
+    }
+
+    private void triggerContainerRestart(String targetService, String targetServer) {
         String webhookUrl = safeTrim(System.getenv(ROLLOUT_WEBHOOK_URL_ENV));
         if (webhookUrl == null || webhookUrl.isEmpty()) {
             logger.info("No rollout webhook URL configured; skipping scoped restart trigger.");
@@ -292,13 +300,19 @@ public class RestartCommand implements SimpleCommand {
             logger.warn("No restart service target resolved; skipping scoped restart trigger.");
             return;
         }
+        String serverId = safeTrim(targetServer);
+        if (serverId == null || serverId.isEmpty()) {
+            logger.warn("No restart server target resolved; skipping scoped restart trigger.");
+            return;
+        }
 
         String token = safeTrim(System.getenv(ROLLOUT_WEBHOOK_TOKEN_ENV));
         try {
             HttpClient client = HttpClient.newBuilder()
                     .connectTimeout(Duration.ofSeconds(3))
                     .build();
-            String payload = "{\"mode\":\"restart\",\"services\":[\"" + service + "\"]}";
+            String payload = "{\"mode\":\"restart\",\"services\":[\"" + escapeJson(service) + "\"],\"serverId\":\""
+                    + escapeJson(serverId) + "\"}";
             HttpRequest.Builder builder = HttpRequest.newBuilder()
                     .uri(URI.create(webhookUrl))
                     .timeout(Duration.ofSeconds(10))
@@ -316,7 +330,10 @@ public class RestartCommand implements SimpleCommand {
                         }
                         int status = response.statusCode();
                         if (status >= 200 && status < 300) {
-                            logger.info("Triggered scoped rollout restart for {} via webhook (status {}).", service, status);
+                            logger.info("Triggered scoped rollout restart for {} ({}) via webhook (status {}).",
+                                    service,
+                                    serverId,
+                                    status);
                         } else {
                             logger.warn("Scoped rollout webhook responded with status {}: {}", status, response.body());
                         }
@@ -324,6 +341,47 @@ public class RestartCommand implements SimpleCommand {
         } catch (Exception ex) {
             logger.warn("Failed to trigger scoped rollout webhook for /restart!", ex);
         }
+    }
+
+    private String escapeJson(String value) {
+        if (value == null || value.isEmpty()) {
+            return "";
+        }
+        StringBuilder escaped = new StringBuilder(value.length() + 8);
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            switch (c) {
+                case '\\':
+                    escaped.append("\\\\");
+                    break;
+                case '"':
+                    escaped.append("\\\"");
+                    break;
+                case '\b':
+                    escaped.append("\\b");
+                    break;
+                case '\f':
+                    escaped.append("\\f");
+                    break;
+                case '\n':
+                    escaped.append("\\n");
+                    break;
+                case '\r':
+                    escaped.append("\\r");
+                    break;
+                case '\t':
+                    escaped.append("\\t");
+                    break;
+                default:
+                    if (c < 0x20) {
+                        escaped.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        escaped.append(c);
+                    }
+                    break;
+            }
+        }
+        return escaped.toString();
     }
 
     private String resolveTargetService(String targetServer) {

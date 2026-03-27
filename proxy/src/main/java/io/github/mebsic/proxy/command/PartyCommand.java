@@ -1275,8 +1275,8 @@ public class PartyCommand implements SimpleCommand {
         return null;
     }
 
-    private void sendInvalidUsage(Player player, String syntax) {
-        sendFramed(player, Component.text("Invalid usage! '" + syntax + "'", NamedTextColor.RED));
+    private void sendInvalidUsage(Player player, String ignoredSyntax) {
+        sendHelp(player);
     }
 
     private void sendNotInParty(Player player) {

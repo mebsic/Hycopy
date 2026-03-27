@@ -1192,6 +1192,11 @@ public class BuildMapConfigService {
             return true;
         }
         int selectedData = itemStack == null ? 0 : Math.max(0, itemStack.getDurability());
+        if (gameType == ServerType.MURDER_MYSTERY && selectedItem != Material.GOLD_INGOT) {
+            selectedItem = Material.GOLD_INGOT;
+            selectedData = 0;
+            player.sendMessage(ChatColor.YELLOW + "Murder Mystery drop items are stored as GOLD_INGOT.");
+        }
         String mapWorld = safeString(worldDirectory);
         if (mapWorld.isEmpty() && player.getWorld() != null) {
             mapWorld = safeString(player.getWorld().getName());

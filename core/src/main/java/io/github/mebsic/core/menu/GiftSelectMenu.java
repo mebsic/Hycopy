@@ -167,13 +167,13 @@ public class GiftSelectMenu extends Menu {
 
     private ItemStack buildRankItem(Rank rank, boolean enchanted, int costGold, int walletGold, Rank targetRank) {
         Material material = (rank == Rank.VIP || rank == Rank.VIP_PLUS) ? Material.EMERALD : Material.DIAMOND;
-        String titleColor = (rank == Rank.VIP || rank == Rank.VIP_PLUS) ? ChatColor.GREEN.toString() : ChatColor.AQUA.toString();
+        ChatColor rankColor = (rank == Rank.VIP || rank == Rank.VIP_PLUS) ? ChatColor.GREEN : ChatColor.AQUA;
         int safeCost = Math.max(0, costGold);
         boolean canAfford = Math.max(0, walletGold) >= safeCost;
         Rank safeTargetRank = GiftSupport.safeRank(targetRank);
         boolean alreadyOwned = safeTargetRank.isAtLeast(rank);
         List<String> lore = buildRankLore(rank, safeCost, canAfford, alreadyOwned);
-        ItemStack item = item(material, titleColor + GiftSupport.displayRank(rank) + " Rank", lore);
+        ItemStack item = item(material, GiftSupport.displayRank(rank) + rankColor + " Rank", lore);
         if (!enchanted) {
             return item;
         }
@@ -183,7 +183,7 @@ public class GiftSelectMenu extends Menu {
     private List<String> buildRankLore(Rank rank, int costGold, boolean canAfford, boolean alreadyOwned) {
         List<String> lore = new ArrayList<String>();
         if (rank == Rank.VIP) {
-            lore.add(GiftSupport.displayRankWithColoredPlus(Rank.VIP, ChatColor.GRAY) + " provides basic perks which");
+            lore.add(ChatColor.GRAY + "VIP provides basic perks which");
             lore.add(ChatColor.GRAY + "improve the Hypixel experience!");
             lore.add("");
             lore.add(perkLine("Chat Prefix: " + ChatColor.GREEN + "[VIP]"));
@@ -194,9 +194,7 @@ public class GiftSelectMenu extends Menu {
             lore.add(perkLine("/fw Command"));
             lore.add(perkLine("[Website] Avatar Frame"));
         } else if (rank == Rank.VIP_PLUS) {
-            lore.add(GiftSupport.displayRankWithColoredPlus(Rank.VIP_PLUS, ChatColor.GRAY)
-                    + " contains every perk from "
-                    + GiftSupport.displayRankWithColoredPlus(Rank.VIP, ChatColor.GRAY));
+            lore.add(ChatColor.GRAY + "VIP+ contains every perk from VIP");
             lore.add(ChatColor.GRAY + "and then more!");
             lore.add("");
             lore.add(perkLine("Chat Prefix: " + ChatColor.GREEN + "[VIP" + ChatColor.GOLD + "+" + ChatColor.GREEN + "]"));
@@ -207,10 +205,8 @@ public class GiftSelectMenu extends Menu {
             lore.add(perkLine("Game Replays"));
             lore.add(perkLine("Housing Mailbox"));
         } else if (rank == Rank.MVP) {
-            lore.add(GiftSupport.displayRankWithColoredPlus(Rank.MVP, ChatColor.GRAY)
-                    + " contains every perk from "
-                    + GiftSupport.displayRankWithColoredPlus(Rank.VIP, ChatColor.GRAY));
-            lore.add(ChatColor.GRAY + "and " + GiftSupport.displayRankWithColoredPlus(Rank.VIP_PLUS, ChatColor.GRAY) + ", and then more!");
+            lore.add(ChatColor.GRAY + "MVP contains every perk from VIP");
+            lore.add(ChatColor.GRAY + "and VIP+, and then more!");
             lore.add("");
             lore.add(perkLine("Chat Prefix: " + ChatColor.AQUA + "[MVP]"));
             lore.add(perkLine("Name Color: " + ChatColor.AQUA + "AQUA"));
@@ -220,14 +216,8 @@ public class GiftSelectMenu extends Menu {
             lore.add(perkLine("Game Replays"));
             lore.add(perkLine("Housing Mailbox"));
         } else if (rank == Rank.MVP_PLUS) {
-            lore.add(GiftSupport.displayRankWithColoredPlus(Rank.MVP_PLUS, ChatColor.GRAY)
-                    + " contains every perk from "
-                    + GiftSupport.displayRankWithColoredPlus(Rank.VIP, ChatColor.GRAY)
-                    + ",");
-            lore.add(GiftSupport.displayRankWithColoredPlus(Rank.VIP_PLUS, ChatColor.GRAY)
-                    + " and "
-                    + GiftSupport.displayRankWithColoredPlus(Rank.MVP, ChatColor.GRAY)
-                    + ", and then more!");
+            lore.add(ChatColor.GRAY + "MVP+ contains every perk from VIP,");
+            lore.add(ChatColor.GRAY + "VIP+ and MVP, and then more!");
             lore.add("");
             lore.add(perkLine("Chat Prefix: " + ChatColor.AQUA + "[MVP" + ChatColor.RED + "+" + ChatColor.AQUA + "]"));
             lore.add(perkLine("Name Color: " + ChatColor.AQUA + "AQUA"));
@@ -251,11 +241,8 @@ public class GiftSelectMenu extends Menu {
 
     private ItemStack buildMvpPlusPlusItem() {
         List<String> lore = new ArrayList<String>();
-        lore.add(GiftSupport.displayRankWithColoredPlus(Rank.MVP_PLUS_PLUS, ChatColor.GRAY) + " is an exclusive Rank Upgrade");
-        lore.add(ChatColor.GRAY + "to your existing "
-                + GiftSupport.displayRankWithColoredPlus(Rank.MVP_PLUS, ChatColor.GRAY)
-                + " Rank. "
-                + GiftSupport.displayRankWithColoredPlus(Rank.MVP_PLUS_PLUS, ChatColor.GRAY));
+        lore.add(ChatColor.GRAY + "MVP++ is an exclusive Rank Upgrade");
+        lore.add(ChatColor.GRAY + "to your existing MVP++ Rank. MVP++");
         lore.add(ChatColor.GRAY + "allows access to some very useful");
         lore.add(ChatColor.GRAY + "commands and is the best way to");
         lore.add(ChatColor.GRAY + "support the Hypixel Server.");
@@ -263,7 +250,7 @@ public class GiftSelectMenu extends Menu {
         lore.add(ChatColor.GRAY + "you buy 30 days, then 90 days, you");
         lore.add(ChatColor.GRAY + "would have a total of 120 days.");
         lore.add(ChatColor.YELLOW + "Click to browse perks and durations!");
-        return GiftSupport.addGlow(item(Material.GOLD_INGOT, ChatColor.GOLD + "MVP++", lore));
+        return GiftSupport.addGlow(item(Material.GOLD_INGOT, ChatColor.GOLD + "MVP" + ChatColor.RED + "++", lore));
     }
 
     private String perkLine(String text) {

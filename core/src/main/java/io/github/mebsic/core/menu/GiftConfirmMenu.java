@@ -169,6 +169,7 @@ public class GiftConfirmMenu extends Menu {
         );
         if (!requestService.queue(request)) {
             sender.sendMessage(ChatColor.RED + "That player already has a pending gift request!");
+            sender.closeInventory();
             return;
         }
         if (!scheduleDecisionBookDelivery(sender, targetProfile, requestService, request)) {
@@ -210,7 +211,11 @@ public class GiftConfirmMenu extends Menu {
         Rank previousRank = GiftSupport.safeRank(targetProfile.getRank());
         boolean eligible = previousRank == Rank.MVP_PLUS || previousRank == Rank.MVP_PLUS_PLUS;
         if (!eligible) {
-            sender.sendMessage(ChatColor.RED + "That player must be MVP+ or MVP++ to receive this gift!");
+            sender.sendMessage(ChatColor.RED + "That player must be "
+                    + GiftSupport.buildGiftRankText(Rank.MVP_PLUS, null)
+                    + ChatColor.RED + " or "
+                    + GiftSupport.buildGiftRankText(Rank.MVP_PLUS_PLUS, null)
+                    + ChatColor.RED + " to receive this gift!");
             return;
         }
 
@@ -236,6 +241,7 @@ public class GiftConfirmMenu extends Menu {
         );
         if (!requestService.queue(request)) {
             sender.sendMessage(ChatColor.RED + "That player already has a pending gift request!");
+            sender.closeInventory();
             return;
         }
         if (!scheduleDecisionBookDelivery(sender, targetProfile, requestService, request)) {

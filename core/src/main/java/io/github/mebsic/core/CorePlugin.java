@@ -479,8 +479,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
         ensureFriendDocumentAsync(player.getUniqueId(), player.getName());
         enforceAdventureMode(player.getGameMode(), player);
         applyHubFlightState(player);
-        scheduleHubFlightReapply(player.getUniqueId(), 2L);
-        scheduleHubFlightReapply(player.getUniqueId(), 20L);
+        applyHubJoinVelocity(player);
     }
 
     private void forceHotbarSlotOne(Player player) {
@@ -826,19 +825,23 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
         if (profile == null) {
             return;
         }
-        Bukkit.getScheduler().runTask(this, () -> {
+        Runnable applyLoadedProfileState = () -> {
             Player player = Bukkit.getPlayer(profile.getUuid());
             if (player == null) {
                 return;
             }
             applyHubFlightState(player, profile);
-            scheduleHubFlightReapply(profile.getUuid(), 2L);
             applyHubSpeedState(player, profile.getRank());
             if (hubItemListener != null) {
                 hubItemListener.applyProfileVisibility(profile);
             }
             refreshBuildTablist();
-        });
+        };
+        if (Bukkit.isPrimaryThread()) {
+            applyLoadedProfileState.run();
+            return;
+        }
+        Bukkit.getScheduler().runTask(this, applyLoadedProfileState);
     }
 
     @Override
@@ -991,37 +994,39 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
         if (player == null || !isHubServer()) {
             return;
         }
-        Rank rank = profile == null ? Rank.DEFAULT : profile.getRank();
-        if (rank == null) {
-            rank = Rank.DEFAULT;
-        }
-        boolean enabled = profile != null && profile.isFlightEnabled() && rank.isAtLeast(Rank.VIP);
+        boolean enabled = isHubFlightEnabled(profile);
         player.setAllowFlight(enabled);
         if (!enabled) {
             player.setFlying(false);
             return;
         }
         player.setFlying(true);
-        if (!player.isOnGround()) {
-            Vector velocity = player.getVelocity();
-            if (velocity != null && velocity.getY() < 0.0d) {
-                player.setVelocity(new Vector(velocity.getX(), 0.0d, velocity.getZ()));
-            }
+        Vector velocity = player.getVelocity();
+        if (velocity != null) {
+            player.setVelocity(new Vector(velocity.getX(), Math.max(0.0d, velocity.getY()), velocity.getZ()));
         }
     }
 
-    private void scheduleHubFlightReapply(UUID uuid, long delayTicks) {
-        if (uuid == null || !isHubServer()) {
+    private void applyHubJoinVelocity(Player player) {
+        if (player == null || !isHubServer()) {
             return;
         }
-        long safeDelay = Math.max(1L, delayTicks);
-        Bukkit.getScheduler().runTaskLater(this, () -> {
-            Player player = Bukkit.getPlayer(uuid);
-            if (player == null || !player.isOnline()) {
-                return;
-            }
-            applyHubFlightState(player);
-        }, safeDelay);
+        Vector velocity = player.getVelocity();
+        if (velocity == null) {
+            return;
+        }
+        player.setVelocity(new Vector(velocity.getX(), Math.max(0.0d, velocity.getY()), velocity.getZ()));
+    }
+
+    private boolean isHubFlightEnabled(Profile profile) {
+        if (profile == null) {
+            return false;
+        }
+        Rank rank = profile.getRank();
+        if (rank == null) {
+            rank = Rank.DEFAULT;
+        }
+        return profile.isFlightEnabled() && rank.isAtLeast(Rank.VIP);
     }
 
     private void applyHubSpeedState(Player player, Rank rank) {

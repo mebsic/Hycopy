@@ -5,6 +5,7 @@ import io.github.mebsic.core.menu.GiftSupport;
 import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.core.model.Rank;
 import io.github.mebsic.core.service.GiftDecisionHandler;
+import io.github.mebsic.core.service.GiftRequestService;
 import io.github.mebsic.core.util.NetworkConstants;
 import net.md_5.bungee.chat.ComponentSerializer;
 import net.md_5.bungee.api.chat.BaseComponent;
@@ -63,12 +64,6 @@ public class GiftDecisionBookPrompt extends InteractiveBookPrompt {
                 return jsonBook;
             }
         }
-
-        BookMeta fallbackMeta = (BookMeta) book.getItemMeta();
-        if (fallbackMeta != null) {
-            fallbackMeta.setPages(buildFallbackPageText(plugin));
-            book.setItemMeta(fallbackMeta);
-        }
         return book;
     }
 
@@ -80,6 +75,68 @@ public class GiftDecisionBookPrompt extends InteractiveBookPrompt {
     @Override
     public void onNo(CorePlugin plugin, Player viewer) {
         GiftDecisionHandler.decline(plugin, viewer);
+    }
+
+    @Override
+    public void onCancel(CorePlugin plugin, UUID viewerUuid) {
+        if (plugin == null || viewerUuid == null) {
+            return;
+        }
+        GiftRequestService service = plugin.getGiftRequestService();
+        if (service == null) {
+            return;
+        }
+        GiftRequestService.GiftRequest request = service.remove(viewerUuid);
+        if (request == null) {
+            return;
+        }
+
+        String rankDisplay = GiftSupport.buildGiftRankText(request.getGiftedRank(), null);
+        String senderDurationDisplay = formatSenderExpiryDuration(request.getGiftedRank(), request.getMvpPlusPlusDays());
+        String receiverDurationDisplay = formatReceiverExpiryDuration(request.getGiftedRank(), request.getMvpPlusPlusDays());
+
+        Player receiver = Bukkit.getPlayer(viewerUuid);
+        if (receiver != null && receiver.isOnline()) {
+            Profile senderProfile = plugin.getProfile(request.getGifterUuid());
+            String senderDisplay = GiftSupport.buildTargetNameWithRankColor(senderProfile, request.getGifterName());
+            receiver.sendMessage(ChatColor.RED + "The gift from "
+                    + senderDisplay
+                    + ChatColor.RED + " for "
+                    + rankDisplay
+                    + receiverDurationDisplay
+                    + ChatColor.RED + " has expired!");
+        }
+
+        Player gifter = request.getGifterUuid() == null ? null : Bukkit.getPlayer(request.getGifterUuid());
+        if (gifter == null || !gifter.isOnline()) {
+            return;
+        }
+        Profile receiverProfile = plugin.getProfile(viewerUuid);
+        String receiverDisplay = GiftSupport.buildTargetNameWithRankColor(receiverProfile, request.getTargetName());
+        gifter.sendMessage(ChatColor.RED + "Your gift to "
+                + receiverDisplay
+                + ChatColor.RED + " for "
+                + rankDisplay
+                + senderDurationDisplay
+                + ChatColor.RED + " has expired!");
+    }
+
+    private String formatSenderExpiryDuration(Rank rank, Integer mvpPlusPlusDays) {
+        Rank safeRank = GiftSupport.safeRank(rank);
+        int safeDays = mvpPlusPlusDays == null ? 0 : Math.max(0, mvpPlusPlusDays);
+        if (safeRank != Rank.MVP_PLUS_PLUS || safeDays <= 0) {
+            return "";
+        }
+        return ChatColor.RED + " for " + ChatColor.GOLD + safeDays + " Days";
+    }
+
+    private String formatReceiverExpiryDuration(Rank rank, Integer mvpPlusPlusDays) {
+        Rank safeRank = GiftSupport.safeRank(rank);
+        int safeDays = mvpPlusPlusDays == null ? 0 : Math.max(0, mvpPlusPlusDays);
+        if (safeRank != Rank.MVP_PLUS_PLUS || safeDays <= 0) {
+            return "";
+        }
+        return ChatColor.GOLD + " " + safeDays + " Days";
     }
 
     private BaseComponent[] buildPage(CorePlugin plugin, String token) {
@@ -94,39 +151,41 @@ public class GiftDecisionBookPrompt extends InteractiveBookPrompt {
         addLegacy(root, ChatColor.BLACK + "!\n");
         addLegacy(root, ChatColor.BLACK + "Will you accept?\n\n");
 
-        TextComponent yes = new TextComponent(buildIndentedChoice(
-                ChatColor.GREEN + "" + ChatColor.BOLD + ChatColor.UNDERLINE + "YES"
-        ));
-        yes.setColor(net.md_5.bungee.api.ChatColor.GREEN);
-        yes.setBold(true);
-        yes.setUnderlined(true);
-        yes.setItalic(false);
-        yes.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, buildDecisionCommand(token, true)));
-        yes.setHoverEvent(new HoverEvent(
+        TextComponent yes = new TextComponent("");
+        yes.addExtra(new TextComponent(buildChoicePadding()));
+        TextComponent yesLabel = new TextComponent("YES");
+        yesLabel.setColor(net.md_5.bungee.api.ChatColor.GREEN);
+        yesLabel.setBold(true);
+        yesLabel.setUnderlined(true);
+        yesLabel.setItalic(false);
+        yesLabel.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, buildDecisionCommand(token, true)));
+        yesLabel.setHoverEvent(new HoverEvent(
                 HoverEvent.Action.SHOW_TEXT,
                 new BaseComponent[] {new TextComponent(ChatColor.GREEN + "Click here to accept the gift!")}
         ));
+        yes.addExtra(yesLabel);
         root.addExtra(yes);
-        root.addExtra(new TextComponent("\n"));
+        root.addExtra(new TextComponent("\n\n"));
 
-        TextComponent no = new TextComponent(buildIndentedChoice(
-                ChatColor.RED + "" + ChatColor.BOLD + ChatColor.UNDERLINE + "NO"
-        ));
-        no.setColor(net.md_5.bungee.api.ChatColor.RED);
-        no.setBold(true);
-        no.setUnderlined(true);
-        no.setItalic(false);
-        no.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, buildDecisionCommand(token, false)));
-        no.setHoverEvent(new HoverEvent(
+        TextComponent no = new TextComponent("");
+        no.addExtra(new TextComponent(buildChoicePadding()));
+        TextComponent noLabel = new TextComponent("NO");
+        noLabel.setColor(net.md_5.bungee.api.ChatColor.RED);
+        noLabel.setBold(true);
+        noLabel.setUnderlined(true);
+        noLabel.setItalic(false);
+        noLabel.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, buildDecisionCommand(token, false)));
+        noLabel.setHoverEvent(new HoverEvent(
                 HoverEvent.Action.SHOW_TEXT,
                 new BaseComponent[] {new TextComponent(ChatColor.RED + "Click here to decline the gift!")}
         ));
+        no.addExtra(noLabel);
         root.addExtra(no);
         root.addExtra(new TextComponent("\n\n"));
 
-        addLegacy(root, ChatColor.BLACK + "Issues? Contact the Help Desk at\n\n");
+        addLegacy(root, ChatColor.BLACK + "Issues? Contact the Help Desk at\n");
         TextComponent support = new TextComponent(
-                ChatColor.LIGHT_PURPLE + "" + ChatColor.BOLD + ChatColor.UNDERLINE + supportDomain
+                ChatColor.RESET + "" + ChatColor.LIGHT_PURPLE + ChatColor.BOLD + ChatColor.UNDERLINE + supportDomain
         );
         support.setColor(net.md_5.bungee.api.ChatColor.LIGHT_PURPLE);
         support.setBold(true);
@@ -162,12 +221,11 @@ public class GiftDecisionBookPrompt extends InteractiveBookPrompt {
         return PROMPT_COMMAND + " " + safeToken + " " + (yes ? "yes" : "no");
     }
 
-    private String buildIndentedChoice(String text) {
+    private String buildChoicePadding() {
         StringBuilder builder = new StringBuilder();
         for (int i = 0; i < INDENT_SPACES; i++) {
             builder.append(' ');
         }
-        builder.append(text == null ? "" : text);
         return builder.toString();
     }
 
@@ -288,18 +346,6 @@ public class GiftDecisionBookPrompt extends InteractiveBookPrompt {
             fallback = method;
         }
         return fallback;
-    }
-
-    private String buildFallbackPageText(CorePlugin plugin) {
-        String gifterDisplay = resolveGifterDisplay(plugin);
-        String rankDisplay = GiftSupport.buildGiftRankText(giftedRank, mvpPlusPlusDays);
-        String supportDomain = "support." + NetworkConstants.DOMAIN;
-        return gifterDisplay + ChatColor.BLACK + " wants to gift you " + rankDisplay + ChatColor.BLACK + "!\n"
-                + ChatColor.BLACK + "Will you accept?\n\n"
-                + buildIndentedChoice(ChatColor.GREEN + "" + ChatColor.BOLD + ChatColor.UNDERLINE + "YES") + "\n"
-                + buildIndentedChoice(ChatColor.RED + "" + ChatColor.BOLD + ChatColor.UNDERLINE + "NO") + "\n\n"
-                + ChatColor.BLACK + "Issues? Contact the Help Desk at\n\n"
-                + ChatColor.LIGHT_PURPLE + "" + ChatColor.BOLD + ChatColor.UNDERLINE + supportDomain;
     }
 
     private Material resolveWrittenBookMaterial() {

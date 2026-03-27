@@ -1,6 +1,7 @@
 package io.github.mebsic.game.map;
 
 import org.bukkit.Location;
+import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -10,6 +11,7 @@ public class GameMap {
     private final String displayName;
     private final List<Location> spawnPoints;
     private final List<Location> dropItemSpawns;
+    private final List<ItemStack> dropItemStacks;
     private final boolean nightTime;
 
     public GameMap(String name, boolean nightTime) {
@@ -22,6 +24,7 @@ public class GameMap {
         this.nightTime = nightTime;
         this.spawnPoints = new ArrayList<>();
         this.dropItemSpawns = new ArrayList<>();
+        this.dropItemStacks = new ArrayList<>();
     }
 
     public String getName() {
@@ -38,6 +41,10 @@ public class GameMap {
 
     public List<Location> getDropItemSpawns() {
         return dropItemSpawns;
+    }
+
+    public List<ItemStack> getDropItemStacks() {
+        return dropItemStacks;
     }
 
     public boolean isNightTime() {

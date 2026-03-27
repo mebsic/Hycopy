@@ -12,6 +12,7 @@ import io.github.mebsic.core.store.MapConfigStore;
 import io.github.mebsic.core.util.CommonMessages;
 import io.github.mebsic.core.util.GameRewardUtil;
 import io.github.mebsic.core.util.HubMessageUtil;
+import io.github.mebsic.core.util.ScoreboardTitleAnimator;
 import io.github.mebsic.core.util.ServerNameFormatUtil;
 import io.github.mebsic.game.map.GameMap;
 import io.github.mebsic.game.model.GamePlayer;
@@ -76,6 +77,7 @@ public class GameManager {
     private final Map<UUID, GamePlayer> players;
     private final Map<UUID, LinkedHashMap<String, Integer>> roundRewardSummary;
     private final AtomicBoolean mapConfigReloadQueued;
+    private final Map<UUID, ScoreboardTitleAnimator> scoreboardTitleAnimators;
 
     private GameState state;
     private Location lobby;
@@ -111,6 +113,7 @@ public class GameManager {
         this.players = new HashMap<>();
         this.roundRewardSummary = new HashMap<>();
         this.mapConfigReloadQueued = new AtomicBoolean(false);
+        this.scoreboardTitleAnimators = new HashMap<>();
         this.state = GameState.WAITING;
         publishStateToCore();
         this.joinLockedForRestart = false;
@@ -421,6 +424,7 @@ public class GameManager {
             onAlivePlayerQuitInGame(player, gp);
         }
         players.remove(player.getUniqueId());
+        scoreboardTitleAnimators.remove(player.getUniqueId());
         scoreboardService.remove(player);
         if (bossBarService != null) {
             bossBarService.remove(player);
@@ -1461,7 +1465,21 @@ public class GameManager {
         }
     }
 
+    public void updateAnimatedScoreboardTitles() {
+        for (UUID uuid : players.keySet()) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player == null) {
+                continue;
+            }
+            scoreboardService.updateTitle(player, getScoreboardTitle(player));
+        }
+    }
+
     public void updateScoreboard(Player player) {
+        updateScoreboard(player, getScoreboardTitle(player));
+    }
+
+    private void updateScoreboard(Player player, String title) {
         GamePlayer gp = players.get(player.getUniqueId());
         List<String> lines = new ArrayList<>();
         if (state == GameState.WAITING || state == GameState.STARTING) {
@@ -1480,13 +1498,42 @@ public class GameManager {
                 appendDefaultInGameScoreboardLines(lines);
             }
         }
-        scoreboardService.update(player, getScoreboardTitle(), lines);
+        scoreboardService.update(player, title, lines);
     }
 
     protected String getScoreboardTitle() {
+        return ChatColor.YELLOW.toString() + ChatColor.BOLD + resolveScoreboardGameTypeTitle();
+    }
+
+    private String getScoreboardTitle(Player player) {
+        if (player == null) {
+            return getScoreboardTitle();
+        }
+        ScoreboardTitleAnimator animator = scoreboardTitleAnimators.computeIfAbsent(
+                player.getUniqueId(),
+                id -> new ScoreboardTitleAnimator(resolveScoreboardGameTypeTitle())
+        );
+        return animator.resolve(shouldAnimateScoreboardTitle());
+    }
+
+    private String resolveScoreboardGameTypeTitle() {
         ServerType type = plugin == null ? ServerType.UNKNOWN : plugin.getServerType();
-        String title = type == null ? "GAME" : type.getGameTypeDisplayName();
-        return ChatColor.YELLOW.toString() + ChatColor.BOLD + title;
+        String title = type == null ? "" : type.getGameTypeDisplayName();
+        if (title == null || title.trim().isEmpty()) {
+            return "GAME";
+        }
+        return title;
+    }
+
+    private boolean shouldAnimateScoreboardTitle() {
+        ServerType type = plugin == null ? ServerType.UNKNOWN : plugin.getServerType();
+        if (type != null && type.isHub()) {
+            return true;
+        }
+        if (type != null && type.isGame()) {
+            return state == GameState.WAITING || state == GameState.STARTING;
+        }
+        return false;
     }
 
     protected String getPostGameFrameLine() {

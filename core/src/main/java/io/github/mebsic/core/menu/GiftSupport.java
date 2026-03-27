@@ -43,44 +43,19 @@ public final class GiftSupport {
             return "";
         }
         switch (rank) {
+            case VIP:
+                return ChatColor.GREEN + "VIP";
             case VIP_PLUS:
-                return "VIP+";
+                return ChatColor.GREEN + "VIP" + ChatColor.GOLD + "+";
+            case MVP:
+                return ChatColor.AQUA + "MVP";
             case MVP_PLUS:
-                return "MVP+";
+                return ChatColor.AQUA + "MVP" + ChatColor.RED + "+";
             case MVP_PLUS_PLUS:
-                return "MVP++";
+                return ChatColor.GOLD + "MVP" + ChatColor.RED + "++";
             default:
                 return rank.name();
         }
-    }
-
-    public static String displayRankWithColoredPlus(Rank rank, ChatColor trailingColor) {
-        Rank safeRank = safeRank(rank);
-        String text;
-        switch (safeRank) {
-            case VIP:
-                text = ChatColor.GREEN + "VIP";
-                break;
-            case VIP_PLUS:
-                text = ChatColor.GREEN + "VIP" + ChatColor.GOLD + "+" + ChatColor.GREEN;
-                break;
-            case MVP:
-                text = ChatColor.AQUA + "MVP";
-                break;
-            case MVP_PLUS:
-                text = ChatColor.AQUA + "MVP" + ChatColor.RED + "+" + ChatColor.AQUA;
-                break;
-            case MVP_PLUS_PLUS:
-                text = ChatColor.GOLD + "MVP" + ChatColor.RED + "++" + ChatColor.GOLD;
-                break;
-            default:
-                text = safeRank.getColor() + displayRank(safeRank);
-                break;
-        }
-        if (trailingColor == null) {
-            return text;
-        }
-        return text + trailingColor;
     }
 
     public static String buildTargetDisplayName(Profile profile, String fallbackName) {

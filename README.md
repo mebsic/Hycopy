@@ -22,12 +22,7 @@ Run:
 ./gradlew shadowAll
 ```
 
-This builds and copies these jars into `docker/plugins/`:
-
-- `Hypixel.jar`
-- `MurderMystery.jar`
-- `HypixelBuild.jar`
-- `HypixelProxy.jar`
+This builds shaded plugin artifacts and copies both live (`.jar`) and upload-safe (`.jar.upload`) files into `docker/plugins/`.
 
 ## Stack
 
@@ -89,8 +84,8 @@ Use strong unique values locally and never commit real secrets.
 
 ## Documentation
 
-- [Docker bootstrap guide](docker/README.md)
-- [Maps directory contract](docker/maps/README.md)
+- [Getting Started with Docker](https://github.com/mebsic/Hypixel/wiki/Getting-Started-with-Docker)
+- [Creating and Configuring Maps](https://github.com/mebsic/Hypixel/wiki/Creating-and-Configuring-Maps)
 
 ## License
 

@@ -4,8 +4,10 @@ import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.core.server.ServerType;
 import io.github.mebsic.core.service.CoreApi;
 import io.github.mebsic.core.util.NetworkConstants;
+import io.github.mebsic.core.util.ScoreboardTitleAnimator;
 import io.github.mebsic.core.util.ServerNameFormatUtil;
 import io.github.mebsic.murdermystery.stats.MurderMysteryStats;
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 import org.bukkit.scoreboard.DisplaySlot;
@@ -45,8 +47,14 @@ public class HubScoreboardService {
     }
 
     public void remove(Player player) {
+        if (player == null) {
+            return;
+        }
         boards.remove(player.getUniqueId());
-        player.setScoreboard(player.getServer().getScoreboardManager().getNewScoreboard());
+        ScoreboardManager manager = player.getServer().getScoreboardManager();
+        if (manager != null) {
+            player.setScoreboard(manager.getNewScoreboard());
+        }
     }
 
     public void update(Player player) {
@@ -54,12 +62,28 @@ public class HubScoreboardService {
             return;
         }
         List<String> lines = buildLines(player);
-        update(player, ChatColor.YELLOW.toString() + ChatColor.BOLD + serverType.getGameTypeDisplayName(), lines);
+        update(player, lines);
     }
 
     public void updateAll(Iterable<? extends Player> players) {
         for (Player player : players) {
             update(player);
+        }
+    }
+
+    public void updateAnimatedTitle() {
+        for (UUID uuid : new ArrayList<>(boards.keySet())) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player == null || !player.isOnline()) {
+                continue;
+            }
+            Board board = boards.get(uuid);
+            if (board == null) {
+                continue;
+            }
+            String title = board.titleAnimator.resolve(serverType.isHub());
+            applyTitle(board, title);
+            assignBoardIfNeeded(player, board);
         }
     }
 
@@ -91,16 +115,14 @@ public class HubScoreboardService {
         return numberFormat.format(Math.max(0, value));
     }
 
-    private void update(Player player, String title, List<String> lines) {
+    private void update(Player player, List<String> lines) {
         ScoreboardManager manager = player.getServer().getScoreboardManager();
         if (manager == null) {
             return;
         }
-        Board board = boards.computeIfAbsent(player.getUniqueId(), id -> createBoard(manager, title));
-        if (!board.title.equals(title)) {
-            board.objective.setDisplayName(title);
-            board.title = title;
-        }
+        Board board = boards.computeIfAbsent(player.getUniqueId(), id -> createBoard(manager));
+        String title = board.titleAnimator.resolve(serverType.isHub());
+        applyTitle(board, title);
 
         List<String> safe = new ArrayList<>(lines);
         if (safe.size() > MAX_LINES) {
@@ -122,10 +144,12 @@ public class HubScoreboardService {
             }
         }
         board.lines = new ArrayList<>(safe);
-        player.setScoreboard(board.scoreboard);
+        assignBoardIfNeeded(player, board);
     }
 
-    private Board createBoard(ScoreboardManager manager, String title) {
+    private Board createBoard(ScoreboardManager manager) {
+        ScoreboardTitleAnimator titleAnimator = new ScoreboardTitleAnimator(serverType.getGameTypeDisplayName());
+        String title = titleAnimator.resolve(serverType.isHub());
         Scoreboard scoreboard = manager.getNewScoreboard();
         Objective objective = scoreboard.registerNewObjective(OBJECTIVE_NAME, "dummy");
         objective.setDisplaySlot(DisplaySlot.SIDEBAR);
@@ -136,7 +160,7 @@ public class HubScoreboardService {
             Team team = scoreboard.registerNewTeam(TEAM_PREFIX + i);
             team.addEntry(entry);
         }
-        return new Board(scoreboard, objective, title, entries);
+        return new Board(scoreboard, objective, title, entries, titleAnimator);
     }
 
     private List<String> buildEntries() {
@@ -154,6 +178,9 @@ public class HubScoreboardService {
         }
         String entry = board.entries.get(index);
         Team team = board.scoreboard.getTeam(TEAM_PREFIX + index);
+        if (team == null) {
+            return;
+        }
         String[] parts = split(text);
         team.setPrefix(parts[0]);
         team.setSuffix(parts[1]);
@@ -186,18 +213,41 @@ public class HubScoreboardService {
         return new String[] {prefix, suffix};
     }
 
+    private void applyTitle(Board board, String title) {
+        if (board == null) {
+            return;
+        }
+        String safe = title == null ? "" : title;
+        if (safe.equals(board.title)) {
+            return;
+        }
+        board.objective.setDisplayName(safe);
+        board.title = safe;
+    }
+
+    private void assignBoardIfNeeded(Player player, Board board) {
+        if (player == null || board == null) {
+            return;
+        }
+        if (player.getScoreboard() != board.scoreboard) {
+            player.setScoreboard(board.scoreboard);
+        }
+    }
+
     private static class Board {
         private final Scoreboard scoreboard;
         private final Objective objective;
         private final List<String> entries;
+        private final ScoreboardTitleAnimator titleAnimator;
         private String title;
         private List<String> lines;
 
-        private Board(Scoreboard scoreboard, Objective objective, String title, List<String> entries) {
+        private Board(Scoreboard scoreboard, Objective objective, String title, List<String> entries, ScoreboardTitleAnimator titleAnimator) {
             this.scoreboard = scoreboard;
             this.objective = objective;
             this.title = title;
             this.entries = entries;
+            this.titleAnimator = titleAnimator;
             this.lines = new ArrayList<>();
         }
     }

@@ -131,7 +131,11 @@ public class GiftMvpPlusPlusMenu extends Menu {
         Rank previousRank = GiftSupport.safeRank(targetProfile.getRank());
         boolean eligible = previousRank == Rank.MVP_PLUS || previousRank == Rank.MVP_PLUS_PLUS;
         if (!eligible) {
-            sender.sendMessage(ChatColor.RED + "That player must be MVP+ or MVP++ to receive this gift!");
+            sender.sendMessage(ChatColor.RED + "That player must be "
+                    + GiftSupport.buildGiftRankText(Rank.MVP_PLUS, null)
+                    + ChatColor.RED + " or "
+                    + GiftSupport.buildGiftRankText(Rank.MVP_PLUS_PLUS, null)
+                    + ChatColor.RED + " to receive this gift!");
             return;
         }
 
@@ -148,11 +152,13 @@ public class GiftMvpPlusPlusMenu extends Menu {
         int safeCost = Math.max(0, costGold);
         boolean canAfford = Math.max(0, walletGold) >= safeCost;
         ChatColor titleColor = canAfford ? ChatColor.GREEN : ChatColor.RED;
-        String title = titleColor + "MVP++ " + days + " DAYS" + saveSuffix(days);
+        String title = GiftSupport.buildGiftRankText(Rank.MVP_PLUS_PLUS, null)
+                + titleColor + " " + days + " DAYS" + saveSuffix(days);
         List<String> lore = new ArrayList<String>();
         lore.add(ChatColor.YELLOW + "This is a one time purchase for " + days);
         lore.add(ChatColor.YELLOW + "days of "
-                + GiftSupport.displayRankWithColoredPlus(Rank.MVP_PLUS_PLUS, ChatColor.YELLOW)
+                + GiftSupport.buildGiftRankText(Rank.MVP_PLUS_PLUS, null)
+                + ChatColor.YELLOW
                 + ", You will go back to");
         lore.add(ChatColor.AQUA + "MVP" + ChatColor.RED + "+" + ChatColor.YELLOW + " after.");
         lore.add("");

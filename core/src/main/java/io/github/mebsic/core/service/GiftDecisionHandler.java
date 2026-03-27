@@ -85,20 +85,14 @@ public final class GiftDecisionHandler {
             if (upgradedRank) {
                 plugin.setRank(target.getUniqueId(), Rank.MVP_PLUS_PLUS);
             }
-            String targetMessage = ChatColor.GREEN + gifter.getName() + " gifted you MVP++"
-                    + formatMvpPlusPlusDays(days) + ChatColor.GREEN + "!";
-            target.sendMessage(targetMessage);
             if (upgradedRank && sync != null) {
-                sync.dispatchRankUpdate(target.getUniqueId(), Rank.MVP_PLUS_PLUS, targetMessage);
+                sync.dispatchRankUpdate(target.getUniqueId(), Rank.MVP_PLUS_PLUS, null);
             }
             GiftSupport.recordGiftHistoryAsync(plugin, gifter, target, previousTargetRank, Rank.MVP_PLUS_PLUS, safeCost, days);
         } else {
             plugin.setRank(target.getUniqueId(), giftedRank);
-            String targetMessage = ChatColor.GREEN + gifter.getName() + " gifted you "
-                    + GiftSupport.displayRank(giftedRank) + ChatColor.GREEN + "!";
-            target.sendMessage(targetMessage);
             if (sync != null) {
-                sync.dispatchRankUpdate(target.getUniqueId(), giftedRank, targetMessage);
+                sync.dispatchRankUpdate(target.getUniqueId(), giftedRank, null);
             }
             GiftSupport.recordGiftHistoryAsync(plugin, gifter, target, previousTargetRank, giftedRank, safeCost, null);
         }
@@ -170,8 +164,8 @@ public final class GiftDecisionHandler {
 
         String start = ChatColor.YELLOW.toString() + ChatColor.MAGIC + "z"
                 + ChatColor.RED + ChatColor.MAGIC + "z"
-                + ChatColor.DARK_RED + ChatColor.MAGIC + "z";
-        String end = ChatColor.DARK_RED.toString() + ChatColor.MAGIC + "z"
+                + ChatColor.DARK_RED + ChatColor.MAGIC + "z" + ChatColor.DARK_RED + " ";
+        String end = " " + ChatColor.DARK_RED + ChatColor.MAGIC + "z"
                 + ChatColor.RED + ChatColor.MAGIC + "z"
                 + ChatColor.YELLOW + ChatColor.MAGIC + "z";
 
@@ -206,14 +200,6 @@ public final class GiftDecisionHandler {
     private static boolean isHubServer(CorePlugin plugin) {
         ServerType type = plugin == null ? null : plugin.getServerType();
         return type != null && type.isHub();
-    }
-
-    private static String formatMvpPlusPlusDays(Integer days) {
-        Integer safeDays = days == null ? null : Math.max(0, days);
-        if (safeDays == null || safeDays <= 0) {
-            return "";
-        }
-        return ChatColor.GOLD + " " + safeDays + " Days";
     }
 
     private static String formatBroadcastDurationSegment(Rank giftedRank, Integer mvpPlusPlusDays) {

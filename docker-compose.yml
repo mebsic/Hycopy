@@ -59,14 +59,18 @@ services:
       ROLLOUT_TOKEN: "${ROLLOUT_WEBHOOK_TOKEN:-}"
       COMPOSE_PROJECT: "${COMPOSE_PROJECT_NAME:-}"
       ROLLOUT_INCLUDE_SERVICES: "${ROLLOUT_INCLUDE_SERVICES:-velocity,build}"
-      ROLLOUT_INCLUDE_PREFIXES: "${ROLLOUT_INCLUDE_PREFIXES:-hub,game}"
-      ROLLOUT_RESTART_MODE: "${ROLLOUT_RESTART_MODE:-restart}"
+      ROLLOUT_INCLUDE_PREFIXES: "${ROLLOUT_INCLUDE_PREFIXES:-murder-mystery-hub,murder-mystery-game}"
+      ROLLOUT_RESTART_MODE: "${ROLLOUT_RESTART_MODE:-rebuild}"
       ROLLOUT_MIN_HUB_REPLICAS: "${ROLLOUT_MIN_HUB_REPLICAS:-2}"
       ROLLOUT_MIN_GAME_REPLICAS: "${ROLLOUT_MIN_GAME_REPLICAS:-2}"
+      ROLLOUT_RESTART_SERVICE_ORDER: "${ROLLOUT_RESTART_SERVICE_ORDER:-murder-mystery-hub,murder-mystery-game,build,velocity}"
       ROLLOUT_RESTART_TIMEOUT_SECONDS: "${ROLLOUT_RESTART_TIMEOUT_SECONDS:-10}"
       ROLLOUT_COMPOSE_WORKDIR: "${PWD}"
       ROLLOUT_COMPOSE_FILE: "${PWD}/docker-compose.yml"
       ROLLOUT_COMPOSE_ENV_FILE: "${PWD}/.env"
+      ROLLOUT_PROMOTE_UPLOADS: "${ROLLOUT_PROMOTE_UPLOADS:-true}"
+      ROLLOUT_PLUGIN_DIR: "/workspace/docker/plugins"
+      ROLLOUT_PLUGIN_UPLOAD_SUFFIX: ".upload"
       AUTOSCALE_ENABLED: "${AUTOSCALE_ENABLED:-true}"
       AUTOSCALE_INTERVAL_SECONDS: "${AUTOSCALE_INTERVAL_SECONDS:-60}"
       AUTOSCALE_STARTUP_GRACE_SECONDS: "${AUTOSCALE_STARTUP_GRACE_SECONDS:-60}"
@@ -93,6 +97,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./:/workspace:ro
+      - ./docker/plugins:/workspace/docker/plugins
       - "${PWD}:${PWD}:ro"
     healthcheck:
       test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8080/readyz\", timeout=2)'"]
@@ -102,7 +107,8 @@ services:
       start_period: 10s
     restart: unless-stopped
 
-  hub:
+  murder-mystery-hub:
+    image: hypixel-hub
     build:
       context: ./docker/images/paper
       args:
@@ -146,7 +152,8 @@ services:
       retries: 5
     mem_limit: 8g
 
-  game:
+  murder-mystery-game:
+    image: hypixel-game
     build:
       context: ./docker/images/paper
       args:
@@ -250,9 +257,9 @@ services:
     ports:
       - "25565:25565"
     depends_on:
-      hub:
+      murder-mystery-hub:
         condition: service_healthy
-      game:
+      murder-mystery-game:
         condition: service_healthy
     environment:
       <<: *network-env
@@ -260,6 +267,7 @@ services:
       CONFIG_SOURCE: /bootstrap/config.json
       ROLLOUT_WEBHOOK_URL: "${ROLLOUT_WEBHOOK_URL:-http://control-panel:8080/restart}"
       ROLLOUT_WEBHOOK_TOKEN: "${ROLLOUT_WEBHOOK_TOKEN:-}"
+      ROLLOUT_RESTART_MODE: "${ROLLOUT_RESTART_MODE:-rebuild}"
     volumes:
       - ./docker/proxy/velocity.toml:/server/velocity.toml
       - ./server-icon.png:/server/server-icon.png:ro

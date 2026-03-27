@@ -4,6 +4,7 @@ import http.client
 import http.server
 import json
 import os
+import re
 import secrets
 import shutil
 import socket
@@ -11,6 +12,7 @@ import subprocess
 import threading
 import time
 import urllib.parse
+import zipfile
 
 from pymongo import MongoClient, ReturnDocument
 
@@ -50,10 +52,25 @@ COMPOSE_PROJECT = os.getenv("COMPOSE_PROJECT", "").strip()
 
 RESTART_TIMEOUT_SECONDS = env_int("ROLLOUT_RESTART_TIMEOUT_SECONDS", 10, minimum=1)
 RESTART_HEALTH_WAIT_SECONDS = env_int("ROLLOUT_RESTART_HEALTH_WAIT_SECONDS", 180, minimum=5)
-INCLUDE_SERVICES = set(clean_csv(os.getenv("ROLLOUT_INCLUDE_SERVICES"), "velocity,build"))
-INCLUDE_PREFIXES = tuple(clean_csv(os.getenv("ROLLOUT_INCLUDE_PREFIXES"), "hub,game"))
+INCLUDE_SERVICES = {
+    (item or "").strip().lower()
+    for item in clean_csv(os.getenv("ROLLOUT_INCLUDE_SERVICES"), "velocity,build")
+    if (item or "").strip()
+}
+INCLUDE_PREFIXES = tuple(
+    (item or "").strip().lower()
+    for item in clean_csv(os.getenv("ROLLOUT_INCLUDE_PREFIXES"), "murder-mystery-hub,murder-mystery-game")
+    if (item or "").strip()
+)
 EXCLUDED_SERVICES = {"mongo", "redis", "control-panel"}
-RESTART_SERVICE_ORDER = tuple(clean_csv(os.getenv("ROLLOUT_RESTART_SERVICE_ORDER"), "hub,game,build,velocity"))
+RESTART_SERVICE_ORDER = tuple(
+    (item or "").strip().lower()
+    for item in clean_csv(
+        os.getenv("ROLLOUT_RESTART_SERVICE_ORDER"),
+        "murder-mystery-hub,murder-mystery-game,build,velocity",
+    )
+    if (item or "").strip()
+)
 VALID_RESTART_MODES = {"restart", "recreate", "rebuild"}
 ROLLOUT_RESTART_MODE = (os.getenv("ROLLOUT_RESTART_MODE", "restart").strip().lower() or "restart")
 if ROLLOUT_RESTART_MODE not in VALID_RESTART_MODES:
@@ -65,6 +82,15 @@ ROLLOUT_MIN_GAME_REPLICAS = env_int("ROLLOUT_MIN_GAME_REPLICAS", 2, minimum=2)
 ROLLOUT_COMPOSE_WORKDIR = os.getenv("ROLLOUT_COMPOSE_WORKDIR", "/workspace").strip()
 ROLLOUT_COMPOSE_FILE = os.getenv("ROLLOUT_COMPOSE_FILE", "/workspace/docker-compose.yml").strip()
 ROLLOUT_COMPOSE_ENV_FILE = os.getenv("ROLLOUT_COMPOSE_ENV_FILE", "/workspace/.env").strip()
+ROLLOUT_PROMOTE_UPLOADS = env_bool("ROLLOUT_PROMOTE_UPLOADS", True)
+ROLLOUT_PLUGIN_DIR = os.getenv("ROLLOUT_PLUGIN_DIR", "/workspace/docker/plugins").strip()
+ROLLOUT_PLUGIN_UPLOAD_SUFFIX = os.getenv("ROLLOUT_PLUGIN_UPLOAD_SUFFIX", ".upload").strip() or ".upload"
+PROMOTED_PLUGIN_FILENAMES = (
+    "Hypixel.jar",
+    "MurderMystery.jar",
+    "HypixelBuild.jar",
+    "HypixelProxy.jar",
+)
 
 AUTOSCALE_ENABLED = env_bool("AUTOSCALE_ENABLED", True)
 AUTOSCALE_INTERVAL_SECONDS = env_int("AUTOSCALE_INTERVAL_SECONDS", 60, minimum=5)
@@ -166,13 +192,51 @@ def detect_compose_project():
     return labels.get("com.docker.compose.project", "")
 
 
+def normalize_service_slug(value):
+    normalized = (value or "").strip().lower()
+    normalized = normalized.replace("_", "-").replace(" ", "-")
+    normalized = re.sub(r"[^a-z0-9-]+", "-", normalized)
+    normalized = re.sub(r"-{2,}", "-", normalized).strip("-")
+    return normalized
+
+
+def service_game_type_slug(game_type):
+    normalized = normalize_game_type(game_type)
+    aliases = {
+        "murdermystery": "murder-mystery",
+    }
+    alias = aliases.get(normalized, normalized)
+    slug = normalize_service_slug(alias)
+    return slug or "game-type"
+
+
+def default_game_type_service_name(game_type, kind):
+    resolved_kind = "hub" if (kind or "").strip().lower() == "hub" else "game"
+    return f"{service_game_type_slug(game_type)}-{resolved_kind}"
+
+
+def classify_service_kind(service_name):
+    normalized = normalize_service_slug(service_name)
+    if not normalized:
+        return None
+    if normalized == "hub" or normalized.endswith("-hub"):
+        return "hub"
+    if normalized == "game" or normalized.endswith("-game"):
+        return "game"
+    return None
+
+
 def is_restart_target_service(service):
-    if not service or service in EXCLUDED_SERVICES:
+    normalized = (service or "").strip().lower()
+    if not normalized or normalized in EXCLUDED_SERVICES:
         return False
-    if service in INCLUDE_SERVICES:
+    if normalized in INCLUDE_SERVICES:
         return True
     for prefix in INCLUDE_PREFIXES:
-        if service.startswith(prefix):
+        normalized_prefix = (prefix or "").strip().lower()
+        if not normalized_prefix:
+            continue
+        if normalized.startswith(normalized_prefix) or normalized.endswith(normalized_prefix):
             return True
     return False
 
@@ -257,12 +321,12 @@ def wait_for_container_ready(container_id, timeout_seconds):
 
 
 def ordered_restart_targets(targets):
-    order = {service: index for index, service in enumerate(RESTART_SERVICE_ORDER)}
+    order = {(service or "").strip().lower(): index for index, service in enumerate(RESTART_SERVICE_ORDER)}
     unknown_rank = len(order)
     return sorted(
         targets,
         key=lambda item: (
-            order.get(item.get("service", ""), unknown_rank),
+            order.get((item.get("service", "") or "").strip().lower(), order.get(classify_service_kind(item.get("service", "")), unknown_rank)),
             item.get("service", ""),
             item.get("name", ""),
         ),
@@ -289,7 +353,16 @@ def resolve_restart_targets(containers, requested_services=None):
     requested = set((service or "").strip().lower() for service in requested_services if service)
     if not requested:
         return ordered
-    return [item for item in ordered if (item.get("service", "") or "").strip().lower() in requested]
+    requested_kinds = {item for item in requested if item in {"hub", "game"}}
+    filtered = []
+    for item in ordered:
+        service = (item.get("service", "") or "").strip().lower()
+        if service in requested:
+            filtered.append(item)
+            continue
+        if classify_service_kind(service) in requested_kinds:
+            filtered.append(item)
+    return filtered
 
 
 def count_ready_service_containers(compose_project, service_name):
@@ -307,11 +380,44 @@ def count_ready_service_containers(compose_project, service_name):
     return ready
 
 
+def count_ready_kind_containers(compose_project, kind, allowed_services=None):
+    target_kind = classify_service_kind(kind)
+    if target_kind is None:
+        return 0
+
+    allowed = None
+    if allowed_services:
+        allowed = {
+            (service or "").strip()
+            for service in allowed_services
+            if isinstance(service, str) and service.strip()
+        }
+        if not allowed:
+            allowed = None
+
+    ready = 0
+    containers = list_project_containers(compose_project, include_all=True)
+    for container in containers:
+        service = (container.get("service") or "").strip()
+        if allowed is not None and service not in allowed:
+            continue
+        if classify_service_kind(service) != target_kind:
+            continue
+        try:
+            lifecycle_status, health_status = inspect_container_state(container.get("id", ""))
+        except Exception:
+            continue
+        if is_container_ready_state(lifecycle_status, health_status):
+            ready += 1
+    return ready
+
+
 def desired_service_replicas(containers, service_name):
     minimum = 1
-    if service_name == "hub":
+    service_kind = classify_service_kind(service_name)
+    if service_kind == "hub":
         minimum = ROLLOUT_MIN_HUB_REPLICAS
-    elif service_name == "game":
+    elif service_kind == "game":
         minimum = ROLLOUT_MIN_GAME_REPLICAS
 
     active = len(
@@ -404,6 +510,14 @@ def merge_requested_services(primary, secondary):
             seen.add(normalized)
             merged.append(normalized)
     return merged
+
+
+def parse_requested_server_ids(value):
+    return parse_requested_services(value)
+
+
+def merge_requested_server_ids(primary, secondary):
+    return merge_requested_services(primary, secondary)
 
 
 def stop_and_remove_container(container_id):
@@ -499,6 +613,57 @@ def run_compose_up_service(compose_project, service_name, replicas, build, force
     if result.returncode != 0:
         raise RuntimeError(f"compose up failed: {combined}")
     return combined
+
+
+def validate_uploaded_jar(path):
+    if not os.path.isfile(path):
+        return False, "file missing"
+    try:
+        size = os.path.getsize(path)
+    except OSError as exc:
+        return False, f"size check failed: {exc}"
+    if size <= 0:
+        return False, "file is empty"
+    try:
+        with zipfile.ZipFile(path, "r") as jar_file:
+            bad_entry = jar_file.testzip()
+            if bad_entry is not None:
+                return False, f"corrupt entry: {bad_entry}"
+    except zipfile.BadZipFile as exc:
+        return False, f"bad zip/jar: {exc}"
+    except Exception as exc:
+        return False, f"jar validation failed: {exc}"
+    return True, "ok"
+
+
+def promote_uploaded_plugins():
+    result = {
+        "enabled": bool(ROLLOUT_PROMOTE_UPLOADS),
+        "pluginDir": ROLLOUT_PLUGIN_DIR,
+        "uploadSuffix": ROLLOUT_PLUGIN_UPLOAD_SUFFIX,
+        "promoted": [],
+    }
+    if not ROLLOUT_PROMOTE_UPLOADS:
+        return result
+    if not ROLLOUT_PLUGIN_DIR:
+        raise RuntimeError("ROLLOUT_PLUGIN_DIR is required")
+
+    os.makedirs(ROLLOUT_PLUGIN_DIR, exist_ok=True)
+
+    for file_name in PROMOTED_PLUGIN_FILENAMES:
+        source_path = os.path.join(ROLLOUT_PLUGIN_DIR, f"{file_name}{ROLLOUT_PLUGIN_UPLOAD_SUFFIX}")
+        if not os.path.isfile(source_path):
+            continue
+
+        valid, detail = validate_uploaded_jar(source_path)
+        if not valid:
+            raise RuntimeError(f"{file_name} failed validation: {detail}")
+
+        destination_path = os.path.join(ROLLOUT_PLUGIN_DIR, file_name)
+        os.replace(source_path, destination_path)
+        result["promoted"].append(file_name)
+
+    return result
 
 
 def docker_daemon_ready():
@@ -615,6 +780,7 @@ def is_container_active(container):
 
 
 def default_policy(game_type):
+    normalized_game_type = normalize_game_type(game_type)
     min_hub = max(0, AUTOSCALE_POLICY_DEFAULT_MIN_HUB)
     min_game = max(0, AUTOSCALE_POLICY_DEFAULT_MIN_GAME)
     base_hub = max(min_hub, AUTOSCALE_POLICY_DEFAULT_BASE_HUB)
@@ -623,7 +789,7 @@ def default_policy(game_type):
     max_game = max(base_game, AUTOSCALE_POLICY_DEFAULT_MAX_GAME)
     return {
         "docType": "policy",
-        "gameType": normalize_game_type(game_type),
+        "gameType": normalized_game_type,
         "playersPerStep": AUTOSCALE_POLICY_DEFAULT_PLAYERS_PER_STEP,
         "hubPerStep": AUTOSCALE_POLICY_DEFAULT_HUB_PER_STEP,
         "gamePerStep": AUTOSCALE_POLICY_DEFAULT_GAME_PER_STEP,
@@ -633,8 +799,8 @@ def default_policy(game_type):
         "minGame": min_game,
         "maxHub": max_hub,
         "maxGame": max_game,
-        "hubService": "hub",
-        "gameService": "game",
+        "hubService": default_game_type_service_name(normalized_game_type, "hub"),
+        "gameService": default_game_type_service_name(normalized_game_type, "game"),
         "scaleUpCooldownSeconds": AUTOSCALE_SCALE_UP_COOLDOWN_SECONDS,
         "scaleDownCooldownSeconds": AUTOSCALE_SCALE_DOWN_COOLDOWN_SECONDS,
         "hysteresisPlayers": AUTOSCALE_HYSTERESIS_PLAYERS,
@@ -645,6 +811,8 @@ def default_policy(game_type):
 
 def normalize_policy(raw):
     game_type = extract_game_type(raw, "policy")
+    default_hub_service = default_game_type_service_name(game_type, "hub")
+    default_game_service = default_game_type_service_name(game_type, "game")
     players_per_step = max(1, to_int(raw.get("playersPerStep"), AUTOSCALE_POLICY_DEFAULT_PLAYERS_PER_STEP))
     hub_per_step = max(0, to_int(raw.get("hubPerStep"), AUTOSCALE_POLICY_DEFAULT_HUB_PER_STEP))
     game_per_step = max(0, to_int(raw.get("gamePerStep"), AUTOSCALE_POLICY_DEFAULT_GAME_PER_STEP))
@@ -654,8 +822,10 @@ def normalize_policy(raw):
     min_game = max(2, to_int(raw.get("minGame"), base_game))
     max_hub = max(min_hub, to_int(raw.get("maxHub"), AUTOSCALE_POLICY_DEFAULT_MAX_HUB))
     max_game = max(min_game, to_int(raw.get("maxGame"), AUTOSCALE_POLICY_DEFAULT_MAX_GAME))
-    hub_service = (raw.get("hubService") or "hub").strip() or "hub"
-    game_service = (raw.get("gameService") or "game").strip() or "game"
+    raw_hub_service = (raw.get("hubService") or "").strip()
+    raw_game_service = (raw.get("gameService") or "").strip()
+    hub_service = raw_hub_service if raw_hub_service and raw_hub_service.lower() != "hub" else default_hub_service
+    game_service = raw_game_service if raw_game_service and raw_game_service.lower() != "game" else default_game_service
     up_cd = max(0, to_int(raw.get("scaleUpCooldownSeconds"), AUTOSCALE_SCALE_UP_COOLDOWN_SECONDS))
     down_cd = max(0, to_int(raw.get("scaleDownCooldownSeconds"), AUTOSCALE_SCALE_DOWN_COOLDOWN_SECONDS))
     hysteresis = max(0, to_int(raw.get("hysteresisPlayers"), AUTOSCALE_HYSTERESIS_PLAYERS))
@@ -699,8 +869,8 @@ def matches_previous_default_policy(doc):
     )
 
 
-def conservative_policy_update():
-    defaults = default_policy(AUTOSCALE_DEFAULT_GAME_TYPE)
+def conservative_policy_update(game_type):
+    defaults = default_policy(game_type)
     return {
         "playersPerStep": defaults["playersPerStep"],
         "hubPerStep": defaults["hubPerStep"],
@@ -711,6 +881,8 @@ def conservative_policy_update():
         "minGame": defaults["minGame"],
         "maxHub": defaults["maxHub"],
         "maxGame": defaults["maxGame"],
+        "hubService": defaults["hubService"],
+        "gameService": defaults["gameService"],
         "scaleUpCooldownSeconds": AUTOSCALE_SCALE_UP_COOLDOWN_SECONDS,
         "hysteresisPlayers": AUTOSCALE_HYSTERESIS_PLAYERS,
         "drainTimeoutSeconds": AUTOSCALE_DRAIN_TIMEOUT_SECONDS,
@@ -748,9 +920,21 @@ def ensure_policies(db, game_types):
             )
             doc["baseGame"] = 2
             doc["minGame"] = 2
+        if doc:
+            legacy_service_update = {}
+            expected_hub = default_game_type_service_name(game_type, "hub")
+            expected_game = default_game_type_service_name(game_type, "game")
+            if (doc.get("hubService") or "").strip().lower() in {"", "hub"}:
+                legacy_service_update["hubService"] = expected_hub
+            if (doc.get("gameService") or "").strip().lower() in {"", "game"}:
+                legacy_service_update["gameService"] = expected_game
+            if legacy_service_update:
+                legacy_service_update["updatedAt"] = now_iso()
+                collection.update_one({"_id": doc.get("_id")}, {"$set": legacy_service_update})
+                doc.update(legacy_service_update)
         # Migrate untouched policy defaults to conservative values suitable for small VPS deployments.
         if doc and matches_previous_default_policy(doc):
-            conservative = conservative_policy_update()
+            conservative = conservative_policy_update(game_type)
             collection.update_one(
                 {"_id": doc.get("_id")},
                 {"$set": conservative},
@@ -836,6 +1020,47 @@ def match_registry_doc(container, registry_docs):
             best = doc
             best_score = score
     return best
+
+
+def map_targets_to_server_ids(db, targets):
+    if db is None or not targets:
+        return {}
+
+    cutoff = now_ms() - AUTOSCALE_STALE_HEARTBEAT_MILLIS
+    registry_docs = list(
+        db[AUTOSCALE_REGISTRY_COLLECTION].find(
+            {
+                "status": "online",
+                "lastHeartbeat": {"$gte": cutoff},
+            }
+        )
+    )
+    mapping = {}
+    for target in targets:
+        match = match_registry_doc(target, registry_docs)
+        if match is None:
+            continue
+        server_id = str(match.get("_id", "")).strip().lower()
+        if not server_id:
+            continue
+        mapping[target.get("id")] = server_id
+    return mapping
+
+
+def filter_targets_by_server_ids(targets, target_server_map, requested_server_ids):
+    if requested_server_ids is None:
+        return targets
+    if not targets:
+        return []
+    requested = set((value or "").strip().lower() for value in requested_server_ids if value)
+    if not requested:
+        return targets
+    filtered = []
+    for target in targets:
+        server_id = target_server_map.get(target.get("id"), "")
+        if server_id in requested:
+            filtered.append(target)
+    return filtered
 
 
 def fetch_registry_stats(db):
@@ -1299,8 +1524,8 @@ def autoscale_loop():
             try:
                 compose_project = detect_compose_project()
                 if compose_project:
-                    ready_hub = count_ready_service_containers(compose_project, "hub")
-                    ready_game = count_ready_service_containers(compose_project, "game")
+                    ready_hub = count_ready_kind_containers(compose_project, "hub")
+                    ready_game = count_ready_kind_containers(compose_project, "game")
                     if ready_hub >= 1 and ready_game >= 1:
                         print(
                             "autoscale startup gate satisfied "
@@ -1437,17 +1662,58 @@ class RolloutHandler(http.server.BaseHTTPRequestHandler):
                 self.json_response(400, {"error": "service must be a string"})
                 return
             requested_services = merge_requested_services(requested_services, single_service)
+            server_ids_valid, requested_server_ids = parse_requested_server_ids(payload.get("serverIds"))
+            if not server_ids_valid:
+                self.json_response(400, {"error": "serverIds must be a string or list of strings"})
+                return
+            server_id_valid, single_server_id = parse_requested_server_ids(payload.get("serverId"))
+            if not server_id_valid:
+                self.json_response(400, {"error": "serverId must be a string"})
+                return
+            legacy_server_valid, legacy_server_id = parse_requested_server_ids(payload.get("server"))
+            if not legacy_server_valid:
+                self.json_response(400, {"error": "server must be a string"})
+                return
+            requested_server_ids = merge_requested_server_ids(requested_server_ids, single_server_id)
+            requested_server_ids = merge_requested_server_ids(requested_server_ids, legacy_server_id)
+            if requested_server_ids is not None and not requested_server_ids:
+                requested_server_ids = None
 
             restart_mode = requested_mode or ROLLOUT_RESTART_MODE
             if payload.get("rebuild") is True:
                 restart_mode = "rebuild"
             elif payload.get("recreate") is True and restart_mode == "restart":
                 restart_mode = "recreate"
+            if requested_server_ids is not None and restart_mode != "restart":
+                self.json_response(
+                    400,
+                    {
+                        "error": "server targeting requires restart mode",
+                        "requestedServerIds": requested_server_ids,
+                        "restartMode": restart_mode,
+                    },
+                )
+                return
             timestamp = now_iso()
             try:
                 compose_project = detect_compose_project()
                 if not compose_project:
                     raise RuntimeError("compose project not detected; set COMPOSE_PROJECT")
+                try:
+                    plugin_promotion = promote_uploaded_plugins()
+                except Exception as exc:
+                    self.json_response(
+                        409,
+                        {
+                            "timestamp": timestamp,
+                            "error": "plugin promotion failed",
+                            "detail": str(exc),
+                            "pluginDir": ROLLOUT_PLUGIN_DIR,
+                            "uploadSuffix": ROLLOUT_PLUGIN_UPLOAD_SUFFIX,
+                        },
+                    )
+                    return
+                db = get_mongo_database() if requested_server_ids is not None else None
                 project_containers = list_project_containers(compose_project, include_all=True)
                 available_targets = resolve_restart_targets(project_containers)
                 targets = resolve_restart_targets(project_containers, requested_services)
@@ -1461,10 +1727,33 @@ class RolloutHandler(http.server.BaseHTTPRequestHandler):
                         },
                     )
                     return
+                target_server_map = {}
+                if requested_server_ids is not None:
+                    available_server_map = map_targets_to_server_ids(db, available_targets)
+                    target_server_map = map_targets_to_server_ids(db, targets)
+                    targets = filter_targets_by_server_ids(targets, target_server_map, requested_server_ids)
+                    if not targets:
+                        self.json_response(
+                            400,
+                            {
+                                "error": "requested servers did not match any restart targets",
+                                "requestedServerIds": requested_server_ids,
+                                "requestedServices": requested_services,
+                                "availableServices": ordered_target_services(available_targets),
+                                "availableServerIds": sorted(set(available_server_map.values())),
+                            },
+                        )
+                        return
+                    selected_ids = {target.get("id") for target in targets}
+                    target_server_map = {
+                        container_id: server_id
+                        for container_id, server_id in target_server_map.items()
+                        if container_id in selected_ids
+                    }
                 target_services = ordered_target_services(targets)
                 scaled_to_minimum = []
-                for service in ("hub", "game"):
-                    if service not in target_services:
+                for service in target_services:
+                    if classify_service_kind(service) not in {"hub", "game"}:
                         continue
                     current_active = len(
                         [
@@ -1505,6 +1794,25 @@ class RolloutHandler(http.server.BaseHTTPRequestHandler):
                     )
 
                 targets = resolve_restart_targets(project_containers, requested_services)
+                if requested_server_ids is not None:
+                    target_server_map = map_targets_to_server_ids(db, targets)
+                    targets = filter_targets_by_server_ids(targets, target_server_map, requested_server_ids)
+                    if not targets:
+                        self.json_response(
+                            409,
+                            {
+                                "error": "requested server targets became unavailable before restart",
+                                "requestedServerIds": requested_server_ids,
+                                "availableServerIds": sorted(set(target_server_map.values())),
+                            },
+                        )
+                        return
+                    selected_ids = {target.get("id") for target in targets}
+                    target_server_map = {
+                        container_id: server_id
+                        for container_id, server_id in target_server_map.items()
+                        if container_id in selected_ids
+                    }
                 target_services = ordered_target_services(targets)
                 restarted = []
                 failed = []
@@ -1512,8 +1820,8 @@ class RolloutHandler(http.server.BaseHTTPRequestHandler):
                     for target in targets:
                         service = target.get("service", "")
                         if service == "velocity":
-                            ready_hub = count_ready_service_containers(compose_project, "hub")
-                            ready_game = count_ready_service_containers(compose_project, "game")
+                            ready_hub = count_ready_kind_containers(compose_project, "hub")
+                            ready_game = count_ready_kind_containers(compose_project, "game")
                             if ready_hub < 1 or ready_game < 1:
                                 failed.append(
                                     {
@@ -1538,8 +1846,8 @@ class RolloutHandler(http.server.BaseHTTPRequestHandler):
                     build_images = restart_mode == "rebuild"
                     for service in target_services:
                         if service == "velocity":
-                            ready_hub = count_ready_service_containers(compose_project, "hub")
-                            ready_game = count_ready_service_containers(compose_project, "game")
+                            ready_hub = count_ready_kind_containers(compose_project, "hub")
+                            ready_game = count_ready_kind_containers(compose_project, "game")
                             if ready_hub < 1 or ready_game < 1:
                                 failed.append(
                                     {
@@ -1579,6 +1887,13 @@ class RolloutHandler(http.server.BaseHTTPRequestHandler):
                         project_containers = list_project_containers(compose_project, include_all=True)
 
                 status_code = 200 if not failed else 500
+                target_server_ids = sorted(
+                    {
+                        target_server_map.get(target.get("id"), "")
+                        for target in targets
+                        if target_server_map.get(target.get("id"), "")
+                    }
+                )
                 self.json_response(
                     status_code,
                     {
@@ -1588,10 +1903,13 @@ class RolloutHandler(http.server.BaseHTTPRequestHandler):
                         "orderedTargets": [target["name"] for target in targets],
                         "targetServices": target_services,
                         "requestedServices": requested_services,
+                        "requestedServerIds": requested_server_ids,
+                        "targetServerIds": target_server_ids,
                         "restartMode": restart_mode,
                         "targets": [target["name"] for target in targets],
                         "restarted": restarted,
                         "failed": failed,
+                        "pluginPromotion": plugin_promotion,
                         "scaledToMinimum": scaled_to_minimum,
                         "restartServiceOrder": list(RESTART_SERVICE_ORDER),
                         "healthWaitSeconds": RESTART_HEALTH_WAIT_SECONDS,

@@ -3,9 +3,6 @@ package io.github.mebsic.proxy.service;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import io.github.mebsic.core.util.HypixelExperienceUtil;
-import io.github.mebsic.core.model.Rank;
-import io.github.mebsic.core.util.RankColorUtil;
-import io.github.mebsic.core.util.RankFormatUtil;
 import org.bson.Document;
 
 import java.util.HashMap;
@@ -70,16 +67,11 @@ public class RankResolver {
         return current >= needed;
     }
 
-    public Rank resolveRank(UUID uuid) {
-        try {
-            if (database == null || uuid == null) {
-                return null;
-            }
-            String rankName = resolveRankName(loadProfile(uuid));
-            return Rank.valueOf(rankName);
-        } catch (Throwable ignored) {
-            return null;
+    public String resolveRank(UUID uuid) {
+        if (database == null || uuid == null) {
+            return "DEFAULT";
         }
+        return resolveRankName(loadProfile(uuid));
     }
 
     public String formatNameWithRank(UUID uuid, String fallbackName) {
@@ -88,18 +80,10 @@ public class RankResolver {
         }
         Document profile = loadProfile(uuid);
         String name = resolveName(profile, fallbackName);
-        try {
-            Rank rank = resolveRank(profile);
-            int networkLevel = resolveNetworkLevel(profile);
-            String plusColor = profile == null ? null : profile.getString("plusColor");
-            String mvpPlusPlusPrefixColor = resolveMvpPlusPlusPrefixColor(profile, rank);
-            String prefix = RankFormatUtil.buildPrefix(rank, networkLevel, plusColor, mvpPlusPlusPrefixColor);
-            return prefix + RankFormatUtil.baseColor(rank, mvpPlusPlusPrefixColor) + name;
-        } catch (Throwable ignored) {
-            return fallbackPrefix(resolveRankName(profile), profile)
-                    + fallbackBaseColor(resolveRankName(profile), profile)
-                    + name;
-        }
+        String rankName = resolveRankName(profile);
+        return fallbackPrefix(rankName, profile)
+                + fallbackBaseColor(rankName, profile)
+                + name;
     }
 
     public String formatNameWithColor(UUID uuid, String fallbackName) {
@@ -108,13 +92,7 @@ public class RankResolver {
         }
         Document profile = loadProfile(uuid);
         String name = resolveName(profile, fallbackName);
-        try {
-            Rank rank = resolveRank(profile);
-            String mvpPlusPlusPrefixColor = resolveMvpPlusPlusPrefixColor(profile, rank);
-            return RankFormatUtil.baseColor(rank, mvpPlusPlusPrefixColor) + name;
-        } catch (Throwable ignored) {
-            return fallbackBaseColor(resolveRankName(profile), profile) + name;
-        }
+        return fallbackBaseColor(resolveRankName(profile), profile) + name;
     }
 
     private Document loadProfile(UUID uuid) {
@@ -154,15 +132,6 @@ public class RankResolver {
         return rank.trim().toUpperCase(Locale.ROOT);
     }
 
-    private Rank resolveRank(Document doc) {
-        try {
-            String rankName = resolveRankName(doc);
-            return Rank.valueOf(rankName);
-        } catch (Throwable ignored) {
-            return null;
-        }
-    }
-
     private int resolveNetworkLevel(Document profile) {
         if (profile == null) {
             return 0;
@@ -173,20 +142,6 @@ public class RankResolver {
         }
         Integer networkLevel = profile.getInteger("networkLevel");
         return networkLevel == null ? 0 : Math.max(0, networkLevel);
-    }
-
-    private String resolveMvpPlusPlusPrefixColor(Document profile, Rank rank) {
-        if (profile == null || rank == null) {
-            return null;
-        }
-        if (rank != Rank.MVP_PLUS_PLUS && rank != Rank.STAFF && rank != Rank.YOUTUBE) {
-            return null;
-        }
-        String selected = profile.getString("mvpPlusPlusPrefixColor");
-        if (selected == null || selected.trim().isEmpty()) {
-            return null;
-        }
-        return RankColorUtil.getEffectiveMvpPlusPlusPrefixColorId(selected);
     }
 
     private String resolveName(Document profile, String fallbackName) {

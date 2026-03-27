@@ -6,8 +6,10 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
+import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -18,6 +20,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class BookPromptService implements Listener {
     private static final String COMMAND_PREFIX = "/bookprompt";
+    private static final long PROMPT_TIMEOUT_TICKS = 20L * 60L;
 
     private final CorePlugin plugin;
     private final Map<UUID, ActivePrompt> activePrompts;
@@ -45,19 +48,32 @@ public class BookPromptService implements Listener {
         if (book == null) {
             return false;
         }
-        activePrompts.put(viewerUuid, new ActivePrompt(token, prompt));
         boolean opened = openBook(viewer, book);
         if (!opened) {
-            cancelPrompt(viewerUuid);
+            prompt.onCancel(plugin, viewerUuid);
+            return false;
         }
-        return opened;
+        if (!viewer.isOnline()) {
+            prompt.onCancel(plugin, viewerUuid);
+            return false;
+        }
+        BukkitTask timeoutTask = null;
+        if (plugin != null && plugin.isEnabled()) {
+            timeoutTask = plugin.getServer().getScheduler().runTaskLater(
+                    plugin,
+                    () -> cancelPrompt(viewerUuid),
+                    PROMPT_TIMEOUT_TICKS
+            );
+        }
+        activePrompts.put(viewerUuid, new ActivePrompt(token, prompt, timeoutTask));
+        return true;
     }
 
     public void cancelPrompt(UUID viewerUuid) {
         if (viewerUuid == null) {
             return;
         }
-        ActivePrompt removed = activePrompts.remove(viewerUuid);
+        ActivePrompt removed = removeActivePrompt(viewerUuid);
         if (removed == null || removed.prompt == null) {
             return;
         }
@@ -65,17 +81,9 @@ public class BookPromptService implements Listener {
     }
 
     public void shutdown() {
-        for (Map.Entry<UUID, ActivePrompt> entry : activePrompts.entrySet()) {
-            if (entry == null) {
-                continue;
-            }
-            ActivePrompt active = entry.getValue();
-            if (active == null || active.prompt == null) {
-                continue;
-            }
-            active.prompt.onCancel(plugin, entry.getKey());
+        for (UUID viewerUuid : activePrompts.keySet()) {
+            cancelPrompt(viewerUuid);
         }
-        activePrompts.clear();
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -117,16 +125,19 @@ public class BookPromptService implements Listener {
             return;
         }
 
-        activePrompts.remove(viewerUuid);
+        ActivePrompt removed = removeActivePrompt(viewerUuid);
+        if (removed == null || removed.prompt == null) {
+            return;
+        }
         if ("yes".equals(action)) {
-            active.prompt.onYes(plugin, viewer);
+            removed.prompt.onYes(plugin, viewer);
             return;
         }
         if ("no".equals(action)) {
-            active.prompt.onNo(plugin, viewer);
+            removed.prompt.onNo(plugin, viewer);
             return;
         }
-        active.prompt.onCancel(plugin, viewerUuid);
+        removed.prompt.onCancel(plugin, viewerUuid);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -135,6 +146,28 @@ public class BookPromptService implements Listener {
             return;
         }
         cancelPrompt(event.getPlayer().getUniqueId());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onKick(PlayerKickEvent event) {
+        if (event == null || event.getPlayer() == null) {
+            return;
+        }
+        cancelPrompt(event.getPlayer().getUniqueId());
+    }
+
+    private ActivePrompt removeActivePrompt(UUID viewerUuid) {
+        if (viewerUuid == null) {
+            return null;
+        }
+        ActivePrompt removed = activePrompts.remove(viewerUuid);
+        if (removed == null) {
+            return null;
+        }
+        if (removed.timeoutTask != null) {
+            removed.timeoutTask.cancel();
+        }
+        return removed;
     }
 
     private String createToken() {
@@ -414,10 +447,12 @@ public class BookPromptService implements Listener {
     private static final class ActivePrompt {
         private final String token;
         private final InteractiveBookPrompt prompt;
+        private final BukkitTask timeoutTask;
 
-        private ActivePrompt(String token, InteractiveBookPrompt prompt) {
+        private ActivePrompt(String token, InteractiveBookPrompt prompt, BukkitTask timeoutTask) {
             this.token = token == null ? "" : token;
             this.prompt = prompt;
+            this.timeoutTask = timeoutTask;
         }
     }
 }

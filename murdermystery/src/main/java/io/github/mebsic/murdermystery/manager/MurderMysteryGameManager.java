@@ -123,15 +123,6 @@ public class MurderMysteryGameManager extends GameManager {
             resolveCompatibleSound("ORB_PICKUP", "ENTITY_EXPERIENCE_ORB_PICKUP");
     private static final Sound WIN_GAME_SOUND = resolveCompatibleSound("LEVEL_UP", "ENTITY_PLAYER_LEVELUP");
     private static final Sound MURDER_KILL_DAMAGE_SOUND = resolveMurderKillDamageSound();
-    private static final Sound ITEM_PICKUP_FEEDBACK_SOUND =
-            resolveCompatibleSound("ENTITY_ITEM_PICKUP", "ITEM_PICKUP", "ORB_PICKUP", "ENTITY_EXPERIENCE_ORB_PICKUP");
-    private static final Sound ITEM_DROP_FEEDBACK_SOUND =
-            resolveCompatibleSound("ENTITY_ITEM_PICKUP", "ITEM_PICKUP", "CHICKEN_EGG_POP", "ENTITY_CHICKEN_EGG");
-    private static final String[] ITEM_DROP_FEEDBACK_SOUND_KEYS = {
-            "random.pop",
-            "entity.item.pickup",
-            "entity.experience_orb.pickup"
-    };
     private static final String TOKEN_REASON_SURVIVED_30_SECONDS = "Survived 30 seconds";
     private static final String TOKEN_REASON_PICKED_UP_GOLD = "Picked up gold";
     private static final String SPECTATOR_CHAT_HINT_LINE_ONE =
@@ -834,7 +825,6 @@ public class MurderMysteryGameManager extends GameManager {
         }
         awardTokens(player, getGoldPickupTokenReward(), TOKEN_REASON_PICKED_UP_GOLD);
         mmPlayer.addGold(amount);
-        playPickupFeedback(player, 1.0f);
         if (mmPlayer.getRole() == MurderMysteryRole.INNOCENT && mmPlayer.getGold() >= GOLD_FOR_BOW) {
             grantArrowsFromGold(player, mmPlayer, BOW_HOTBAR_SLOT, ARROW_HOTBAR_SLOT);
         } else if (mmPlayer.getRole() == MurderMysteryRole.MURDERER && mmPlayer.getGold() >= GOLD_FOR_BOW) {
@@ -997,30 +987,6 @@ public class MurderMysteryGameManager extends GameManager {
         }
     }
 
-    private void silenceEntityForPickup(Entity entity) {
-        if (entity == null) {
-            return;
-        }
-        try {
-            Method setSilent = entity.getClass().getMethod("setSilent", boolean.class);
-            setSilent.invoke(entity, true);
-            return;
-        } catch (Throwable ignored) {
-            // Try NMS fallback below for older API wrappers.
-        }
-        try {
-            Method getHandle = entity.getClass().getMethod("getHandle");
-            Object handle = getHandle.invoke(entity);
-            if (handle == null) {
-                return;
-            }
-            Method setSilent = handle.getClass().getMethod("setSilent", boolean.class);
-            setSilent.invoke(handle, true);
-        } catch (Throwable ignored) {
-            // Older APIs may not support silent entities.
-        }
-    }
-
     public void convertToHero(Player player) {
         convertToHero(player, false);
     }
@@ -1030,7 +996,6 @@ public class MurderMysteryGameManager extends GameManager {
         if (mmPlayer == null || !mmPlayer.isAlive() || mmPlayer.getRole() != MurderMysteryRole.INNOCENT) {
             return;
         }
-        playPickupFeedback(player, 0.95f);
         mmPlayer.setRole(MurderMysteryRole.DETECTIVE);
         mmPlayer.setHasDetectiveBow(true);
         mmPlayer.markDetectiveWeaponGrantedNow();
@@ -1144,11 +1109,23 @@ public class MurderMysteryGameManager extends GameManager {
                 return;
             }
             List<Location> dropItemSpawns = map.getDropItemSpawns();
-            Location location = dropItemSpawns.get((int) (Math.random() * dropItemSpawns.size()));
-            Item dropped = location.getWorld().dropItemNaturally(location, new ItemStack(Material.GOLD_INGOT, 1));
+            int dropIndex = (int) (Math.random() * dropItemSpawns.size());
+            Location location = dropItemSpawns.get(dropIndex);
+            if (location == null || location.getWorld() == null) {
+                return;
+            }
+            ItemStack dropTemplate = new ItemStack(Material.GOLD_INGOT, 1);
+            List<ItemStack> configuredDrops = map.getDropItemStacks();
+            if (configuredDrops != null && dropIndex >= 0 && dropIndex < configuredDrops.size()) {
+                ItemStack configured = configuredDrops.get(dropIndex);
+                if (configured != null && configured.getType() == Material.GOLD_INGOT) {
+                    dropTemplate = configured.clone();
+                    dropTemplate.setAmount(1);
+                }
+            }
+            Item dropped = location.getWorld().dropItemNaturally(location, dropTemplate);
             if (dropped != null) {
                 activeMapDropItems.add(dropped);
-                silenceEntityForPickup(dropped);
             }
         }, 40L, 60L);
     }
@@ -1808,51 +1785,6 @@ public class MurderMysteryGameManager extends GameManager {
 
     private static Sound resolveMurderKillDamageSound() {
         return resolveCompatibleSound("ENTITY_PLAYER_HURT", "HURT_FLESH");
-    }
-
-    private void playPickupFeedback(Player player, float pitch) {
-        if (player == null || ITEM_PICKUP_FEEDBACK_SOUND == null) {
-            return;
-        }
-        player.playSound(player.getLocation(), ITEM_PICKUP_FEEDBACK_SOUND, 1.0f, pitch);
-    }
-
-    private void playDropFeedback(Location location, float pitch) {
-        if (location == null || location.getWorld() == null) {
-            return;
-        }
-        if (ITEM_DROP_FEEDBACK_SOUND != null) {
-            try {
-                location.getWorld().playSound(location, ITEM_DROP_FEEDBACK_SOUND, 1.0f, pitch);
-                return;
-            } catch (Throwable ignored) {
-                // Fallback to string sound keys below.
-            }
-        }
-        playDropFeedbackByKey(location, pitch);
-    }
-
-    private void playDropFeedbackByKey(Location location, float pitch) {
-        if (location == null || location.getWorld() == null) {
-            return;
-        }
-        for (String key : ITEM_DROP_FEEDBACK_SOUND_KEYS) {
-            if (key == null || key.trim().isEmpty()) {
-                continue;
-            }
-            try {
-                for (Player player : location.getWorld().getPlayers()) {
-                    if (player == null || !player.isOnline()) {
-                        continue;
-                    }
-                    // Older APIs support string-key playback on Player, not always on World.
-                    player.playSound(location, key, 1.0f, pitch);
-                }
-                return;
-            } catch (Throwable ignored) {
-                // Try next legacy/modern key.
-            }
-        }
     }
 
     private static Sound resolveCompatibleSound(String... names) {

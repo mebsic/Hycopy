@@ -62,6 +62,7 @@ public class MurderMysteryPlugin extends JavaPlugin implements HubContext {
     private static final double DEFAULT_DETECTIVE_CHANCE = 1.0;
     private static final long HUB_SCOREBOARD_INITIAL_DELAY_TICKS = 1L;
     private static final long HUB_SCOREBOARD_REFRESH_TICKS = 20L;
+    private static final long SCOREBOARD_TITLE_ANIMATION_TICKS = 2L;
     private static final long HUB_SCOREBOARD_POST_JOIN_REFRESH_TICKS = 10L;
     private static final long HUB_SPAWN_STARTUP_REFRESH_DELAY_TICKS = 20L;
     private static final int PARKOUR_PROFILE_INIT_MAX_ATTEMPTS = 20;
@@ -90,6 +91,8 @@ public class MurderMysteryPlugin extends JavaPlugin implements HubContext {
     private Location hubSpawn;
     private BukkitTask hubSpawnStartupRefreshTask;
     private BukkitTask hubScoreboardTask;
+    private BukkitTask hubScoreboardTitleTask;
+    private BukkitTask gameScoreboardTitleTask;
     private BukkitTask hubNetworkLevelTask;
     private BukkitTask roleChanceSeedTask;
     private ServerRegistryService hubRegistryService;
@@ -248,6 +251,14 @@ public class MurderMysteryPlugin extends JavaPlugin implements HubContext {
             hubScoreboardTask.cancel();
             hubScoreboardTask = null;
         }
+        if (hubScoreboardTitleTask != null) {
+            hubScoreboardTitleTask.cancel();
+            hubScoreboardTitleTask = null;
+        }
+        if (gameScoreboardTitleTask != null) {
+            gameScoreboardTitleTask.cancel();
+            gameScoreboardTitleTask = null;
+        }
         if (hubNetworkLevelTask != null) {
             hubNetworkLevelTask.cancel();
             hubNetworkLevelTask = null;
@@ -308,6 +319,11 @@ public class MurderMysteryPlugin extends JavaPlugin implements HubContext {
         this.queueService.start();
         getServer().getPluginManager().registerEvents(new TablistListener(this, gameManager.getTablistService()), this);
         this.tablistTask = getServer().getScheduler().runTaskTimer(this, () -> gameManager.getTablistService().updateAll(), 20L, 20L);
+        this.gameScoreboardTitleTask = getServer().getScheduler().runTaskTimer(this, () -> {
+            if (gameManager != null) {
+                gameManager.updateAnimatedScoreboardTitles();
+            }
+        }, HUB_SCOREBOARD_INITIAL_DELAY_TICKS, SCOREBOARD_TITLE_ANIMATION_TICKS);
         this.bossBarService.start();
         this.registryService = new io.github.mebsic.game.service.ServerRegistryService(this, corePlugin.getConfig(), gameManager);
         this.registryService.start();
@@ -378,6 +394,10 @@ public class MurderMysteryPlugin extends JavaPlugin implements HubContext {
                 () -> hubScoreboardService.updateAll(getServer().getOnlinePlayers()),
                 HUB_SCOREBOARD_INITIAL_DELAY_TICKS,
                 HUB_SCOREBOARD_REFRESH_TICKS);
+        this.hubScoreboardTitleTask = getServer().getScheduler().runTaskTimer(this,
+                () -> hubScoreboardService.updateAnimatedTitle(),
+                HUB_SCOREBOARD_INITIAL_DELAY_TICKS,
+                SCOREBOARD_TITLE_ANIMATION_TICKS);
         this.hubNetworkLevelTask = getServer().getScheduler().runTaskTimer(this,
                 this::updateNetworkLevels,
                 20L,

@@ -25,7 +25,11 @@ tasks.shadowJar {
 
 val copyShadowJarToDocker by tasks.registering(Copy::class) {
     dependsOn(tasks.shadowJar)
-    from(tasks.shadowJar.flatMap { it.archiveFile })
+    val shadowArchive = tasks.shadowJar.flatMap { it.archiveFile }
+    from(shadowArchive)
+    from(shadowArchive) {
+        rename { fileName -> "$fileName.upload" }
+    }
     into(rootProject.layout.projectDirectory.dir("docker/plugins"))
 }
 

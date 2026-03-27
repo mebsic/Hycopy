@@ -34,8 +34,9 @@ import java.util.concurrent.ThreadLocalRandom;
 
 public class HubListener implements Listener {
     private static final String JOIN_SUFFIX = ChatColor.GOLD + " joined the lobby!";
-    private static final long JOIN_MESSAGE_RETRY_INTERVAL_TICKS = 10L;
-    private static final int JOIN_MESSAGE_MAX_RETRIES = 10;
+    private static final long JOIN_MESSAGE_RETRY_INTERVAL_TICKS = 2L;
+    private static final int JOIN_MESSAGE_MAX_RETRIES = 40;
+    private static final long JOIN_PROFILE_REFRESH_DELAY_TICKS = 1L;
     private static final int HUB_SPAWN_HORIZONTAL_RADIUS_BLOCKS = 2;
     private static final int HUB_SPAWN_OFFSET_ATTEMPTS = 24;
 
@@ -156,7 +157,7 @@ public class HubListener implements Listener {
             if (!announced && refreshedProfile == null) {
                 scheduleJoinAnnouncementRetries(uuid);
             }
-        }, 20L);
+        }, JOIN_PROFILE_REFRESH_DELAY_TICKS);
     }
 
     private String stripNewLines(String value) {

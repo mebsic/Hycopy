@@ -1024,8 +1024,8 @@ public class FriendCommand implements SimpleCommand {
         return "/" + commandRoot + " " + safeSuffix;
     }
 
-    private void sendInvalidUsage(Player player, String syntax) {
-        sendFramed(player, FriendComponents.invalidUsage(syntax));
+    private void sendInvalidUsage(Player player, String ignoredSyntax) {
+        sendHelp(player);
     }
 
     private Component suggestCommandComponent(String command) {

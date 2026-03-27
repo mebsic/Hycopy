@@ -9,7 +9,9 @@ import io.github.mebsic.core.store.MapConfigStore;
 import io.github.mebsic.game.map.GameMap;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.World;
+import org.bukkit.inventory.ItemStack;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -95,6 +97,7 @@ public class MapManager {
                         Location location = toLocation(loc);
                         if (location != null) {
                             map.getDropItemSpawns().add(location);
+                            map.getDropItemStacks().add(toDropItemStack(loc));
                         }
                     }
                 }
@@ -387,6 +390,31 @@ public class MapManager {
             return null;
         }
         return new Location(world, entry.x, entry.y, entry.z, entry.yaw, entry.pitch);
+    }
+
+    private ItemStack toDropItemStack(LocationEntry entry) {
+        Material material = Material.AIR;
+        short data = 0;
+        if (entry != null) {
+            String configuredItem = safeText(entry.item);
+            if (!configuredItem.isEmpty()) {
+                Material exact = Material.matchMaterial(configuredItem);
+                if (exact == null) {
+                    exact = Material.matchMaterial(configuredItem.toUpperCase(Locale.ROOT));
+                }
+                if (exact != null) {
+                    material = exact;
+                }
+            }
+            int configuredData = entry.itemData;
+            if (configuredData > 0) {
+                data = (short) Math.min(Short.MAX_VALUE, configuredData);
+            }
+        }
+        if (material == Material.AIR) {
+            return null;
+        }
+        return new ItemStack(material, 1, data);
     }
 
     private World resolveWorld(String name) {
@@ -785,5 +813,7 @@ public class MapManager {
         private double z;
         private float yaw;
         private float pitch;
+        private String item;
+        private int itemData;
     }
 }
