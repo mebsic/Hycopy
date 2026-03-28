@@ -342,7 +342,7 @@ public class MurderMysteryGameManager extends GameManager {
         }
         lines.add(ChatColor.WHITE + "Map: " + ChatColor.GREEN + getActiveMapName());
         lines.add("     ");
-        lines.add(ChatColor.YELLOW + NetworkConstants.WEBSITE);
+        lines.add(ChatColor.YELLOW + NetworkConstants.website());
     }
 
     @Override
@@ -362,7 +362,7 @@ public class MurderMysteryGameManager extends GameManager {
         lines.add("  ");
         lines.add(ChatColor.WHITE + "Mode: " + ChatColor.GREEN + "Classic");
         lines.add("   ");
-        lines.add(ChatColor.YELLOW + NetworkConstants.WEBSITE);
+        lines.add(ChatColor.YELLOW + NetworkConstants.website());
     }
 
     private String buildDateAndServerLine() {

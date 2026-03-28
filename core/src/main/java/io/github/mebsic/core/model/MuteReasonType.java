@@ -55,7 +55,7 @@ public enum MuteReasonType {
     public String getFindOutMoreUrl() {
         switch (this) {
             case ESCALATION:
-                return "https://support." + NetworkConstants.DOMAIN;
+                return NetworkConstants.supportUrl();
             default:
                 return null;
         }

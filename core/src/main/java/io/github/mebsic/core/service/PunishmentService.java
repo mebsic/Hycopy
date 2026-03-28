@@ -21,8 +21,6 @@ public class PunishmentService {
     private static final String PUNISHMENT_CHANNEL = "punishment_action";
     private static final String PUNISHMENT_ID_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     private static final int PUNISHMENT_ID_LENGTH = 10;
-    private static final String SUPPORT_HOST = "support." + NetworkConstants.DOMAIN;
-    private static final String DEFAULT_SUPPORT_URL = "https://" + SUPPORT_HOST;
     private static final Pattern URL_PATTERN = Pattern.compile("(https?://\\S+|www\\.\\S+)", Pattern.CASE_INSENSITIVE);
     private static final String BAN_BROADCAST_MESSAGE = ChatColor.RED.toString()
             + ChatColor.BOLD
@@ -373,12 +371,12 @@ public class PunishmentService {
                 return url.trim();
             }
         }
-        return NetworkConstants.WEBSITE + "/mutes";
+        return NetworkConstants.mutesUrl();
     }
 
     private String resolveSupportUrl(String reason) {
         if (reason == null || reason.trim().isEmpty()) {
-            return DEFAULT_SUPPORT_URL;
+            return defaultSupportUrl();
         }
         Matcher matcher = URL_PATTERN.matcher(reason);
         while (matcher.find()) {
@@ -387,14 +385,22 @@ public class PunishmentService {
                 continue;
             }
             String normalized = candidate.toLowerCase(Locale.ROOT);
-            if (normalized.contains(SUPPORT_HOST)) {
+            if (normalized.contains(supportHost())) {
                 if (normalized.startsWith("http://") || normalized.startsWith("https://")) {
                     return candidate;
                 }
                 return "https://" + candidate;
             }
         }
-        return DEFAULT_SUPPORT_URL;
+        return defaultSupportUrl();
+    }
+
+    private String supportHost() {
+        return NetworkConstants.supportHost().toLowerCase(Locale.ROOT);
+    }
+
+    private String defaultSupportUrl() {
+        return NetworkConstants.supportUrl();
     }
 
     private String sanitizeUrl(String raw) {

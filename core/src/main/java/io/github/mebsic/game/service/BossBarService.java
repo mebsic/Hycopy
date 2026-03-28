@@ -421,7 +421,7 @@ public class BossBarService {
     }
 
     private String resolveDomainLabel() {
-        return "MC." + NetworkConstants.DOMAIN.toUpperCase(Locale.ROOT);
+        return "MC." + NetworkConstants.domain().toUpperCase(Locale.ROOT);
     }
 
     private float sanitizeValue(float raw) {

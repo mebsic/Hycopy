@@ -185,7 +185,7 @@ public final class GiftSupport {
     public static ItemStack buildWalletItem(int gold) {
         int safeGold = Math.max(0, gold);
         String formattedGold = formatGold(safeGold);
-        String url = "https://store." + NetworkConstants.DOMAIN;
+        String url = NetworkConstants.storeUrl();
         ItemStack item = new ItemStack(Material.GOLD_NUGGET);
         ItemMeta meta = item.getItemMeta();
         if (meta == null) {

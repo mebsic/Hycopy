@@ -31,7 +31,6 @@ public class UpdateCommand implements SimpleCommand {
             new DurationOption("5m", "5 minutes", 5),
             new DurationOption("1m", "1 minute", 1)
     };
-    private static final String RECONNECT_HOST = "mc." + NetworkConstants.DOMAIN;
     private static final String ROLLOUT_WEBHOOK_URL_ENV = "ROLLOUT_WEBHOOK_URL";
     private static final String ROLLOUT_WEBHOOK_TOKEN_ENV = "ROLLOUT_WEBHOOK_TOKEN";
     private static final String ROLLOUT_RESTART_MODE_ENV = "ROLLOUT_RESTART_MODE";
@@ -179,7 +178,7 @@ public class UpdateCommand implements SimpleCommand {
     private void broadcastRestartSoon() {
         Component firstLine = withGoldObfuscatedPrefix(Component.text("This proxy is restarting soon.", NamedTextColor.RED));
         Component secondLine = withGoldObfuscatedPrefix(Component.text("Please reconnect to ", NamedTextColor.RED)
-                .append(Component.text(RECONNECT_HOST, NamedTextColor.AQUA))
+                .append(Component.text(NetworkConstants.mcHost(), NamedTextColor.AQUA))
                 .append(Component.text("!", NamedTextColor.RED)));
         broadcastFramed(firstLine.append(Component.newline()).append(secondLine));
     }
@@ -190,7 +189,7 @@ public class UpdateCommand implements SimpleCommand {
                 .append(Component.text(String.valueOf(secondsRemaining), NamedTextColor.GOLD))
                 .append(Component.text(unit + ".", NamedTextColor.RED)));
         Component secondLine = withGoldObfuscatedPrefix(Component.text("Please reconnect to ", NamedTextColor.RED)
-                .append(Component.text(RECONNECT_HOST, NamedTextColor.AQUA))
+                .append(Component.text(NetworkConstants.mcHost(), NamedTextColor.AQUA))
                 .append(Component.text("!", NamedTextColor.RED)));
         broadcastFramed(firstLine.append(Component.newline()).append(secondLine));
     }
@@ -390,7 +389,7 @@ public class UpdateCommand implements SimpleCommand {
 
     public Component restartDisconnectReason() {
         return Component.text("This proxy is restarting. Please reconnect to ", NamedTextColor.RED)
-                .append(Component.text(RECONNECT_HOST, NamedTextColor.AQUA))
+                .append(Component.text(NetworkConstants.mcHost(), NamedTextColor.AQUA))
                 .append(Component.text("!", NamedTextColor.RED));
     }
 

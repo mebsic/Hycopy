@@ -52,7 +52,7 @@ public class MurderMysteryMenu extends Menu {
         set(inventory, TOKENS_SLOT, item(
                 Material.EMERALD,
                 ChatColor.GRAY + "Total Tokens: " + ChatColor.DARK_GREEN + formatTokens(player),
-                ChatColor.GOLD + "https://store." + NetworkConstants.DOMAIN
+                ChatColor.GOLD + NetworkConstants.storeUrl()
         ));
     }
 

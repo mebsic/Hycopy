@@ -41,7 +41,6 @@ public class RestartCommand implements SimpleCommand {
     private static final String ROLLOUT_WEBHOOK_URL_ENV = "ROLLOUT_WEBHOOK_URL";
     private static final String ROLLOUT_WEBHOOK_TOKEN_ENV = "ROLLOUT_WEBHOOK_TOKEN";
     private static final String WARP_COMMAND = "/hub";
-    private static final String RECONNECT_HOST = "mc." + NetworkConstants.DOMAIN;
     private final ProxyServer proxy;
     private final Object plugin;
     private final RankResolver rankResolver;
@@ -285,7 +284,7 @@ public class RestartCommand implements SimpleCommand {
 
     private Component restartDisconnectReason() {
         return Component.text("This server is restarting. Please reconnect to ", NamedTextColor.RED)
-                .append(Component.text(RECONNECT_HOST, NamedTextColor.AQUA))
+                .append(Component.text(NetworkConstants.mcHost(), NamedTextColor.AQUA))
                 .append(Component.text("!", NamedTextColor.RED));
     }
 

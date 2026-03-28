@@ -142,7 +142,7 @@ public class GiftDecisionBookPrompt extends InteractiveBookPrompt {
     private BaseComponent[] buildPage(CorePlugin plugin, String token) {
         String gifterDisplay = resolveGifterDisplay(plugin);
         String rankDisplay = GiftSupport.buildGiftRankText(giftedRank, mvpPlusPlusDays);
-        String supportDomain = "support." + NetworkConstants.DOMAIN;
+        String supportDomain = NetworkConstants.supportHost();
 
         TextComponent root = new TextComponent("");
         addLegacy(root, gifterDisplay);

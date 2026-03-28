@@ -120,7 +120,7 @@ public class HubScoreboardService {
         lines.add("");
         lines.add(ChatColor.WHITE + "Tokens: " + ChatColor.DARK_GREEN + formatNumber(tokens));
         lines.add("");
-        lines.add(ChatColor.YELLOW + NetworkConstants.WEBSITE);
+        lines.add(ChatColor.YELLOW + NetworkConstants.website());
         return lines;
     }
 

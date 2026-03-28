@@ -62,6 +62,8 @@ import io.github.mebsic.core.service.PubSubService;
 import io.github.mebsic.core.manager.RedisManager;
 import io.github.mebsic.core.util.GameRewardUtil;
 import io.github.mebsic.core.util.HypixelExperienceUtil;
+import io.github.mebsic.core.util.DomainSettingsStore;
+import io.github.mebsic.core.util.NetworkConstants;
 import io.github.mebsic.core.util.RankColorUtil;
 import io.github.mebsic.game.listener.TablistListener;
 import io.github.mebsic.game.listener.ReturnToLobbyListener;
@@ -131,6 +133,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
     private TablistService buildTablistService;
     private BukkitTask buildTablistTask;
     private BukkitTask profileRefreshTask;
+    private BukkitTask networkDomainRefreshTask;
     private volatile GameState currentGameState = GameState.WAITING;
     private final Map<UUID, BlockedCacheEntry> blockedCache = new ConcurrentHashMap<>();
 
@@ -266,9 +269,11 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
 
     private void setupServices() {
         Map<String, KnifeSkinDefinition> knifeSkins = new HashMap<>();
+        NetworkConstants.resetDomain();
         if (isMongoEnabled()) {
             this.mongo = new MongoManager(getConfig().getString("mongo.uri"), getConfig().getString("mongo.database"));
             ensureCoreCollections();
+            initializeNetworkDomainSettings();
             ensureMapConfigDefaults();
             knifeSkins = loadKnifeSkins();
             this.profileStore = new ProfileStore(mongo, knifeSkins);
@@ -324,6 +329,35 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
         mongo.ensureCollection("core_migrations");
         mongo.ensureCollection("rank_gift_history");
         mongo.ensureCollection(MapConfigStore.COLLECTION_NAME);
+        mongo.ensureCollection(DomainSettingsStore.COLLECTION_NAME);
+    }
+
+    private void initializeNetworkDomainSettings() {
+        if (mongo == null) {
+            return;
+        }
+        MongoCollection<Document> settings = mongo.getCollection(DomainSettingsStore.COLLECTION_NAME);
+        if (settings == null) {
+            return;
+        }
+        try {
+            DomainSettingsStore.ensureDomainDocument(settings);
+            DomainSettingsStore.refreshDomain(settings);
+        } catch (Exception ex) {
+            getLogger().warning("Failed to load domain from proxy settings: " + ex.getMessage());
+            return;
+        }
+        networkDomainRefreshTask = Bukkit.getScheduler().runTaskTimerAsynchronously(
+                this,
+                () -> {
+                    try {
+                        DomainSettingsStore.refreshDomain(settings);
+                    } catch (Exception ignored) {
+                    }
+                },
+                1200L,
+                1200L
+        );
     }
 
     private void ensureMapConfigDefaults() {
@@ -443,6 +477,10 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
         if (profileRefreshTask != null) {
             profileRefreshTask.cancel();
             profileRefreshTask = null;
+        }
+        if (networkDomainRefreshTask != null) {
+            networkDomainRefreshTask.cancel();
+            networkDomainRefreshTask = null;
         }
         if (leaderboards != null) {
             leaderboards.stop();

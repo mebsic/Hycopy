@@ -21,7 +21,6 @@ public class HelpCommand implements CommandExecutor {
     private static final String MINIGAMES_URL = "https://hypixel.net/forums/#games.67";
     private static final String BUG_REPORT_URL = "https://hypixel.net/bug-reports/create";
     private static final String REPORT_INFO_URL = "https://support.hypixel.net/hc/en-us/articles/360019646359-How-To-Report-Rule-Breakers";
-    private static final String STORE_URL = "https://store." + NetworkConstants.DOMAIN;
     private static final String SUPPORT_URL = "https://support.hypixel.net/hc/en-us";
     private static final String ALLOWED_MODS_URL = "https://support.hypixel.net/hc/en-us/articles/6472550754962";
     private static final String RULES_URL = "https://hypixel.net/rules";
@@ -66,7 +65,7 @@ public class HelpCommand implements CommandExecutor {
         sendOption(player, "Hypixel Minigames", ClickEvent.Action.OPEN_URL, MINIGAMES_URL);
         sendOption(player, "Found a Server Bug/Issue", ClickEvent.Action.OPEN_URL, BUG_REPORT_URL);
         sendOption(player, "Report a Rule Breaker", ClickEvent.Action.RUN_COMMAND, "/help report");
-        sendOption(player, "Store", ClickEvent.Action.OPEN_URL, STORE_URL);
+        sendOption(player, "Store", ClickEvent.Action.OPEN_URL, NetworkConstants.storeUrl());
         sendOption(player, "Support", ClickEvent.Action.OPEN_URL, SUPPORT_URL);
         sendOption(player, "Allowed Modifications", ClickEvent.Action.OPEN_URL, ALLOWED_MODS_URL);
         sendOption(player, "Hypixel Rules & Policies", ClickEvent.Action.OPEN_URL, RULES_URL);

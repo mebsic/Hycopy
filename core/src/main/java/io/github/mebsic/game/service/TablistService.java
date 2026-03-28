@@ -26,11 +26,6 @@ public class TablistService {
     private static final int SORT_NAME_PART_LENGTH = 8;
     private static final int SORT_ID_PART_LENGTH = 4;
     private static final int MAX_TEAM_TEXT_LENGTH = 16;
-    private static final String TAB_HEADER = ChatColor.AQUA + "You are playing on "
-            + ChatColor.YELLOW + ChatColor.BOLD + "MC." + NetworkConstants.DOMAIN.toUpperCase(Locale.ROOT);
-    private static final String TAB_FOOTER = ChatColor.GREEN + "Ranks, Boosters & MORE! "
-            + ChatColor.RED + ChatColor.BOLD + "STORE." + NetworkConstants.DOMAIN.toUpperCase(Locale.ROOT);
-
     private final CoreApi coreApi;
     private boolean nameTagsHidden;
     private boolean showRankPrefix;
@@ -402,10 +397,22 @@ public class TablistService {
         if (viewer == null) {
             return;
         }
-        if (tryDirectHeaderFooter(viewer, TAB_HEADER, TAB_FOOTER)) {
+        String header = tabHeader();
+        String footer = tabFooter();
+        if (tryDirectHeaderFooter(viewer, header, footer)) {
             return;
         }
-        tryLegacyHeaderFooter(viewer, TAB_HEADER, TAB_FOOTER);
+        tryLegacyHeaderFooter(viewer, header, footer);
+    }
+
+    private String tabHeader() {
+        return ChatColor.AQUA + "You are playing on "
+                + ChatColor.YELLOW + ChatColor.BOLD + "MC." + NetworkConstants.domain().toUpperCase(Locale.ROOT);
+    }
+
+    private String tabFooter() {
+        return ChatColor.GREEN + "Ranks, Boosters & MORE! "
+                + ChatColor.RED + ChatColor.BOLD + "STORE." + NetworkConstants.domain().toUpperCase(Locale.ROOT);
     }
 
     private boolean tryDirectHeaderFooter(Player viewer, String header, String footer) {

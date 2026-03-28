@@ -5,7 +5,7 @@ import io.github.mebsic.core.util.NetworkConstants;
 import java.util.Locale;
 
 public enum BanReasonType {
-    WATCHDOG("WATCHDOG CHEAT DETECTION - https://" + NetworkConstants.WEBSITE + "/watchdog", "WATCHDOG"),
+    WATCHDOG("WATCHDOG CHEAT DETECTION - https://{website}/watchdog", "WATCHDOG"),
     BLACKLISTED_MODIFICATIONS(
             "Cheating through the use of unfair game advantages.",
             "BM",
@@ -27,7 +27,7 @@ public enum BanReasonType {
     INAPPROPRIATE_AESTHETICS("Using inappropriate skins or capes on the server.", "IA"),
     EXPLOITING("Exploiting a bug or issue within the server and using it to your advantage.", "EX", "Exploits"),
     FALSIFIED_INFORMATION("Making or sharing fake information.", "FI"),
-    CHARGEBACK("Chargeback: for more info and appeal, go to https://support." + NetworkConstants.DOMAIN + ".", "CHARGEBACK", "Chargeback"),
+    CHARGEBACK("Chargeback: for more info and appeal, go to https://support.{domain}.", "CHARGEBACK", "Chargeback"),
     ACCOUNT_SELLING("Attempting to sell Minecraft accounts.", "AS"),
     COMPROMISED_ACCOUNT(
             "Your account has a security alert, please secure it and contact appeals.",
@@ -41,10 +41,10 @@ public enum BanReasonType {
     UN_INTENTIONALLY_CAUSING_DISTRESS_2("Unintentionally/Intentionally Causing distress.", "UIB"),
     UN_INTENTIONALLY_CAUSING_DISTRESS_3("Unintentionally/Intentionally Causing distress.", "UI3"),
     INAPPROPRIATE_CONTENT_LVL2("Talking or sharing inappropriate content with adult themes on the server.", "IC2"),
-    ACCOUNT_DELETION("Upon request, data for this user has been deleted. https://support." + NetworkConstants.DOMAIN, "ACCOUNT_DELETION"),
-    CREATOR_BAN("Please contact creators@example.net for assistance.", "CREATOR_BAN"),
+    ACCOUNT_DELETION("Upon request, data for this user has been deleted. https://support.{domain}", "ACCOUNT_DELETION"),
+    CREATOR_BAN("Please contact {creatorsEmail} for assistance.", "CREATOR_BAN"),
     CREATOR_ACCOUNT_SECURITY_ALERT(
-            "Your account has a security alert, please secure it and contact creators@example.net for assistance.",
+            "Your account has a security alert, please secure it and contact {creatorsEmail} for assistance.",
             "CREATOR_ACCOUNT_SECURITY_ALERT",
             "Creator Compromised Account",
             "Creator Account Security Alert"
@@ -61,7 +61,7 @@ public enum BanReasonType {
     }
 
     public String getDescription() {
-        return description;
+        return resolveDynamicValues(description);
     }
 
     public String getCode() {
@@ -131,5 +131,15 @@ public enum BanReasonType {
             }
         }
         return builder.toString();
+    }
+
+    private static String resolveDynamicValues(String value) {
+        if (value == null || value.isEmpty()) {
+            return value;
+        }
+        return value
+                .replace("{domain}", NetworkConstants.domain())
+                .replace("{website}", NetworkConstants.website())
+                .replace("{creatorsEmail}", NetworkConstants.creatorsEmail());
     }
 }

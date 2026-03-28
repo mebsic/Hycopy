@@ -5,6 +5,7 @@ import com.mongodb.ConnectionString;
 import com.mongodb.MongoClientSettings;
 import io.github.mebsic.core.server.ServerType;
 import io.github.mebsic.core.util.CommonMessages;
+import io.github.mebsic.core.util.DomainSettingsStore;
 import io.github.mebsic.core.util.HubMessageUtil;
 import io.github.mebsic.core.util.NetworkConstants;
 import io.github.mebsic.proxy.cache.MotdCache;
@@ -145,6 +146,7 @@ public class HypixelProxyPlugin {
             loadConfig();
             setupMongo();
             ensureProxyCollections();
+            startDomainRefreshTask();
             setupRedis();
             this.motdCache = new MotdCache(mongoDatabase, config);
             try {
@@ -729,6 +731,7 @@ public class HypixelProxyPlugin {
         ensureCollection("maps");
         ensureCollection("autoscale");
         seedMotdDocument();
+        seedDomainDocument();
     }
 
     private void ensureCollection(String name) {
@@ -781,6 +784,41 @@ public class HypixelProxyPlugin {
                 new Document("_id", documentId),
                 new Document("$set", new Document("playerCount", resolvedPlayerCount))
         );
+    }
+
+    private void seedDomainDocument() {
+        String collectionName = config.getMotdCollection();
+        if (collectionName == null || collectionName.trim().isEmpty()) {
+            return;
+        }
+        MongoCollection<Document> collection = mongoDatabase.getCollection(collectionName);
+        DomainSettingsStore.ensureDomainDocument(collection);
+    }
+
+    private void startDomainRefreshTask() {
+        if (mongoDatabase == null || config == null) {
+            return;
+        }
+        String collectionName = config.getMotdCollection();
+        if (collectionName == null || collectionName.trim().isEmpty()) {
+            return;
+        }
+        MongoCollection<Document> collection = mongoDatabase.getCollection(collectionName);
+        refreshNetworkDomain(collection, false);
+        proxy.getScheduler().buildTask(this, () -> refreshNetworkDomain(collection, true))
+                .repeat(1, TimeUnit.MINUTES)
+                .schedule();
+    }
+
+    private void refreshNetworkDomain(MongoCollection<Document> collection, boolean logChanges) {
+        try {
+            boolean changed = DomainSettingsStore.refreshDomain(collection);
+            if (changed && logChanges) {
+                logger.info("Updated network domain to {}", NetworkConstants.domain());
+            }
+        } catch (Exception ex) {
+            logger.debug("Failed to refresh proxy settings domain: {}", ex.getMessage());
+        }
     }
 
     private int resolvePlayerCount(Object value) {
@@ -1622,7 +1660,7 @@ public class HypixelProxyPlugin {
             return command.restartDisconnectReason();
         }
         return Component.text("This proxy is restarting. Please reconnect to ", NamedTextColor.RED)
-                .append(Component.text("mc." + NetworkConstants.DOMAIN, NamedTextColor.AQUA))
+                .append(Component.text(NetworkConstants.mcHost(), NamedTextColor.AQUA))
                 .append(Component.text("!", NamedTextColor.RED));
     }
 
