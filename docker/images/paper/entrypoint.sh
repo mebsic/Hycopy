@@ -25,6 +25,7 @@ PORT_ALLOC_ROOT="${PORT_ALLOC_ROOT:-/var/lib/hypixel-port}"
 PORT_ALLOC_MIN="${PORT_ALLOC_MIN:-25590}"
 PORT_ALLOC_MAX="${PORT_ALLOC_MAX:-29999}"
 USER_AGENT="${USER_AGENT:-hypixel-docker/2.0 (https://example.net)}"
+PLUGIN_SOURCE_DIR="${PLUGIN_SOURCE_DIR:-/bootstrap/plugins}"
 
 mkdir -p "${DATA_DIR}" "${DATA_DIR}/plugins" "${DATA_DIR}/plugins/Hypixel"
 
@@ -184,6 +185,50 @@ is_true() {
   local value="${1:-}"
   local normalized="${value,,}"
   [[ "${normalized}" == "true" || "${normalized}" == "1" || "${normalized}" == "yes" ]]
+}
+
+stage_plugin() {
+  local file_name="$1"
+  local runtime_target="${DATA_DIR}/plugins/${file_name}"
+  local source_target=""
+
+  if [[ -n "${PLUGIN_SOURCE_DIR}" && -d "${PLUGIN_SOURCE_DIR}" ]]; then
+    source_target="${PLUGIN_SOURCE_DIR}/${file_name}"
+
+    if [[ -d "${source_target}" ]]; then
+      echo "[bootstrap] Fixing plugin path type mismatch for ${file_name}."
+      rm -rf "${source_target}"
+    fi
+
+    if [[ -f "${source_target}" ]]; then
+      cp -f "${source_target}" "${runtime_target}"
+    fi
+  fi
+
+  if [[ -s "${runtime_target}" ]]; then
+    return 0
+  fi
+
+  echo "[bootstrap] Required plugin ${file_name} not found in ${PLUGIN_SOURCE_DIR} or ${runtime_target}." >&2
+  return 1
+}
+
+stage_required_runtime_plugins() {
+  local required_plugins=("Hypixel.jar")
+  local plugin_file=""
+
+  case "${SERVER_KIND,,}" in
+    build)
+      required_plugins+=("HypixelBuild.jar")
+      ;;
+    hub|game)
+      required_plugins+=("MurderMystery.jar")
+      ;;
+  esac
+
+  for plugin_file in "${required_plugins[@]}"; do
+    stage_plugin "${plugin_file}"
+  done
 }
 
 normalize_map_dir_name() {
@@ -707,6 +752,8 @@ resolve_map_name_from_mongo() {
     printf '%s' "${resolved}"
   fi
 }
+
+stage_required_runtime_plugins
 
 if [[ -z "${MAP_NAME}" && "${SERVER_KIND,,}" != "build" ]]; then
   resolved_map_name="$(resolve_map_name_from_mongo)"

@@ -480,6 +480,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
         enforceAdventureMode(player.getGameMode(), player);
         applyHubFlightState(player);
         applyHubJoinVelocity(player);
+        scheduleImmediateJoinVelocityFollowUp(player.getUniqueId());
     }
 
     private void forceHotbarSlotOne(Player player) {
@@ -1016,6 +1017,19 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
             return;
         }
         player.setVelocity(new Vector(velocity.getX(), Math.max(0.0d, velocity.getY()), velocity.getZ()));
+    }
+
+    private void scheduleImmediateJoinVelocityFollowUp(UUID uuid) {
+        if (uuid == null || !isHubServer()) {
+            return;
+        }
+        Bukkit.getScheduler().runTask(this, () -> {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player == null || !player.isOnline()) {
+                return;
+            }
+            applyHubJoinVelocity(player);
+        });
     }
 
     private boolean isHubFlightEnabled(Profile profile) {

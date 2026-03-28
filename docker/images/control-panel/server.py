@@ -82,10 +82,9 @@ ROLLOUT_MIN_GAME_REPLICAS = env_int("ROLLOUT_MIN_GAME_REPLICAS", 2, minimum=2)
 ROLLOUT_COMPOSE_WORKDIR = os.getenv("ROLLOUT_COMPOSE_WORKDIR", "/workspace").strip()
 ROLLOUT_COMPOSE_FILE = os.getenv("ROLLOUT_COMPOSE_FILE", "/workspace/docker-compose.yml").strip()
 ROLLOUT_COMPOSE_ENV_FILE = os.getenv("ROLLOUT_COMPOSE_ENV_FILE", "/workspace/.env").strip()
-ROLLOUT_PROMOTE_UPLOADS = env_bool("ROLLOUT_PROMOTE_UPLOADS", True)
-ROLLOUT_PLUGIN_DIR = os.getenv("ROLLOUT_PLUGIN_DIR", "/workspace/docker/plugins").strip()
-ROLLOUT_PLUGIN_UPLOAD_SUFFIX = os.getenv("ROLLOUT_PLUGIN_UPLOAD_SUFFIX", ".upload").strip() or ".upload"
-PROMOTED_PLUGIN_FILENAMES = (
+ROLLOUT_PLUGIN_DIR = os.getenv("ROLLOUT_PLUGIN_DIR", "/workspace/docker/production").strip()
+ROLLOUT_PLUGIN_SOURCE_DIR = os.getenv("ROLLOUT_PLUGIN_SOURCE_DIR", "/workspace/docker/plugins").strip()
+REQUIRED_PLUGIN_FILENAMES = (
     "Hypixel.jar",
     "MurderMystery.jar",
     "HypixelBuild.jar",
@@ -615,7 +614,7 @@ def run_compose_up_service(compose_project, service_name, replicas, build, force
     return combined
 
 
-def validate_uploaded_jar(path):
+def validate_jar(path):
     if not os.path.isfile(path):
         return False, "file missing"
     try:
@@ -636,32 +635,50 @@ def validate_uploaded_jar(path):
     return True, "ok"
 
 
-def promote_uploaded_plugins():
-    result = {
-        "enabled": bool(ROLLOUT_PROMOTE_UPLOADS),
-        "pluginDir": ROLLOUT_PLUGIN_DIR,
-        "uploadSuffix": ROLLOUT_PLUGIN_UPLOAD_SUFFIX,
-        "promoted": [],
-    }
-    if not ROLLOUT_PROMOTE_UPLOADS:
-        return result
+def validate_rollout_plugins():
     if not ROLLOUT_PLUGIN_DIR:
         raise RuntimeError("ROLLOUT_PLUGIN_DIR is required")
 
     os.makedirs(ROLLOUT_PLUGIN_DIR, exist_ok=True)
-
-    for file_name in PROMOTED_PLUGIN_FILENAMES:
-        source_path = os.path.join(ROLLOUT_PLUGIN_DIR, f"{file_name}{ROLLOUT_PLUGIN_UPLOAD_SUFFIX}")
-        if not os.path.isfile(source_path):
-            continue
-
-        valid, detail = validate_uploaded_jar(source_path)
+    result = {
+        "pluginDir": ROLLOUT_PLUGIN_DIR,
+        "validated": [],
+    }
+    for file_name in REQUIRED_PLUGIN_FILENAMES:
+        source_path = os.path.join(ROLLOUT_PLUGIN_DIR, file_name)
+        valid, detail = validate_jar(source_path)
         if not valid:
             raise RuntimeError(f"{file_name} failed validation: {detail}")
+        result["validated"].append(file_name)
+    return result
+
+
+def sync_source_rollout_plugins():
+    if not ROLLOUT_PLUGIN_DIR:
+        raise RuntimeError("ROLLOUT_PLUGIN_DIR is required")
+
+    os.makedirs(ROLLOUT_PLUGIN_DIR, exist_ok=True)
+    result = {
+        "sourceDir": ROLLOUT_PLUGIN_SOURCE_DIR,
+        "pluginDir": ROLLOUT_PLUGIN_DIR,
+        "copied": [],
+        "missingSource": [],
+    }
+    if not ROLLOUT_PLUGIN_SOURCE_DIR:
+        return result
+
+    for file_name in REQUIRED_PLUGIN_FILENAMES:
+        source_path = os.path.join(ROLLOUT_PLUGIN_SOURCE_DIR, file_name)
+        if not os.path.isfile(source_path):
+            result["missingSource"].append(file_name)
+            continue
 
         destination_path = os.path.join(ROLLOUT_PLUGIN_DIR, file_name)
-        os.replace(source_path, destination_path)
-        result["promoted"].append(file_name)
+        try:
+            shutil.copy2(source_path, destination_path)
+        except OSError as exc:
+            raise RuntimeError(f"failed to copy {file_name} from plugin source: {exc}")
+        result["copied"].append(file_name)
 
     return result
 
@@ -1700,16 +1717,17 @@ class RolloutHandler(http.server.BaseHTTPRequestHandler):
                 if not compose_project:
                     raise RuntimeError("compose project not detected; set COMPOSE_PROJECT")
                 try:
-                    plugin_promotion = promote_uploaded_plugins()
+                    plugin_sync = sync_source_rollout_plugins()
+                    plugin_validation = validate_rollout_plugins()
                 except Exception as exc:
                     self.json_response(
                         409,
                         {
                             "timestamp": timestamp,
-                            "error": "plugin promotion failed",
+                            "error": "plugin sync/validation failed",
                             "detail": str(exc),
                             "pluginDir": ROLLOUT_PLUGIN_DIR,
-                            "uploadSuffix": ROLLOUT_PLUGIN_UPLOAD_SUFFIX,
+                            "pluginSourceDir": ROLLOUT_PLUGIN_SOURCE_DIR,
                         },
                     )
                     return
@@ -1909,7 +1927,8 @@ class RolloutHandler(http.server.BaseHTTPRequestHandler):
                         "targets": [target["name"] for target in targets],
                         "restarted": restarted,
                         "failed": failed,
-                        "pluginPromotion": plugin_promotion,
+                        "pluginSync": plugin_sync,
+                        "pluginValidation": plugin_validation,
                         "scaledToMinimum": scaled_to_minimum,
                         "restartServiceOrder": list(RESTART_SERVICE_ORDER),
                         "healthWaitSeconds": RESTART_HEALTH_WAIT_SECONDS,

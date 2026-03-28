@@ -169,7 +169,7 @@ public class MurderMysteryPlugin extends JavaPlugin implements HubContext {
             getLogger().severe("Startup failed due to a missing class dependency.");
         }
         getLogger().severe("This usually means plugin jars are out of sync during deployment.");
-        getLogger().severe("Build matching jars before restarting servers, then upload them as one release set:");
+        getLogger().severe("Build matching jars before restarting servers, then deploy them as one release set:");
         getLogger().severe("./gradlew shadowAll");
         getLogger().log(Level.SEVERE, "Disabling MurderMystery due to NoClassDefFoundError.", error);
         getServer().getPluginManager().disablePlugin(this);

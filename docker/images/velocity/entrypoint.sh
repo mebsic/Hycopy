@@ -2,8 +2,33 @@
 set -euo pipefail
 
 CONFIG_SOURCE="${CONFIG_SOURCE:-/bootstrap/config.json}"
+PLUGIN_SOURCE_DIR="${PLUGIN_SOURCE_DIR:-/bootstrap/plugins}"
 
 mkdir -p /server/plugins/hypixelproxy
+
+stage_proxy_plugin() {
+  local file_name="HypixelProxy.jar"
+  local runtime_target="/server/plugins/${file_name}"
+  local source_target=""
+
+  if [[ -n "${PLUGIN_SOURCE_DIR}" && -d "${PLUGIN_SOURCE_DIR}" ]]; then
+    source_target="${PLUGIN_SOURCE_DIR}/${file_name}"
+
+    if [[ -d "${source_target}" ]]; then
+      echo "[bootstrap] Fixing plugin path type mismatch for ${file_name}."
+      rm -rf "${source_target}"
+    fi
+
+    if [[ -f "${source_target}" ]]; then
+      cp -f "${source_target}" "${runtime_target}"
+    fi
+  fi
+
+  if [[ ! -s "${runtime_target}" ]]; then
+    echo "[bootstrap] Required proxy plugin ${file_name} not found in ${PLUGIN_SOURCE_DIR} or ${runtime_target}." >&2
+    return 1
+  fi
+}
 
 apply_network_config_overrides() {
   local config_file="$1"
@@ -78,5 +103,7 @@ config-version = "2.7"
 bungee-plugin-message-channel = true
 TOML
 fi
+
+stage_proxy_plugin
 
 exec java ${JAVA_OPTS:-"-Xms256M -Xmx512M"} -jar /server/velocity.jar
