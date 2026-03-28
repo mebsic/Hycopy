@@ -53,7 +53,7 @@ This builds shaded plugin artifacts and copies runtime `.jar` files into `docker
    ```
 5. Connect to `localhost:25565`.
 
-`docker-compose.yml` includes a `plugin-init` one-shot service that runs before game/build/proxy services, copies jars from `docker/plugins/` into `docker/production/`, and verifies required runtime jars are present on startup.
+`docker-compose.yml` includes a `plugin-init` one-shot service that runs before game/build/proxy services, copies jars from `docker/plugins/` into `docker/production/`, and verifies required runtime jars are present on start.
 
 ## `.env` Template
 
