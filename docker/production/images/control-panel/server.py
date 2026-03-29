@@ -537,12 +537,9 @@ def stop_and_remove_container(container_id):
 
 
 def compose_command_prefix(compose_project):
-    if shutil.which("docker"):
-        cmd = ["docker", "compose"]
-    elif shutil.which("docker-compose"):
-        cmd = ["docker-compose"]
-    else:
-        raise RuntimeError("docker compose command not found in control-panel container")
+    if not shutil.which("docker"):
+        raise RuntimeError("docker binary not found in control-panel container")
+    cmd = ["docker", "compose"]
     if compose_project:
         cmd.extend(["-p", compose_project])
     if ROLLOUT_COMPOSE_FILE:

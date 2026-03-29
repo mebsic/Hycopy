@@ -336,7 +336,7 @@ public class HubItemListener implements Listener {
             return;
         }
         try {
-            Bukkit.dispatchCommand(player, "hub");
+            player.chat("/hub");
         } catch (Exception ignored) {
         }
     }
