@@ -1,10 +1,5 @@
-plugins {
-    id("java")
-}
-
 group = "io.github.mebsic"
 version = "1.0.0"
-buildDir = file(".root-build")
 
 subprojects {
     apply(plugin = "java")
@@ -46,6 +41,15 @@ tasks.register("shadowAll") {
     )
 }
 
-tasks.build {
+tasks.register("build") {
     dependsOn("shadowAll")
+}
+
+tasks.register("clean") {
+    dependsOn(
+        ":core:clean",
+        ":murdermystery:clean",
+        ":proxy:clean",
+        ":build:clean"
+    )
 }

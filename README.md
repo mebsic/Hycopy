@@ -53,7 +53,7 @@ This builds shaded plugin artifacts and copies runtime `.jar` files into `docker
    ```
 5. Connect to `localhost:25565`.
 
-`control-panel` runs a BusyBox shell pre-start step that copies jars from `docker/development/plugins/` into `docker/production/plugins/` and verifies required runtime jars before the API starts.
+`control-panel` runs a BusyBox pre-start script that copies jars from `docker/development/plugins/` into `docker/production/plugins/` and verifies required runtime jars before the API starts.
 
 ## `.env` Template
 
