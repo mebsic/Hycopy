@@ -11,6 +11,9 @@ import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.regex.Matcher;
@@ -118,6 +121,46 @@ public class PunishmentService {
             return false;
         }
         return store.deactivateActive(targetUuid, type) > 0;
+    }
+
+    public PunishmentHistoryPage getPunishmentHistory(UUID targetUuid,
+                                                      String targetName,
+                                                      PunishmentType type,
+                                                      int page,
+                                                      int pageSize) {
+        if (store == null || type == null) {
+            return PunishmentHistoryPage.empty();
+        }
+        int safePageSize = Math.max(1, pageSize);
+        int requestedPage = Math.max(1, page);
+        long totalEntries;
+        int totalPages;
+        int effectivePage;
+        int skip;
+        List<Punishment> entries;
+        if (targetUuid != null) {
+            totalEntries = store.countByTargetUuid(targetUuid, type);
+            if (totalEntries <= 0L) {
+                return PunishmentHistoryPage.empty();
+            }
+            totalPages = totalHistoryPages(totalEntries, safePageSize);
+            effectivePage = Math.min(requestedPage, totalPages);
+            skip = historySkip(effectivePage, safePageSize);
+            entries = store.findByTargetUuid(targetUuid, type, skip, safePageSize);
+            return new PunishmentHistoryPage(effectivePage, totalPages, totalEntries, entries);
+        }
+        if (targetName == null || targetName.trim().isEmpty()) {
+            return PunishmentHistoryPage.empty();
+        }
+        totalEntries = store.countByTargetName(targetName, type);
+        if (totalEntries <= 0L) {
+            return PunishmentHistoryPage.empty();
+        }
+        totalPages = totalHistoryPages(totalEntries, safePageSize);
+        effectivePage = Math.min(requestedPage, totalPages);
+        skip = historySkip(effectivePage, safePageSize);
+        entries = store.findByTargetName(targetName, type, skip, safePageSize);
+        return new PunishmentHistoryPage(effectivePage, totalPages, totalEntries, entries);
     }
 
     public String formatMuteMessage(Punishment punishment) {
@@ -528,6 +571,61 @@ public class PunishmentService {
             return serverId.trim();
         }
         return "server-" + UUID.randomUUID();
+    }
+
+    private int totalHistoryPages(long totalEntries, int pageSize) {
+        if (totalEntries <= 0L || pageSize <= 0) {
+            return 1;
+        }
+        long pages = (totalEntries + pageSize - 1L) / pageSize;
+        if (pages > Integer.MAX_VALUE) {
+            return Integer.MAX_VALUE;
+        }
+        return (int) Math.max(1L, pages);
+    }
+
+    private int historySkip(int page, int pageSize) {
+        int safePage = Math.max(1, page);
+        int safePageSize = Math.max(1, pageSize);
+        long skip = ((long) safePage - 1L) * (long) safePageSize;
+        if (skip > Integer.MAX_VALUE) {
+            return Integer.MAX_VALUE;
+        }
+        return (int) skip;
+    }
+
+    public static class PunishmentHistoryPage {
+        private final int page;
+        private final int totalPages;
+        private final long totalEntries;
+        private final List<Punishment> entries;
+
+        private PunishmentHistoryPage(int page, int totalPages, long totalEntries, List<Punishment> entries) {
+            this.page = page;
+            this.totalPages = totalPages;
+            this.totalEntries = Math.max(0L, totalEntries);
+            this.entries = Collections.unmodifiableList(new ArrayList<Punishment>(entries));
+        }
+
+        public int getPage() {
+            return page;
+        }
+
+        public int getTotalPages() {
+            return totalPages;
+        }
+
+        public long getTotalEntries() {
+            return totalEntries;
+        }
+
+        public List<Punishment> getEntries() {
+            return entries;
+        }
+
+        private static PunishmentHistoryPage empty() {
+            return new PunishmentHistoryPage(1, 1, 0L, Collections.<Punishment>emptyList());
+        }
     }
 
     private static class PunishmentAction {

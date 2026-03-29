@@ -8,6 +8,10 @@ commands:
     usage: /unban <player>
   mute:
     usage: /mute <player> [duration] [reason]
+  bans:
+    usage: /bans <player> [page]
+  mutes:
+    usage: /mutes <player> [page]
   unmute:
     usage: /unmute <player>
   kick:

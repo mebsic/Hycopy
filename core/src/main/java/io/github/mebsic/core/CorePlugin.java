@@ -14,6 +14,7 @@ import io.github.mebsic.core.command.MapCommand;
 import io.github.mebsic.core.command.MuteCommand;
 import io.github.mebsic.core.command.NetworkLevelCommand;
 import io.github.mebsic.core.command.ParkourCommand;
+import io.github.mebsic.core.command.PunishmentHistoryCommand;
 import io.github.mebsic.core.command.RankCommand;
 import io.github.mebsic.core.command.RankColorCommand;
 import io.github.mebsic.core.command.Reset100RanksGiftedCommand;
@@ -33,6 +34,7 @@ import io.github.mebsic.core.listener.PunishmentListener;
 import io.github.mebsic.core.model.CosmeticType;
 import io.github.mebsic.core.model.GameResult;
 import io.github.mebsic.core.model.Profile;
+import io.github.mebsic.core.model.PunishmentType;
 import io.github.mebsic.core.model.Rank;
 import io.github.mebsic.core.book.BookPromptService;
 import io.github.mebsic.core.service.CoreApi;
@@ -172,6 +174,12 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
         }
         if (getCommand("mute") != null) {
             getCommand("mute").setExecutor(new MuteCommand(this, punishments));
+        }
+        if (getCommand("bans") != null) {
+            getCommand("bans").setExecutor(new PunishmentHistoryCommand(this, punishments, PunishmentType.BAN));
+        }
+        if (getCommand("mutes") != null) {
+            getCommand("mutes").setExecutor(new PunishmentHistoryCommand(this, punishments, PunishmentType.MUTE));
         }
         if (getCommand("unmute") != null) {
             getCommand("unmute").setExecutor(new UnmuteCommand(this, punishments));

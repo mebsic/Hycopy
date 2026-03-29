@@ -8,6 +8,9 @@ import com.mongodb.client.model.Filters;
 import com.mongodb.client.result.UpdateResult;
 import org.bson.Document;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -79,6 +82,64 @@ public class PunishmentStore {
                 Filters.eq("active", true)
         ), new Document("$set", new Document("active", false)));
         return result == null ? 0L : result.getModifiedCount();
+    }
+
+    public long countByTargetUuid(UUID targetUuid, PunishmentType type) {
+        if (targetUuid == null || type == null) {
+            return 0L;
+        }
+        MongoCollection<Document> collection = mongo.getPunishments();
+        return collection.countDocuments(Filters.and(
+                Filters.eq("targetUuid", targetUuid.toString()),
+                Filters.eq("type", type.name())
+        ));
+    }
+
+    public long countByTargetName(String targetName, PunishmentType type) {
+        if (targetName == null || targetName.trim().isEmpty() || type == null) {
+            return 0L;
+        }
+        MongoCollection<Document> collection = mongo.getPunishments();
+        String trimmed = targetName.trim();
+        return collection.countDocuments(Filters.and(
+                Filters.regex("targetName", "^" + Pattern.quote(trimmed) + "$", "i"),
+                Filters.eq("type", type.name())
+        ));
+    }
+
+    public List<Punishment> findByTargetUuid(UUID targetUuid, PunishmentType type, int skip, int limit) {
+        if (targetUuid == null || type == null || limit <= 0) {
+            return Collections.emptyList();
+        }
+        MongoCollection<Document> collection = mongo.getPunishments();
+        int safeSkip = Math.max(0, skip);
+        int safeLimit = Math.max(1, limit);
+        List<Punishment> punishments = new ArrayList<Punishment>();
+        for (Document doc : collection.find(Filters.and(
+                Filters.eq("targetUuid", targetUuid.toString()),
+                Filters.eq("type", type.name())
+        )).sort(new Document("createdAt", -1)).skip(safeSkip).limit(safeLimit)) {
+            punishments.add(fromDocument(doc));
+        }
+        return punishments;
+    }
+
+    public List<Punishment> findByTargetName(String targetName, PunishmentType type, int skip, int limit) {
+        if (targetName == null || targetName.trim().isEmpty() || type == null || limit <= 0) {
+            return Collections.emptyList();
+        }
+        String trimmed = targetName.trim();
+        MongoCollection<Document> collection = mongo.getPunishments();
+        int safeSkip = Math.max(0, skip);
+        int safeLimit = Math.max(1, limit);
+        List<Punishment> punishments = new ArrayList<Punishment>();
+        for (Document doc : collection.find(Filters.and(
+                Filters.regex("targetName", "^" + Pattern.quote(trimmed) + "$", "i"),
+                Filters.eq("type", type.name())
+        )).sort(new Document("createdAt", -1)).skip(safeSkip).limit(safeLimit)) {
+            punishments.add(fromDocument(doc));
+        }
+        return punishments;
     }
 
     private Punishment fromDocument(Document doc) {
