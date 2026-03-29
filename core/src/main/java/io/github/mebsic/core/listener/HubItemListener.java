@@ -7,8 +7,10 @@ import io.github.mebsic.core.manager.MongoManager;
 import io.github.mebsic.core.menu.GameMenu;
 import io.github.mebsic.core.menu.LobbySelectorMenu;
 import io.github.mebsic.core.model.Profile;
+import io.github.mebsic.core.server.ServerType;
 import io.github.mebsic.core.service.QueueClient;
 import io.github.mebsic.core.service.ServerRegistrySnapshot;
+import io.github.mebsic.core.util.CommonMessages;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
@@ -29,10 +31,16 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.bson.Document;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -57,6 +65,11 @@ public class HubItemListener implements Listener {
     private static final int LOBBY_SELECTOR_SLOT = 8;
     private static final int PORTAL_TRIGGER_RADIUS_BLOCKS = 2;
     private static final long PORTAL_MENU_REOPEN_COOLDOWN_MS = 500L;
+    private static final String HUB_CONNECT_CHANNEL = "BungeeCord";
+    private static final String NO_HUB_AVAILABLE_MESSAGE =
+            ChatColor.RED + CommonMessages.NO_SERVERS_AVAILABLE;
+    private static final String HUB_TRANSFER_FAILED_MESSAGE =
+            ChatColor.RED + "Cannot send you to an available lobby! Please try again later.";
     private static final Material NETHER_PORTAL_MATERIAL = Material.matchMaterial("NETHER_PORTAL");
     private static final Material PORTAL_MATERIAL = Material.matchMaterial("PORTAL");
     private static final Material LEGACY_PORTAL_MATERIAL = Material.matchMaterial("LEGACY_PORTAL");
@@ -71,6 +84,10 @@ public class HubItemListener implements Listener {
     private final Set<UUID> friendRefreshInProgress;
     private final Set<UUID> playersInPortalZone;
     private final Map<UUID, Long> portalMenuReopenAllowedAt;
+    private final ServerType hubType;
+    private final String group;
+    private final String currentServerId;
+    private final int staleSeconds;
 
     public HubItemListener(CorePlugin plugin, QueueClient queueClient, ServerRegistrySnapshot registrySnapshot) {
         this.plugin = plugin;
@@ -83,6 +100,11 @@ public class HubItemListener implements Listener {
         this.friendRefreshInProgress = ConcurrentHashMap.newKeySet();
         this.playersInPortalZone = ConcurrentHashMap.newKeySet();
         this.portalMenuReopenAllowedAt = new ConcurrentHashMap<>();
+        ServerType currentType = plugin == null ? ServerType.UNKNOWN : plugin.getServerType();
+        this.hubType = currentType == null ? ServerType.UNKNOWN : currentType.toHubType();
+        this.group = plugin == null ? "" : plugin.getConfig().getString("server.group", "");
+        this.currentServerId = plugin == null ? "" : plugin.getConfig().getString("server.id", "");
+        this.staleSeconds = plugin == null ? 20 : Math.max(0, plugin.getConfig().getInt("registry.staleSeconds", 20));
         subscribeToFriendVisibilityUpdates();
     }
 
@@ -328,16 +350,130 @@ public class HubItemListener implements Listener {
         }
         portalMenuReopenAllowedAt.put(uuid, now + PORTAL_MENU_REOPEN_COOLDOWN_MS);
         playersInPortalZone.add(uuid);
-        dispatchHubCommand(player);
+        requestHubTransfer(uuid);
     }
 
-    private void dispatchHubCommand(Player player) {
-        if (player == null) {
+    private void requestHubTransfer(UUID playerUuid) {
+        if (plugin == null || playerUuid == null) {
+            return;
+        }
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            String targetHub = findBestHubServerName();
+            Bukkit.getScheduler().runTask(plugin, () -> connectToHub(playerUuid, targetHub));
+        });
+    }
+
+    private void connectToHub(UUID playerUuid, String targetHub) {
+        if (plugin == null || playerUuid == null) {
+            return;
+        }
+        Player player = plugin.getServer().getPlayer(playerUuid);
+        if (player == null || !player.isOnline()) {
+            return;
+        }
+        if (targetHub == null || targetHub.trim().isEmpty()) {
+            player.sendMessage(NO_HUB_AVAILABLE_MESSAGE);
             return;
         }
         try {
-            player.chat("/hub");
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            DataOutputStream out = new DataOutputStream(bytes);
+            out.writeUTF("Connect");
+            out.writeUTF(targetHub.trim());
+            player.sendPluginMessage(plugin, HUB_CONNECT_CHANNEL, bytes.toByteArray());
+        } catch (Exception ex) {
+            player.sendMessage(HUB_TRANSFER_FAILED_MESSAGE);
+            plugin.getLogger().warning("Failed to send hub connect request from portal!\n" + ex.getMessage());
+        }
+    }
+
+    private String findBestHubServerName() {
+        if (plugin == null || hubType == null || !hubType.isHub()) {
+            return null;
+        }
+        MongoManager mongo = plugin.getMongoManager();
+        if (mongo == null) {
+            return null;
+        }
+        MongoCollection<Document> collection = mongo.getServerRegistry();
+        if (collection == null) {
+            return null;
+        }
+        long now = System.currentTimeMillis();
+        Map<String, Document> latestByServerId = new HashMap<>();
+        Map<String, Long> heartbeatByServerId = new HashMap<>();
+        for (Document doc : collection.find(Filters.eq("type", hubType.getId()))) {
+            if (!isHubEntryValid(doc, now)) {
+                continue;
+            }
+            String serverId = safeString(doc.getString("_id"));
+            if (serverId.isEmpty()) {
+                continue;
+            }
+            if (!currentServerId.isEmpty() && currentServerId.equalsIgnoreCase(serverId)) {
+                continue;
+            }
+            String key = serverId.toLowerCase(Locale.ROOT);
+            long heartbeat = doc.getLong("lastHeartbeat") == null ? Long.MIN_VALUE : doc.getLong("lastHeartbeat");
+            Long currentHeartbeat = heartbeatByServerId.get(key);
+            if (currentHeartbeat != null && currentHeartbeat >= heartbeat) {
+                continue;
+            }
+            heartbeatByServerId.put(key, heartbeat);
+            latestByServerId.put(key, doc);
+        }
+        if (latestByServerId.isEmpty()) {
+            return null;
+        }
+        List<Document> candidates = new ArrayList<>(latestByServerId.values());
+        candidates.sort(Comparator
+                .comparingInt((Document doc) -> safeInt(doc.get("players")))
+                .thenComparing(doc -> safeString(doc.getString("_id")).toLowerCase(Locale.ROOT)));
+        return safeString(candidates.get(0).getString("_id"));
+    }
+
+    private boolean isHubEntryValid(Document doc, long now) {
+        if (doc == null) {
+            return false;
+        }
+        if (group != null && !group.trim().isEmpty()) {
+            String entryGroup = safeString(doc.getString("group"));
+            if (!group.equalsIgnoreCase(entryGroup)) {
+                return false;
+            }
+        }
+        String status = safeString(doc.getString("status"));
+        if (!status.isEmpty() && !status.equalsIgnoreCase("online")) {
+            return false;
+        }
+        if (staleSeconds > 0) {
+            Long heartbeat = doc.getLong("lastHeartbeat");
+            if (heartbeat != null && now - heartbeat > staleSeconds * 1000L) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private String safeString(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String trimmed = raw.trim();
+        return trimmed.isEmpty() ? "" : trimmed;
+    }
+
+    private int safeInt(Object value) {
+        if (value instanceof Number) {
+            return Math.max(0, ((Number) value).intValue());
+        }
+        if (value == null) {
+            return 0;
+        }
+        try {
+            return Math.max(0, Integer.parseInt(String.valueOf(value).trim()));
         } catch (Exception ignored) {
+            return 0;
         }
     }
 
