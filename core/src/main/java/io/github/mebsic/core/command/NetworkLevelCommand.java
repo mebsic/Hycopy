@@ -40,18 +40,18 @@ public class NetworkLevelCommand implements CommandExecutor {
         UUID uuid = target != null ? target.getUniqueId() : MojangApi.lookupUuid(args[0]);
         String name = target != null ? target.getName() : args[0];
         if (uuid == null) {
-            sender.sendMessage(ChatColor.RED + "Player not found.");
+            sender.sendMessage(ChatColor.RED + "Player not found!");
             return true;
         }
         int level;
         try {
             level = Integer.parseInt(args[1]);
         } catch (NumberFormatException ex) {
-            sender.sendMessage(ChatColor.RED + "Network level must be a number.");
+            sender.sendMessage(ChatColor.RED + "Network level must be a number!");
             return true;
         }
         if (level < 0) {
-            sender.sendMessage(ChatColor.RED + "Network level must be 0 or higher.");
+            sender.sendMessage(ChatColor.RED + "Network level must be 0 or higher!");
             return true;
         }
         boolean selfTarget = sender instanceof Player
@@ -62,7 +62,7 @@ public class NetworkLevelCommand implements CommandExecutor {
             plugin.sendNetworkLevelUpAnnouncement(target, level);
         } else {
             if (!plugin.isMongoEnabled() || plugin.getProfileStore() == null) {
-                sender.sendMessage(ChatColor.RED + "MongoDB is not enabled.");
+                sender.sendMessage(ChatColor.RED + "MongoDB is not enabled!");
                 return true;
             }
             plugin.getProfileStore().updateNetworkLevel(uuid, name, level);

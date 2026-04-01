@@ -25,7 +25,7 @@ public class Reset100RanksGiftedCommand implements CommandExecutor {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!(sender instanceof Player)) {
-            sender.sendMessage(ChatColor.RED + "Only players can use this command.");
+            sender.sendMessage(ChatColor.RED + CommonMessages.ONLY_PLAYERS_COMMAND);
             return true;
         }
 
@@ -37,7 +37,7 @@ public class Reset100RanksGiftedCommand implements CommandExecutor {
 
         Profile profile = plugin.getProfile(player.getUniqueId());
         if (profile == null || profile.getStats() == null) {
-            player.sendMessage(ChatColor.RED + "Your profile is still loading! Try again in a moment.");
+            player.sendMessage(ChatColor.RED + CommonMessages.PROFILE_LOADING);
             return true;
         }
 

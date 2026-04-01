@@ -69,7 +69,7 @@ public class ClickToPlayNpcMenu extends Menu {
             return;
         }
         if (gameType == null || !gameType.isGame()) {
-            player.sendMessage(ChatColor.RED + "This game is currently unavailable.");
+            player.sendMessage(ChatColor.RED + "This game is currently unavailable!");
             return;
         }
         if (queueClient != null) {

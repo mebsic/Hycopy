@@ -4,6 +4,7 @@ import com.mongodb.client.MongoCollection;
 import io.github.mebsic.core.CorePlugin;
 import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.core.model.Rank;
+import io.github.mebsic.core.util.CommonMessages;
 import io.github.mebsic.core.util.NetworkConstants;
 import io.github.mebsic.core.util.RankFormatUtil;
 import org.bson.Document;
@@ -27,7 +28,7 @@ public final class GiftSupport {
     static final String PRESENT_HEAD_OWNER = "MHF_Present";
     static final String GIFT_HISTORY_COLLECTION = "rank_gift_history";
     static final String GIFTED_COUNTER_KEY = "ranksGifted";
-    public static final String PROFILE_LOADING_SELF_MESSAGE = ChatColor.RED + "Your profile is still loading! Try again in a moment.";
+    public static final String PROFILE_LOADING_SELF_MESSAGE = ChatColor.RED + CommonMessages.PROFILE_LOADING;
     public static final String PROFILE_LOADING_TARGET_MESSAGE = ChatColor.RED + "That player's profile is still loading! Try again in a moment.";
     public static final String GIFT_LOADING_MESSAGE = ChatColor.RED + "That gift is still loading! Try again in a moment.";
 

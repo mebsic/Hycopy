@@ -46,7 +46,7 @@ public class RankCommand implements CommandExecutor {
         UUID uuid = target != null ? target.getUniqueId() : MojangApi.lookupUuid(args[0]);
         String name = target != null ? target.getName() : args[0];
         if (uuid == null) {
-            sender.sendMessage(ChatColor.RED + "Player not found.");
+            sender.sendMessage(ChatColor.RED + "Player not found!");
             return true;
         }
         boolean selfTarget = sender instanceof Player
@@ -57,7 +57,7 @@ public class RankCommand implements CommandExecutor {
             target.sendMessage(targetMessage);
         } else {
             if (!plugin.isMongoEnabled() || plugin.getProfileStore() == null) {
-                sender.sendMessage(ChatColor.RED + "MongoDB is not enabled.");
+                sender.sendMessage(ChatColor.RED + "MongoDB is not enabled!");
                 return true;
             }
             plugin.getProfileStore().updateRank(uuid, name, rank);

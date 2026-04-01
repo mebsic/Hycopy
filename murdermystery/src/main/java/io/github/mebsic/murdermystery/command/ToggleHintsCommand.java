@@ -2,6 +2,7 @@ package io.github.mebsic.murdermystery.command;
 
 import io.github.mebsic.core.CorePlugin;
 import io.github.mebsic.core.model.Profile;
+import io.github.mebsic.core.util.CommonMessages;
 import io.github.mebsic.murdermystery.service.TipService;
 import io.github.mebsic.murdermystery.stats.MurderMysteryStats;
 import org.bukkit.ChatColor;
@@ -22,7 +23,7 @@ public class ToggleHintsCommand implements CommandExecutor {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!(sender instanceof Player)) {
-            sender.sendMessage(ChatColor.RED + "Only players can use this command.");
+            sender.sendMessage(ChatColor.RED + CommonMessages.ONLY_PLAYERS_COMMAND);
             return true;
         }
         Player player = (Player) sender;
@@ -31,7 +32,7 @@ public class ToggleHintsCommand implements CommandExecutor {
         }
         Profile profile = corePlugin.getProfile(player.getUniqueId());
         if (profile == null || profile.getStats() == null) {
-            player.sendMessage(ChatColor.RED + "Your Profile is not loaded yet!");
+            player.sendMessage(ChatColor.RED + CommonMessages.PROFILE_LOADING);
             return true;
         }
 

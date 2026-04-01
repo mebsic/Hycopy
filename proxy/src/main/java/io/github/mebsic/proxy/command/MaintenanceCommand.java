@@ -46,7 +46,7 @@ public class MaintenanceCommand implements SimpleCommand {
             }
         }
         if (database == null) {
-            invocation.source().sendMessage(Component.text("MongoDB is not configured.", NamedTextColor.RED));
+            invocation.source().sendMessage(Component.text("MongoDB is not configured!", NamedTextColor.RED));
             return;
         }
         MongoCollection<Document> collection = database.getCollection(config.getMotdCollection());

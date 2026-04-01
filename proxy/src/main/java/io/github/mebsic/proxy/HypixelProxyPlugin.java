@@ -505,7 +505,7 @@ public class HypixelProxyPlugin {
             return;
         }
         if (chatRestrictionService != null && chatRestrictionService.isMuted(playerId)) {
-            sendPartyChatFramed(player, Component.text("You are currently muted.", NamedTextColor.RED));
+            sendPartyChatFramed(player, Component.text("You are currently muted!", NamedTextColor.RED));
             event.setResult(PlayerChatEvent.ChatResult.denied());
             return;
         }
@@ -513,7 +513,7 @@ public class HypixelProxyPlugin {
                 && !partyService.isLeader(playerId)
                 && !partyService.isModerator(playerId)
                 && !isStaff(playerId)) {
-            sendPartyChatFramed(player, Component.text("This party is currently muted.", NamedTextColor.RED));
+            sendPartyChatFramed(player, Component.text("This party is currently muted!", NamedTextColor.RED));
             event.setResult(PlayerChatEvent.ChatResult.denied());
             return;
         }

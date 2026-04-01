@@ -25,7 +25,7 @@ public class GiveCommand implements CommandExecutor {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!(sender instanceof Player)) {
-            sender.sendMessage(ChatColor.RED + "Players only.");
+            sender.sendMessage(ChatColor.RED + CommonMessages.ONLY_PLAYERS_COMMAND);
             return true;
         }
         Player player = (Player) sender;
@@ -45,7 +45,7 @@ public class GiveCommand implements CommandExecutor {
         if (args.length >= 3) {
             target = Bukkit.getPlayer(args[0]);
             if (target == null) {
-                sender.sendMessage(ChatColor.RED + "That player must be online.");
+                sender.sendMessage(ChatColor.RED + "That player must be online!");
                 return true;
             }
             rawItem = args[1];
@@ -66,11 +66,11 @@ public class GiveCommand implements CommandExecutor {
         try {
             quantity = Integer.parseInt(rawQuantity);
         } catch (NumberFormatException ex) {
-            sender.sendMessage(ChatColor.RED + "Quantity must be a positive number.");
+            sender.sendMessage(ChatColor.RED + "Quantity must be a positive number!");
             return true;
         }
         if (quantity <= 0) {
-            sender.sendMessage(ChatColor.RED + "Quantity must be a positive number.");
+            sender.sendMessage(ChatColor.RED + "Quantity must be a positive number!");
             return true;
         }
 

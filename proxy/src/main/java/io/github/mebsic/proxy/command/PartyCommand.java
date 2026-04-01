@@ -84,7 +84,7 @@ public class PartyCommand implements SimpleCommand {
     @Override
     public void execute(Invocation invocation) {
         if (!(invocation.source() instanceof Player)) {
-            invocation.source().sendMessage(Component.text("Players only.", NamedTextColor.RED));
+            invocation.source().sendMessage(Component.text(CommonMessages.ONLY_PLAYERS_COMMAND, NamedTextColor.RED));
             return;
         }
         Player player = (Player) invocation.source();
@@ -287,7 +287,7 @@ public class PartyCommand implements SimpleCommand {
             return;
         }
         if (!parties.acceptInvite(player.getUniqueId(), leaderId)) {
-            sendFramed(player, Component.text("No pending party invite from that player.", NamedTextColor.RED));
+            sendFramed(player, Component.text("No pending party invite from that player!", NamedTextColor.RED));
             return;
         }
         sendFramed(player, Component.text("You have joined ", NamedTextColor.YELLOW)
@@ -307,7 +307,7 @@ public class PartyCommand implements SimpleCommand {
             return;
         }
         if (!parties.denyInvite(player.getUniqueId(), leaderId)) {
-            sendFramed(player, Component.text("No pending party invite from that player.", NamedTextColor.RED));
+            sendFramed(player, Component.text("No pending party invite from that player!", NamedTextColor.RED));
             return;
         }
         sendFramed(player, Component.text("Party invite denied.", NamedTextColor.YELLOW));
@@ -409,10 +409,10 @@ public class PartyCommand implements SimpleCommand {
                 sendFramed(player, Component.text("Use " + cmd("leave") + " to leave your party.", NamedTextColor.RED));
                 return;
             case CANNOT_KICK_LEADER:
-                sendFramed(player, Component.text("You cannot kick the party leader.", NamedTextColor.RED));
+                sendFramed(player, Component.text("You cannot kick the party leader!", NamedTextColor.RED));
                 return;
             case TARGET_NOT_IN_PARTY:
-                sendFramed(player, Component.text("That player is not in your party.", NamedTextColor.RED));
+                sendFramed(player, Component.text("That player is not in your party!", NamedTextColor.RED));
                 return;
             case KICKED:
             default:
@@ -493,14 +493,14 @@ public class PartyCommand implements SimpleCommand {
                 sendNotPartyLeader(player);
                 return;
             case CANNOT_TARGET_SELF:
-                sendFramed(player, Component.text("You cannot promote yourself.", NamedTextColor.RED));
+                sendFramed(player, Component.text("You cannot promote yourself!", NamedTextColor.RED));
                 return;
             case TARGET_NOT_IN_PARTY:
-                sendFramed(player, Component.text("That player is not in your party.", NamedTextColor.RED));
+                sendFramed(player, Component.text("That player is not in your party!", NamedTextColor.RED));
                 return;
             case ALREADY_LEADER:
                 sendFramed(player, LEGACY.deserialize(targetName)
-                        .append(Component.text(" is already the party leader.", NamedTextColor.RED)));
+                        .append(Component.text(" is already the party leader!", NamedTextColor.RED)));
                 return;
             case PROMOTED_TO_MODERATOR:
                 sendFramedToParty(playerId,
@@ -548,17 +548,17 @@ public class PartyCommand implements SimpleCommand {
                 sendNotPartyLeader(player);
                 return;
             case CANNOT_TARGET_SELF:
-                sendFramed(player, Component.text("You cannot demote yourself.", NamedTextColor.RED));
+                sendFramed(player, Component.text("You cannot demote yourself!", NamedTextColor.RED));
                 return;
             case TARGET_NOT_IN_PARTY:
-                sendFramed(player, Component.text("That player is not in your party.", NamedTextColor.RED));
+                sendFramed(player, Component.text("That player is not in your party!", NamedTextColor.RED));
                 return;
             case CANNOT_DEMOTE_LEADER:
                 sendFramed(player, Component.text("Use " + cmd("transfer <player>") + " to change the party leader.", NamedTextColor.RED));
                 return;
             case ALREADY_MEMBER:
                 sendFramed(player, LEGACY.deserialize(targetName)
-                        .append(Component.text(" is already a party member.", NamedTextColor.RED)));
+                        .append(Component.text(" is already a party member!", NamedTextColor.RED)));
                 return;
             case DEMOTED_TO_MEMBER:
             default:
@@ -599,14 +599,14 @@ public class PartyCommand implements SimpleCommand {
                 sendNotPartyLeader(player);
                 return;
             case CANNOT_TARGET_SELF:
-                sendFramed(player, Component.text("You are already the party leader.", NamedTextColor.RED));
+                sendFramed(player, Component.text("You are already the party leader!", NamedTextColor.RED));
                 return;
             case TARGET_NOT_IN_PARTY:
-                sendFramed(player, Component.text("That player is not in your party.", NamedTextColor.RED));
+                sendFramed(player, Component.text("That player is not in your party!", NamedTextColor.RED));
                 return;
             case ALREADY_LEADER:
                 sendFramed(player, LEGACY.deserialize(targetName)
-                        .append(Component.text(" is already the party leader.", NamedTextColor.RED)));
+                        .append(Component.text(" is already the party leader!", NamedTextColor.RED)));
                 return;
             case TRANSFERRED:
             default:
@@ -635,10 +635,10 @@ public class PartyCommand implements SimpleCommand {
         switch (result) {
             case TARGET_NOT_IN_PARTY:
                 sendFramed(player, LEGACY.deserialize(formatNameWithRank(targetId, args[1]))
-                        .append(Component.text(" is not in a party.", NamedTextColor.RED)));
+                        .append(Component.text(" is not in a party!", NamedTextColor.RED)));
                 return;
             case ALREADY_LEADER:
-                sendFramed(player, Component.text("You are already the leader of that party.", NamedTextColor.RED));
+                sendFramed(player, Component.text("You are already the leader of that party!", NamedTextColor.RED));
                 return;
             case HIJACKED:
             default:
@@ -677,7 +677,7 @@ public class PartyCommand implements SimpleCommand {
                 ServerType type = details.getType();
                 targetIsGame = type.isGame();
                 if (!type.isHub() && !type.isGame()) {
-                    sendFramed(player, Component.text("You can only warp from hub or game servers.", NamedTextColor.RED));
+                    sendFramed(player, Component.text("You can only warp from hub or game servers!", NamedTextColor.RED));
                     return;
                 }
                 if (type.isGame() && isWarpBlockedGameState(details.getState())) {
@@ -809,14 +809,14 @@ public class PartyCommand implements SimpleCommand {
             return;
         }
         if (chatRestrictions != null && chatRestrictions.isMuted(player.getUniqueId())) {
-            sendFramed(player, Component.text("You are currently muted.", NamedTextColor.RED));
+            sendFramed(player, Component.text("You are currently muted!", NamedTextColor.RED));
             return;
         }
         if (parties.isPartyChatMuted(player.getUniqueId())
                 && !parties.isLeader(player.getUniqueId())
                 && !parties.isModerator(player.getUniqueId())
                 && !isStaff(player.getUniqueId())) {
-            sendFramed(player, Component.text("This party is currently muted.", NamedTextColor.RED));
+            sendFramed(player, Component.text("This party is currently muted!", NamedTextColor.RED));
             return;
         }
         String message = joinArgs(args, start);
@@ -909,7 +909,7 @@ public class PartyCommand implements SimpleCommand {
                 sendNotPartyLeader(player);
                 return;
             case ALREADY_ACTIVE:
-                sendFramed(player, Component.text("You already have an active party poll.", NamedTextColor.RED));
+                sendFramed(player, Component.text("You already have an active party poll!", NamedTextColor.RED));
                 return;
             case INVALID_POLL:
                 sendPollHelp(player, true);
@@ -930,18 +930,18 @@ public class PartyCommand implements SimpleCommand {
             return;
         }
         if (!parties.hasActivePoll(player.getUniqueId())) {
-            sendFramedWithShort(player, singleLine(Component.text("This poll has ended.", NamedTextColor.RED)));
+            sendFramedWithShort(player, singleLine(Component.text("This poll has ended!", NamedTextColor.RED)));
             return;
         }
         int option;
         try {
             option = Integer.parseInt(args[1].trim());
         } catch (NumberFormatException ignored) {
-            sendFramed(player, Component.text("That is not a valid poll option.", NamedTextColor.RED));
+            sendFramed(player, Component.text("That is not a valid poll option!", NamedTextColor.RED));
             return;
         }
         if (option <= 0) {
-            sendFramed(player, Component.text("That is not a valid poll option.", NamedTextColor.RED));
+            sendFramed(player, Component.text("That is not a valid poll option!", NamedTextColor.RED));
             return;
         }
         PollVoteResult result = parties.answerPoll(player.getUniqueId(), option);
@@ -950,10 +950,10 @@ public class PartyCommand implements SimpleCommand {
                 sendNotInParty(player);
                 return;
             case NO_ACTIVE_POLL:
-                sendFramedWithShort(player, singleLine(Component.text("This poll has ended.", NamedTextColor.RED)));
+                sendFramedWithShort(player, singleLine(Component.text("This poll has ended!", NamedTextColor.RED)));
                 return;
             case INVALID_OPTION:
-                sendFramed(player, Component.text("That is not a valid poll option.", NamedTextColor.RED));
+                sendFramed(player, Component.text("That is not a valid poll option!", NamedTextColor.RED));
                 return;
             case VOTED:
             default:
@@ -1066,7 +1066,7 @@ public class PartyCommand implements SimpleCommand {
         }
         if (updated.booleanValue()) {
             List<Component> lines = new ArrayList<Component>();
-            lines.add(Component.text("The party is now muted.", NamedTextColor.RED));
+            lines.add(Component.text("The party is now muted!", NamedTextColor.RED));
             lines.add(Component.text(
                     "Only Party Mods, Staff and the Leader will be able to chat.",
                     NamedTextColor.YELLOW

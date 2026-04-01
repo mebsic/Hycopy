@@ -14,7 +14,7 @@ public final class GameCommandUtil {
 
     public static Player requirePlayer(CommandSender sender) {
         if (!(sender instanceof Player)) {
-            sender.sendMessage("Only players can use this command.");
+            sender.sendMessage(CommonMessages.ONLY_PLAYERS_COMMAND);
             return null;
         }
         return (Player) sender;

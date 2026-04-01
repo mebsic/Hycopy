@@ -48,7 +48,7 @@ public class TokenCommand implements CommandExecutor {
         UUID uuid = target != null ? target.getUniqueId() : MojangApi.lookupUuid(args[0]);
         String name = target != null ? target.getName() : args[0];
         if (uuid == null) {
-            sender.sendMessage(ChatColor.RED + "Player not found.");
+            sender.sendMessage(ChatColor.RED + "Player not found!");
             return true;
         }
 
@@ -56,18 +56,24 @@ public class TokenCommand implements CommandExecutor {
         try {
             amount = Integer.parseInt(args[1]);
         } catch (NumberFormatException ex) {
-            sender.sendMessage(ChatColor.RED + "Token amount must be a number.");
+            sender.sendMessage(ChatColor.RED + "Token amount must be a number!");
             return true;
         }
         if (amount < 0) {
-            sender.sendMessage(ChatColor.RED + "Token amount must be 0 or higher.");
+            sender.sendMessage(ChatColor.RED + "Token amount must be 0 or higher!");
             return true;
         }
 
+        boolean selfTarget = sender instanceof Player
+                && uuid.equals(((Player) sender).getUniqueId());
         if (target != null) {
             Profile profile = corePlugin.getProfile(uuid);
             if (profile == null) {
-                sender.sendMessage(ChatColor.RED + "Profile is not loaded yet. Try again in a moment.");
+                if (selfTarget) {
+                    sender.sendMessage(ChatColor.RED + CommonMessages.PROFILE_LOADING);
+                } else {
+                    sender.sendMessage(ChatColor.RED + "Profile is not loaded yet! Try again in a moment.");
+                }
                 return true;
             }
             int current = MurderMysteryStats.getTokens(profile.getStats());
@@ -81,7 +87,7 @@ public class TokenCommand implements CommandExecutor {
             corePlugin.saveProfile(profile);
         } else {
             if (!corePlugin.isMongoEnabled() || corePlugin.getProfileStore() == null) {
-                sender.sendMessage(ChatColor.RED + "MongoDB is not enabled.");
+                sender.sendMessage(ChatColor.RED + "MongoDB is not enabled!");
                 return true;
             }
             Profile profile = corePlugin.getProfileStore().load(uuid, name);

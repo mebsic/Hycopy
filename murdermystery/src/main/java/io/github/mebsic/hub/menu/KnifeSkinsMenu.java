@@ -7,6 +7,7 @@ import io.github.mebsic.core.model.KnifeSkinDefinition;
 import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.core.service.CoreApi;
 import io.github.mebsic.core.service.CosmeticService;
+import io.github.mebsic.core.util.CommonMessages;
 import io.github.mebsic.core.util.NetworkConstants;
 import io.github.mebsic.hub.service.KnifeMenuStateService;
 import io.github.mebsic.murdermystery.stats.MurderMysteryStats;
@@ -149,12 +150,12 @@ public class KnifeSkinsMenu extends Menu {
             return;
         }
         if (coreApi == null) {
-            player.sendMessage(ChatColor.RED + "Cosmetics are unavailable.");
+            player.sendMessage(ChatColor.RED + "Cosmetics are unavailable!");
             return;
         }
         Profile profile = coreApi.getProfile(player.getUniqueId());
         if (profile == null) {
-            player.sendMessage(ChatColor.RED + "Profile not loaded.");
+            player.sendMessage(ChatColor.RED + CommonMessages.PROFILE_LOADING);
             return;
         }
         int availableTokens = Math.max(0, MurderMysteryStats.getTokens(profile.getStats()));
@@ -978,12 +979,12 @@ public class KnifeSkinsMenu extends Menu {
                 return;
             }
             if (api == null) {
-                player.sendMessage(ChatColor.RED + "Cosmetics are unavailable.");
+                player.sendMessage(ChatColor.RED + "Cosmetics are unavailable!");
                 return;
             }
             Profile profile = api.getProfile(player.getUniqueId());
             if (profile == null) {
-                player.sendMessage(ChatColor.RED + "Profile not loaded.");
+                player.sendMessage(ChatColor.RED + CommonMessages.PROFILE_LOADING);
                 return;
             }
             Set<String> unlocked = normalizeIdSet(profile.getUnlocked().get(CosmeticType.KNIFE));

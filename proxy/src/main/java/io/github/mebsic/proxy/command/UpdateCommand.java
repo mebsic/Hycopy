@@ -59,7 +59,7 @@ public class UpdateCommand implements SimpleCommand {
     @Override
     public void execute(Invocation invocation) {
         if (!(invocation.source() instanceof Player)) {
-            invocation.source().sendMessage(Component.text("Players only.", NamedTextColor.RED));
+            invocation.source().sendMessage(Component.text(CommonMessages.ONLY_PLAYERS_COMMAND, NamedTextColor.RED));
             return;
         }
 
@@ -171,7 +171,7 @@ public class UpdateCommand implements SimpleCommand {
     }
 
     private void broadcastRestartSoon() {
-        Component firstLine = withGoldObfuscatedPrefix(Component.text("This proxy is restarting soon.", NamedTextColor.RED));
+        Component firstLine = withGoldObfuscatedPrefix(Component.text("This proxy is restarting soon!", NamedTextColor.RED));
         Component secondLine = withGoldObfuscatedPrefix(Component.text("Please reconnect to ", NamedTextColor.RED)
                 .append(Component.text(NetworkConstants.mcHost(), NamedTextColor.AQUA))
                 .append(Component.text("!", NamedTextColor.RED)));

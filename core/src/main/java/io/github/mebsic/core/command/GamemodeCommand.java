@@ -44,12 +44,12 @@ public class GamemodeCommand implements CommandExecutor {
         if (args.length >= 2) {
             target = Bukkit.getPlayer(args[1]);
             if (target == null) {
-                sender.sendMessage(ChatColor.RED + "That player must be online.");
+                sender.sendMessage(ChatColor.RED + "That player must be online!");
                 return true;
             }
         } else {
             if (!(sender instanceof Player)) {
-                sender.sendMessage(ChatColor.RED + "Console must specify a player.");
+                sender.sendMessage(ChatColor.RED + "Console must specify a player!");
                 return true;
             }
             target = (Player) sender;

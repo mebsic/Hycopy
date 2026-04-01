@@ -22,7 +22,7 @@ public class ClearCommand implements CommandExecutor {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!(sender instanceof Player)) {
-            sender.sendMessage(ChatColor.RED + "Players only.");
+            sender.sendMessage(ChatColor.RED + CommonMessages.ONLY_PLAYERS_COMMAND);
             return true;
         }
         Player player = (Player) sender;
@@ -40,7 +40,7 @@ public class ClearCommand implements CommandExecutor {
         if (args.length == 1) {
             target = Bukkit.getPlayer(args[0]);
             if (target == null) {
-                sender.sendMessage(ChatColor.RED + "That player must be online.");
+                sender.sendMessage(ChatColor.RED + "That player must be online!");
                 return true;
             }
         } else {

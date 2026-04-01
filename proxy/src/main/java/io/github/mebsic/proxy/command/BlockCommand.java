@@ -3,6 +3,7 @@ package io.github.mebsic.proxy.command;
 import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
+import io.github.mebsic.core.util.CommonMessages;
 import io.github.mebsic.core.util.MojangApi;
 import io.github.mebsic.proxy.service.BlockService;
 import io.github.mebsic.proxy.service.FriendService;
@@ -41,7 +42,7 @@ public class BlockCommand implements SimpleCommand {
     @Override
     public void execute(Invocation invocation) {
         if (!(invocation.source() instanceof Player)) {
-            invocation.source().sendMessage(Component.text("Players only.", NamedTextColor.RED));
+            invocation.source().sendMessage(Component.text(CommonMessages.ONLY_PLAYERS_COMMAND, NamedTextColor.RED));
             return;
         }
         Player player = (Player) invocation.source();
@@ -178,7 +179,7 @@ public class BlockCommand implements SimpleCommand {
         blocked.sort(Comparator.comparing(this::nameForSort, String.CASE_INSENSITIVE_ORDER));
         int totalPages = pageCount(blocked.size(), LIST_PAGE_SIZE);
         if (page > totalPages) {
-            send(player, Component.text("That page does not exist.", NamedTextColor.RED));
+            send(player, Component.text("That page does not exist!", NamedTextColor.RED));
             return;
         }
         int start = Math.max(0, (page - 1) * LIST_PAGE_SIZE);

@@ -1,5 +1,6 @@
 package io.github.mebsic.proxy.command;
 
+import io.github.mebsic.core.util.CommonMessages;
 import io.github.mebsic.proxy.service.ChatChannelService;
 import io.github.mebsic.proxy.service.PartyService;
 import io.github.mebsic.proxy.util.PartyComponents;
@@ -20,7 +21,7 @@ public class ChatCommand implements SimpleCommand {
     @Override
     public void execute(Invocation invocation) {
         if (!(invocation.source() instanceof Player)) {
-            invocation.source().sendMessage(Component.text("Players only.", NamedTextColor.RED));
+            invocation.source().sendMessage(Component.text(CommonMessages.ONLY_PLAYERS_COMMAND, NamedTextColor.RED));
             return;
         }
         Player player = (Player) invocation.source();

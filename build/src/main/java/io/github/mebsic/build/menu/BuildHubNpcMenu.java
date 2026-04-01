@@ -71,7 +71,7 @@ public class BuildHubNpcMenu extends Menu {
             return;
         }
         if (mapConfigService == null) {
-            player.sendMessage(ChatColor.RED + "Map config service is unavailable.");
+            player.sendMessage(ChatColor.RED + "Map config service is unavailable!");
             player.closeInventory();
             return;
         }

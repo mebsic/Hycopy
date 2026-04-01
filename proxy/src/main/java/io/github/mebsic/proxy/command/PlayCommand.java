@@ -1,6 +1,7 @@
 package io.github.mebsic.proxy.command;
 
 import io.github.mebsic.core.server.ServerType;
+import io.github.mebsic.core.util.CommonMessages;
 import io.github.mebsic.proxy.service.ServerRegistryService;
 import io.github.mebsic.proxy.service.PartyService;
 import io.github.mebsic.proxy.config.ProxyConfig;
@@ -42,7 +43,7 @@ public class PlayCommand implements SimpleCommand {
     @Override
     public void execute(Invocation invocation) {
         if (!(invocation.source() instanceof Player)) {
-            invocation.source().sendMessage(Component.text("Players only.", NamedTextColor.RED));
+            invocation.source().sendMessage(Component.text(CommonMessages.ONLY_PLAYERS_COMMAND, NamedTextColor.RED));
             return;
         }
         if (registry != null) {

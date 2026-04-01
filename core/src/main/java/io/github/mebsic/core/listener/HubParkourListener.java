@@ -69,7 +69,7 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
     private static final String FINISH_LINE_HINT_MESSAGE = ChatColor.GREEN.toString() + ChatColor.BOLD
             + "This is the finish line for the parkour! Get to the start line and climb back up here!";
     private static final String NOT_IN_RACE_MESSAGE =
-            ChatColor.RED + "You are currently not in a parkour race. Use /parkour start";
+            ChatColor.RED + "You are currently not in a parkour race! Use /parkour start";
     private static final String START_HINT_MESSAGE = ChatColor.GREEN + "Use "
             + ChatColor.YELLOW + "/parkour checkpoint"
             + ChatColor.GREEN + " to teleport to the last checkpoint or "
@@ -898,7 +898,7 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
         ActiveRun active = activeRuns.get(player.getUniqueId());
         ParkourRoute route = active == null ? resolveRouteForPlayer(player) : activeRoute(active);
         if (route == null) {
-            player.sendMessage(ChatColor.RED + "No parkour route is currently available.");
+            player.sendMessage(ChatColor.RED + "No parkour route is currently available!");
             return;
         }
         if (active != null) {

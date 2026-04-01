@@ -3,6 +3,7 @@ package io.github.mebsic.proxy.command;
 import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
+import io.github.mebsic.core.util.CommonMessages;
 import io.github.mebsic.core.util.MojangApi;
 import io.github.mebsic.proxy.service.BlockService;
 import io.github.mebsic.proxy.service.FriendService;
@@ -30,7 +31,7 @@ public class FriendMessageCommand implements SimpleCommand {
     @Override
     public void execute(Invocation invocation) {
         if (!(invocation.source() instanceof Player)) {
-            invocation.source().sendMessage(Component.text("Players only.", NamedTextColor.RED));
+            invocation.source().sendMessage(Component.text(CommonMessages.ONLY_PLAYERS_COMMAND, NamedTextColor.RED));
             return;
         }
         Player sender = (Player) invocation.source();
@@ -50,16 +51,16 @@ public class FriendMessageCommand implements SimpleCommand {
             return;
         }
         if (!friends.areFriends(sender.getUniqueId(), targetId)) {
-            sender.sendMessage(Component.text("You can only message players on your friends list.", NamedTextColor.RED));
+            sender.sendMessage(Component.text("You can only message players on your friends list!", NamedTextColor.RED));
             return;
         }
         if (blocks != null && blocks.isEitherBlocked(sender.getUniqueId(), targetId)) {
-            sender.sendMessage(Component.text("You cannot message this player.", NamedTextColor.RED));
+            sender.sendMessage(Component.text("You cannot message this player!", NamedTextColor.RED));
             return;
         }
         Optional<Player> target = proxy.getPlayer(targetId);
         if (!target.isPresent()) {
-            sender.sendMessage(Component.text("That player is offline.", NamedTextColor.RED));
+            sender.sendMessage(Component.text("That player is offline!", NamedTextColor.RED));
             return;
         }
         String message = joinArgs(args, 1);

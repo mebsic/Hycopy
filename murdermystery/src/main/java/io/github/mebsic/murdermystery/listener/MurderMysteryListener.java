@@ -115,7 +115,7 @@ public class MurderMysteryListener implements Listener {
         }
         long now = System.currentTimeMillis();
         if (now - gp.getLastKnifeThrow() < 2000L) {
-            player.sendMessage(ChatColor.RED + "Knife cooldown.");
+            player.sendMessage(ChatColor.RED + "Knife cooldown!");
             return;
         }
         gp.setLastKnifeThrow(now);

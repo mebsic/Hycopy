@@ -60,7 +60,7 @@ public class SpectatorListener implements Listener {
             ChatColor.GREEN + "Now spectating " + ChatColor.YELLOW;
     private static final String SPECTATE_MESSAGE_SUFFIX = ChatColor.GREEN + ".";
     private static final String NO_GAME_AVAILABLE_MESSAGE =
-            ChatColor.RED + "No available servers were found for this game right now.";
+            ChatColor.RED + "No available servers were found for this game right now!";
     private static final String TRANSFER_FAILED_MESSAGE =
             ChatColor.RED + "Failed to send you to another game server right now!";
 

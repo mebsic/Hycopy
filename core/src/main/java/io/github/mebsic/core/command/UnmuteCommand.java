@@ -53,7 +53,7 @@ public class UnmuteCommand implements CommandExecutor {
             }
         }
         if (targetUuid == null) {
-            sender.sendMessage(ChatColor.RED + "Player not found.");
+            sender.sendMessage(ChatColor.RED + "Player not found!");
             return true;
         }
         boolean removed = punishments.unpunish(PunishmentType.MUTE, targetUuid);

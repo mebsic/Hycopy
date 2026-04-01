@@ -59,7 +59,7 @@ public class GameManager {
     private static final String BUNGEE_CHANNEL = "BungeeCord";
     public static final String QUEUED_TRANSFER_MESSAGE = ChatColor.GREEN.toString() + ChatColor.BOLD + "Queued! Use the bed to return to lobby!";
     private static final long POST_GAME_TRANSFER_DELAY_TICKS = 200L; // 10 seconds
-    private static final String RESTARTING_KICK_MESSAGE = ChatColor.RED + "This server is restarting...";
+    private static final String RESTARTING_KICK_MESSAGE = ChatColor.RED + "This server is restarting!..";
     private static final String NO_LOBBY_AVAILABLE_MESSAGE = ChatColor.RED + CommonMessages.NO_SERVERS_AVAILABLE;
     private static final String TRANSFER_FAILED_MESSAGE = ChatColor.RED + "Could not send you to another server! Please try again later.";
     private static final String MAP_CONFIG_UPDATE_CHANNEL = "map_config_update";
@@ -392,7 +392,7 @@ public class GameManager {
             return;
         }
         if (players.size() >= maxPlayers) {
-            player.kickPlayer(ChatColor.RED + "Game is full.");
+            player.kickPlayer(ChatColor.RED + "Game is full!");
             return;
         }
         scoreboardTitleAnimators.remove(player.getUniqueId());
@@ -542,7 +542,7 @@ public class GameManager {
         joinLockedForRestart = false;
         GameMap activeMap = mapManager.getActiveMap();
         if (activeMap == null || activeMap.getSpawnPoints().isEmpty()) {
-            broadcast(ChatColor.RED + "No spawn points set.");
+            broadcast(ChatColor.RED + "No spawn points set!");
             state = GameState.WAITING;
             publishStateToCore();
             return;
@@ -1563,7 +1563,7 @@ public class GameManager {
         if (didPlayerWin(player, gamePlayer)) {
             return ChatColor.GREEN + "You won this round!";
         }
-        return ChatColor.RED + "You lost this round.";
+        return ChatColor.RED + "You lost this round!";
     }
 
     protected boolean didPlayerWin(Player player, GamePlayer gamePlayer) {

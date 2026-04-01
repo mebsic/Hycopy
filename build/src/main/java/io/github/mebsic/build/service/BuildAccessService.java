@@ -44,7 +44,7 @@ public class BuildAccessService {
 
     public boolean requireStaff(CommandSender sender) {
         if (!(sender instanceof Player)) {
-            sender.sendMessage(ChatColor.RED + "Players only.");
+            sender.sendMessage(ChatColor.RED + CommonMessages.ONLY_PLAYERS_COMMAND);
             return false;
         }
         Player player = (Player) sender;

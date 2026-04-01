@@ -145,7 +145,7 @@ public class BuildEditLocationsMenu extends Menu {
             boolean removed = mapConfigService != null
                     && mapConfigService.deleteMapLocationFromMenu(player, gameType, worldDirectory, entry);
             if (!removed) {
-                player.sendMessage(ChatColor.RED + "That location is no longer available.");
+                player.sendMessage(ChatColor.RED + "That location is no longer available!");
             }
             if (removed && mapConfigService != null) {
                 List<BuildMapConfigService.MapLocationEntry> remaining = mapConfigService.loadMapLocations(gameType, worldDirectory);

@@ -1,6 +1,7 @@
 package io.github.mebsic.proxy.command;
 
 import io.github.mebsic.core.server.ServerType;
+import io.github.mebsic.core.util.CommonMessages;
 import io.github.mebsic.core.util.MojangApi;
 import io.github.mebsic.proxy.service.BlockService;
 import io.github.mebsic.proxy.service.FriendService;
@@ -65,7 +66,7 @@ public class FriendCommand implements SimpleCommand {
     @Override
     public void execute(Invocation invocation) {
         if (!(invocation.source() instanceof Player)) {
-            invocation.source().sendMessage(Component.text("Players only.", NamedTextColor.RED));
+            invocation.source().sendMessage(Component.text(CommonMessages.ONLY_PLAYERS_COMMAND, NamedTextColor.RED));
             return;
         }
         Player player = (Player) invocation.source();
@@ -462,7 +463,7 @@ public class FriendCommand implements SimpleCommand {
         }
         int totalPages = pageCount(ordered.size(), LIST_PAGE_SIZE);
         if (page > totalPages) {
-            sendFramed(player, Component.text("That page does not exist.", NamedTextColor.RED));
+            sendFramed(player, Component.text("That page does not exist!", NamedTextColor.RED));
             return;
         }
         List<Component> lines = new ArrayList<>();
@@ -505,7 +506,7 @@ public class FriendCommand implements SimpleCommand {
         }
         int totalPages = pageCount(requests.size(), REQUESTS_PAGE_SIZE);
         if (page > totalPages) {
-            sendUnframed(player, Component.text("That page does not exist.", NamedTextColor.RED));
+            sendUnframed(player, Component.text("That page does not exist!", NamedTextColor.RED));
             return;
         }
         List<Component> lines = new ArrayList<>();
@@ -571,11 +572,11 @@ public class FriendCommand implements SimpleCommand {
             return;
         }
         if (!friends.areFriends(sender.getUniqueId(), targetId)) {
-            sendFramed(sender, Component.text("You are not friends with that player.", NamedTextColor.RED));
+            sendFramed(sender, Component.text("You are not friends with that player!", NamedTextColor.RED));
             return;
         }
         if (isEitherBlocked(sender.getUniqueId(), targetId)) {
-            sendFramed(sender, Component.text("You cannot message this player.", NamedTextColor.RED));
+            sendFramed(sender, Component.text("You cannot message this player!", NamedTextColor.RED));
             return;
         }
         friends.rememberName(sender.getUniqueId(), sender.getUsername());
@@ -585,7 +586,7 @@ public class FriendCommand implements SimpleCommand {
             String targetDisplay = friends.formatNameWithRank(target.getUniqueId());
             sender.sendMessage(Components.friendPrivateMessage(true, targetDisplay, message));
             target.sendMessage(Components.friendPrivateMessage(false, senderDisplay, message));
-        }, () -> sendFramed(sender, Component.text("That player is offline.", NamedTextColor.RED)));
+        }, () -> sendFramed(sender, Component.text("That player is offline!", NamedTextColor.RED)));
     }
 
     private UUID resolveUuid(String name) {

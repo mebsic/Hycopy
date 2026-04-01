@@ -22,7 +22,7 @@ public class TeleportCommand implements CommandExecutor {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!(sender instanceof Player)) {
-            sender.sendMessage(ChatColor.RED + "Only players can use this command.");
+            sender.sendMessage(ChatColor.RED + CommonMessages.ONLY_PLAYERS_COMMAND);
             return true;
         }
         Player player = (Player) sender;
@@ -38,7 +38,7 @@ public class TeleportCommand implements CommandExecutor {
         if (args.length == 1) {
             Player target = Bukkit.getPlayerExact(args[0]);
             if (target == null) {
-                player.sendMessage(ChatColor.RED + "Player not found.");
+                player.sendMessage(ChatColor.RED + "Player not found!");
                 return true;
             }
             player.teleport(target.getLocation());
@@ -50,7 +50,7 @@ public class TeleportCommand implements CommandExecutor {
             Player from = Bukkit.getPlayerExact(args[0]);
             Player to = Bukkit.getPlayerExact(args[1]);
             if (from == null || to == null) {
-                player.sendMessage(ChatColor.RED + "Player not found.");
+                player.sendMessage(ChatColor.RED + "Player not found!");
                 return true;
             }
             from.teleport(to.getLocation());

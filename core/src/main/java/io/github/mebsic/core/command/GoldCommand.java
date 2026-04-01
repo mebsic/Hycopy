@@ -42,7 +42,7 @@ public class GoldCommand implements CommandExecutor {
         UUID uuid = target != null ? target.getUniqueId() : MojangApi.lookupUuid(args[0]);
         String name = target != null ? target.getName() : args[0];
         if (uuid == null) {
-            sender.sendMessage(ChatColor.RED + "Player not found.");
+            sender.sendMessage(ChatColor.RED + "Player not found!");
             return true;
         }
 
@@ -50,11 +50,11 @@ public class GoldCommand implements CommandExecutor {
         try {
             amount = Integer.parseInt(args[1]);
         } catch (NumberFormatException ex) {
-            sender.sendMessage(ChatColor.RED + "Gold amount must be a number.");
+            sender.sendMessage(ChatColor.RED + "Gold amount must be a number!");
             return true;
         }
         if (amount < 0) {
-            sender.sendMessage(ChatColor.RED + "Gold amount must be 0 or higher.");
+            sender.sendMessage(ChatColor.RED + "Gold amount must be 0 or higher!");
             return true;
         }
 
@@ -64,14 +64,18 @@ public class GoldCommand implements CommandExecutor {
         if (target != null) {
             Profile profile = plugin.getProfile(uuid);
             if (profile == null) {
-                sender.sendMessage(ChatColor.RED + "Profile is not loaded yet. Try again in a moment.");
+                if (selfTarget) {
+                    sender.sendMessage(ChatColor.RED + CommonMessages.PROFILE_LOADING);
+                } else {
+                    sender.sendMessage(ChatColor.RED + "Profile is not loaded yet! Try again in a moment.");
+                }
                 return true;
             }
             plugin.setNetworkGold(uuid, amount);
             target.sendMessage(targetMessage);
         } else {
             if (!plugin.isMongoEnabled() || plugin.getProfileStore() == null) {
-                sender.sendMessage(ChatColor.RED + "MongoDB is not enabled.");
+                sender.sendMessage(ChatColor.RED + "MongoDB is not enabled!");
                 return true;
             }
             plugin.getProfileStore().updateNetworkGold(uuid, name, amount);

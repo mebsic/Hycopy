@@ -64,7 +64,7 @@ public class BuildNpcEditorMenu extends Menu {
             return;
         }
         if (mapConfigService == null || npcEntityUuid == null) {
-            player.sendMessage(ChatColor.RED + "That NPC is no longer available.");
+            player.sendMessage(ChatColor.RED + "That NPC is no longer available!");
             player.closeInventory();
             return;
         }

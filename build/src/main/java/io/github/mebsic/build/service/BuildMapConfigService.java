@@ -239,7 +239,7 @@ public class BuildMapConfigService {
             return;
         }
         if (corePlugin == null) {
-            player.sendMessage(ChatColor.RED + "Build export is unavailable right now.");
+            player.sendMessage(ChatColor.RED + "Build export is unavailable right now!");
             return;
         }
 
@@ -281,7 +281,7 @@ public class BuildMapConfigService {
 
         World transitWorld = resolveExportTransitWorld(sourceWorld.getName());
         if (transitWorld == null) {
-            player.sendMessage(ChatColor.RED + "Load another world first so this one can be safely unloaded.");
+            player.sendMessage(ChatColor.RED + "Load another world first so this one can be safely unloaded!");
             return;
         }
 
@@ -289,7 +289,7 @@ public class BuildMapConfigService {
         String sourceWorldName = safeString(sourceWorld.getName());
         String lockKey = gameKey.toLowerCase(Locale.ROOT) + ":" + sourceWorldName.toLowerCase(Locale.ROOT);
         if (worldExportLocks.putIfAbsent(lockKey, playerUuid) != null) {
-            player.sendMessage(ChatColor.RED + "An export is already running for this world.");
+            player.sendMessage(ChatColor.RED + "An export is already running for this world!");
             return;
         }
 
@@ -305,7 +305,7 @@ public class BuildMapConfigService {
         Path sourcePath = sourceFolder.toPath();
         List<MapExportTarget> exportTargets = resolveMapExportTargets(gameKey, sourceWorldName);
         if (exportTargets.isEmpty()) {
-            player.sendMessage(ChatColor.RED + "No map export destination is configured.");
+            player.sendMessage(ChatColor.RED + "No map export destination is configured!");
             worldExportLocks.remove(lockKey);
             return;
         }
@@ -397,7 +397,7 @@ public class BuildMapConfigService {
                                         + ", but failed to update map config!\n" + finalMetadataError);
                             }
                         } else if (!finalExportedPaths.isEmpty()) {
-                            online.sendMessage(ChatColor.RED + "Export completed with errors.\nExported to: "
+                            online.sendMessage(ChatColor.RED + "Export completed with errors!\nExported to: "
                                     + formatDisplayList(finalExportedPaths) + "\nFailures:\n" + finalExportError);
                         } else {
                             online.sendMessage(ChatColor.RED + "Export failed!\n" + finalExportError);
@@ -430,7 +430,7 @@ public class BuildMapConfigService {
         }
         MapConfigStore store = mapConfigStore();
         if (store == null) {
-            player.sendMessage(ChatColor.RED + "MongoDB map config store is unavailable.");
+            player.sendMessage(ChatColor.RED + "MongoDB map config store is unavailable!");
             return true;
         }
         Location location = player.getLocation();
@@ -461,7 +461,7 @@ public class BuildMapConfigService {
             return true;
         }
         if (!gameType.isGame()) {
-            player.sendMessage(ChatColor.RED + "Waiting spawn can only be set for game servers.");
+            player.sendMessage(ChatColor.RED + "Waiting spawn can only be set for game servers!");
             return true;
         }
         String mapWorld = safeString(worldDirectory);
@@ -480,7 +480,7 @@ public class BuildMapConfigService {
         }
         MapConfigStore store = mapConfigStore();
         if (store == null) {
-            player.sendMessage(ChatColor.RED + "MongoDB map config store is unavailable.");
+            player.sendMessage(ChatColor.RED + "MongoDB map config store is unavailable!");
             return true;
         }
         Location location = player.getLocation();
@@ -512,7 +512,7 @@ public class BuildMapConfigService {
             return true;
         }
         if (!gameType.isHub()) {
-            player.sendMessage(ChatColor.RED + "Hub spawn can only be set for hub servers.");
+            player.sendMessage(ChatColor.RED + "Hub spawn can only be set for hub servers!");
             return true;
         }
         String mapWorld = safeString(worldDirectory);
@@ -530,7 +530,7 @@ public class BuildMapConfigService {
         }
         MapConfigStore store = mapConfigStore();
         if (store == null) {
-            player.sendMessage(ChatColor.RED + "MongoDB map config store is unavailable.");
+            player.sendMessage(ChatColor.RED + "MongoDB map config store is unavailable!");
             return true;
         }
         Location location = player.getLocation();
@@ -566,7 +566,7 @@ public class BuildMapConfigService {
             return true;
         }
         if (!gameType.isHub()) {
-            player.sendMessage(ChatColor.RED + "Click to Play NPCs can only be added in hub edit mode.");
+            player.sendMessage(ChatColor.RED + "Click to Play NPCs can only be added in hub edit mode!");
             return true;
         }
         String mapWorld = safeString(worldDirectory);
@@ -584,7 +584,7 @@ public class BuildMapConfigService {
         }
         MapConfigStore store = mapConfigStore();
         if (store == null) {
-            player.sendMessage(ChatColor.RED + "MongoDB map config store is unavailable.");
+            player.sendMessage(ChatColor.RED + "MongoDB map config store is unavailable!");
             return true;
         }
         Location location = player.getLocation();
@@ -634,7 +634,7 @@ public class BuildMapConfigService {
             return true;
         }
         if (!gameType.isHub()) {
-            player.sendMessage(ChatColor.RED + "Profile NPCs can only be added in hub edit mode.");
+            player.sendMessage(ChatColor.RED + "Profile NPCs can only be added in hub edit mode!");
             return true;
         }
         String mapWorld = safeString(worldDirectory);
@@ -652,7 +652,7 @@ public class BuildMapConfigService {
         }
         MapConfigStore store = mapConfigStore();
         if (store == null) {
-            player.sendMessage(ChatColor.RED + "MongoDB map config store is unavailable.");
+            player.sendMessage(ChatColor.RED + "MongoDB map config store is unavailable!");
             return true;
         }
         Location location = player.getLocation();
@@ -717,7 +717,7 @@ public class BuildMapConfigService {
             return true;
         }
         if (!gameType.isHub()) {
-            player.sendMessage(ChatColor.RED + "Leaderboard holograms can only be added in hub edit mode.");
+            player.sendMessage(ChatColor.RED + "Leaderboard holograms can only be added in hub edit mode!");
             return true;
         }
         String mapWorld = safeString(worldDirectory);
@@ -735,7 +735,7 @@ public class BuildMapConfigService {
         }
         MapConfigStore store = mapConfigStore();
         if (store == null) {
-            player.sendMessage(ChatColor.RED + "MongoDB map config store is unavailable.");
+            player.sendMessage(ChatColor.RED + "MongoDB map config store is unavailable!");
             return true;
         }
         Location location = player.getLocation();
@@ -780,7 +780,7 @@ public class BuildMapConfigService {
             return true;
         }
         if (!gameType.isHub()) {
-            player.sendMessage(ChatColor.RED + "Parkour setup is only available for hub edit mode.");
+            player.sendMessage(ChatColor.RED + "Parkour setup is only available for hub edit mode!");
             return true;
         }
         String mapWorld = safeString(worldDirectory);
@@ -843,7 +843,7 @@ public class BuildMapConfigService {
         }
         MapConfigStore store = mapConfigStore();
         if (store == null) {
-            player.sendMessage(ChatColor.RED + "MongoDB map config store is unavailable.");
+            player.sendMessage(ChatColor.RED + "MongoDB map config store is unavailable!");
             return true;
         }
 
@@ -930,7 +930,7 @@ public class BuildMapConfigService {
         }
         MapConfigStore store = mapConfigStore();
         if (store == null) {
-            player.sendMessage(ChatColor.RED + "MongoDB map config store is unavailable.");
+            player.sendMessage(ChatColor.RED + "MongoDB map config store is unavailable!");
             return true;
         }
 
@@ -967,7 +967,7 @@ public class BuildMapConfigService {
             removeParkourWorldMarkers(markers, player.getWorld());
             player.sendMessage(ChatColor.GREEN + "Parkour course reset.");
         } else {
-            player.sendMessage(ChatColor.RED + "No parkour course is configured for this map.");
+            player.sendMessage(ChatColor.RED + "No parkour course is configured for this map!");
         }
         return true;
     }
@@ -1149,7 +1149,7 @@ public class BuildMapConfigService {
             player.sendMessage(ChatColor.GOLD + "Click to Play NPC configured.");
             return true;
         }
-        player.sendMessage(ChatColor.RED + "Only Profile NPC and Click to Play NPC are supported here.");
+        player.sendMessage(ChatColor.RED + "Only Profile NPC and Click to Play NPC are supported here!");
         return true;
     }
 
@@ -1157,19 +1157,19 @@ public class BuildMapConfigService {
         RuntimeNpc runtime = entityUuid == null ? null : npcsByEntityId.get(entityUuid);
         if (runtime == null) {
             if (player != null) {
-                player.sendMessage(ChatColor.RED + "That NPC is no longer available.");
+                player.sendMessage(ChatColor.RED + "That NPC is no longer available!");
             }
             return false;
         }
         if (runtime.profileNpc) {
             if (player != null) {
-                player.sendMessage(ChatColor.RED + "Profile NPC skin is tied to the profile owner.");
+                player.sendMessage(ChatColor.RED + "Profile NPC skin is tied to the profile owner!");
             }
             return false;
         }
         if (runtime.clickToPlayNpc) {
             if (player != null) {
-                player.sendMessage(ChatColor.RED + "Click to Play NPC skin is fixed for Murder Mystery.");
+                player.sendMessage(ChatColor.RED + "Click to Play NPC skin is fixed for Murder Mystery!");
             }
             return false;
         }
@@ -1191,19 +1191,19 @@ public class BuildMapConfigService {
         RuntimeNpc runtime = entityUuid == null ? null : npcsByEntityId.get(entityUuid);
         if (runtime == null) {
             if (player != null) {
-                player.sendMessage(ChatColor.RED + "That NPC is no longer available.");
+                player.sendMessage(ChatColor.RED + "That NPC is no longer available!");
             }
             return false;
         }
         if (runtime.clickToPlayNpc) {
             if (player != null) {
-                player.sendMessage(ChatColor.RED + "Click to Play NPC hologram style is fixed.");
+                player.sendMessage(ChatColor.RED + "Click to Play NPC hologram style is fixed!");
             }
             return false;
         }
         if (runtime.profileNpc) {
             if (player != null) {
-                player.sendMessage(ChatColor.RED + "Profile NPC hologram style is fixed.");
+                player.sendMessage(ChatColor.RED + "Profile NPC hologram style is fixed!");
             }
             return false;
         }
@@ -1247,7 +1247,7 @@ public class BuildMapConfigService {
         }
         MapConfigStore store = mapConfigStore();
         if (store == null) {
-            player.sendMessage(ChatColor.RED + "MongoDB map config store is unavailable.");
+            player.sendMessage(ChatColor.RED + "MongoDB map config store is unavailable!");
             return true;
         }
         Location location = player.getLocation();
@@ -1318,7 +1318,7 @@ public class BuildMapConfigService {
         }
         MapConfigStore store = mapConfigStore();
         if (store == null) {
-            player.sendMessage(ChatColor.RED + "MongoDB map config store is unavailable.");
+            player.sendMessage(ChatColor.RED + "MongoDB map config store is unavailable!");
             return false;
         }
         List<MapLocationEntry> parkourMarkers = new ArrayList<MapLocationEntry>();
@@ -1331,7 +1331,7 @@ public class BuildMapConfigService {
                 map = findMap(maps, mapWorld);
             }
             if (map == null) {
-                player.sendMessage(ChatColor.RED + "No saved map data found for this world.");
+                player.sendMessage(ChatColor.RED + "No saved map data found for this world!");
                 return false;
             }
             parkourMarkers = collectAllParkourMarkers(map);
@@ -3226,7 +3226,7 @@ public class BuildMapConfigService {
         }
         viewer.sendMessage(ChatColor.GOLD + "Profile NPC: " + ChatColor.YELLOW + name);
         if (profile == null || profile.getStats() == null) {
-            viewer.sendMessage(ChatColor.RED + "Profile stats are not loaded.");
+            viewer.sendMessage(ChatColor.RED + "Profile stats are not loaded!");
             return;
         }
         viewer.sendMessage(ChatColor.GRAY + "Wins: " + ChatColor.AQUA + profile.getStats().getWins());
