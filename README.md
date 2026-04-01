@@ -75,7 +75,7 @@ MONGO_APP_PASSWORD=your_app_mongo_password
 REDIS_PASSWORD=your_redis_password
 REDIS_DATABASE=0
 
-# Deployment/rollout settings
+# Deployment settings
 ROLLOUT_WEBHOOK_TOKEN=your_rollout_webhook_token
 ROLLOUT_RESTART_MODE=rebuild
 
