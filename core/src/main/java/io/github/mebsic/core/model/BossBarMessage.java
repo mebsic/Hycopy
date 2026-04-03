@@ -7,14 +7,14 @@ public class BossBarMessage {
     private final String scope;
     private final String serverType;
     private final String animationType;
-    private final String startColor;
     private final String animationColor;
+    private final String firstColor;
+    private final String secondColor;
+    private final String startColor;
     private final String endColor;
-    private final double startSeconds;
-    private final double endSeconds;
 
     public BossBarMessage(String id, String text, float value, String scope, String serverType) {
-        this(id, text, value, scope, serverType, "", "", "", "", 0.0D, 5.0D);
+        this(id, text, value, scope, serverType, "", "", "", "", "", "");
     }
 
     public BossBarMessage(String id,
@@ -23,22 +23,22 @@ public class BossBarMessage {
                           String scope,
                           String serverType,
                           String animationType,
-                          String startColor,
                           String animationColor,
-                          String endColor,
-                          double startSeconds,
-                          double endSeconds) {
+                          String firstColor,
+                          String secondColor,
+                          String startColor,
+                          String endColor) {
         this.id = id == null ? "" : id.trim();
         this.text = text == null ? "" : text;
         this.value = value;
         this.scope = scope == null ? "" : scope.trim();
         this.serverType = serverType == null ? "" : serverType.trim();
         this.animationType = animationType == null ? "" : animationType.trim();
-        this.startColor = startColor == null ? "" : startColor.trim();
         this.animationColor = animationColor == null ? "" : animationColor.trim();
+        this.firstColor = firstColor == null ? "" : firstColor.trim();
+        this.secondColor = secondColor == null ? "" : secondColor.trim();
+        this.startColor = startColor == null ? "" : startColor.trim();
         this.endColor = endColor == null ? "" : endColor.trim();
-        this.startSeconds = startSeconds;
-        this.endSeconds = endSeconds;
     }
 
     public String getId() {
@@ -65,23 +65,23 @@ public class BossBarMessage {
         return animationType;
     }
 
-    public String getStartColor() {
-        return startColor;
-    }
-
     public String getAnimationColor() {
         return animationColor;
     }
 
+    public String getFirstColor() {
+        return firstColor;
+    }
+
+    public String getSecondColor() {
+        return secondColor;
+    }
+
+    public String getStartColor() {
+        return startColor;
+    }
+
     public String getEndColor() {
         return endColor;
-    }
-
-    public double getStartSeconds() {
-        return startSeconds;
-    }
-
-    public double getEndSeconds() {
-        return endSeconds;
     }
 }

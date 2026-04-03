@@ -172,7 +172,7 @@ public class UpdateCommand implements SimpleCommand {
     }
 
     private void broadcastRestartSoon() {
-        Component firstLine = withGoldObfuscatedPrefix(Component.text(HypixelProxyPlugin.PROXY_RESTARTING_SOON_MESSAGE, NamedTextColor.RED));
+        Component firstLine = withGoldObfuscatedPrefix(Component.text(HypixelProxyPlugin.PROXY_RESTARTING_MESSAGE + " soon.", NamedTextColor.RED));
         Component secondLine = withGoldObfuscatedPrefix(Component.text(HypixelProxyPlugin.PROXY_RECONNECT_TO_MESSAGE, NamedTextColor.RED)
                 .append(Component.text(NetworkConstants.mcHost(), NamedTextColor.AQUA))
                 .append(Component.text("!", NamedTextColor.RED)));

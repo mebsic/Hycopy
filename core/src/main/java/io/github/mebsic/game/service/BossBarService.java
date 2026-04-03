@@ -34,13 +34,13 @@ public class BossBarService {
     private static final long TICK_MILLIS = 50L;
     private static final long DOMAIN_COLOR_CYCLE_INTERVAL_TICKS = 8L; // 0.4 seconds
     private static final long GAME_MESSAGE_ROTATION_INTERVAL_TICKS = 100L; // 5 seconds
-    private static final long HUB_MESSAGE_PRE_ANIMATION_DELAY_TICKS = 10L; // 0.5 seconds
-    private static final long HUB_MESSAGE_ANIMATION_WINDOW_TICKS = 80L; // 4 seconds
+    private static final long HUB_MESSAGE_PRE_ANIMATION_DELAY_TICKS = 20L; // 1 second
+    private static final long HUB_MESSAGE_ANIMATION_WINDOW_TICKS = 60L; // 3 seconds
     private static final long HUB_MESSAGE_POST_ANIMATION_DELAY_TICKS = 20L; // 1 second
     private static final long HUB_MESSAGE_ROTATION_INTERVAL_TICKS =
-            HUB_MESSAGE_PRE_ANIMATION_DELAY_TICKS + HUB_MESSAGE_ANIMATION_WINDOW_TICKS + HUB_MESSAGE_POST_ANIMATION_DELAY_TICKS; // 5.5 seconds
+            HUB_MESSAGE_PRE_ANIMATION_DELAY_TICKS + HUB_MESSAGE_ANIMATION_WINDOW_TICKS + HUB_MESSAGE_POST_ANIMATION_DELAY_TICKS; // 5 seconds
     private static final long STORE_REFRESH_INTERVAL_TICKS = 600L; // 30 seconds
-    private static final long FLASH_STEP_TICKS = 8L; // 0.4 seconds (fits 5 flashes in 4 seconds)
+    private static final long FLASH_STEP_TICKS = 7L; // ~0.35 seconds
     private static final long FLASH_COUNT = 5L;
     private static final long LEGACY_METADATA_KEEPALIVE_INTERVAL_TICKS = 5L; // 0.25 seconds
     private static final double LEGACY_ANCHOR_FORWARD_DISTANCE = 24.0D;
@@ -64,14 +64,13 @@ public class BossBarService {
     private final Supplier<GameState> gameStateSupplier;
     private final Set<UUID> trackedPlayers;
     private final Map<UUID, LegacyBarView> activeBars;
+    private final Map<UUID, PlayerMessageState> hubPlayerStates;
+    private final Map<UUID, PlayerMessageState> gamePlayerStates;
     private final LegacyBossBarAdapter legacyAdapter;
     private final BossBarMessageStore messageStore;
 
     private List<BossBarMessage> gameMessages;
     private List<BossBarMessage> hubMessages;
-    private BossBarMessage currentGameMessage;
-    private BossBarMessage currentHubMessage;
-    private MessageTransition currentHubTransition;
     private int domainColorIndex;
     private long domainColorCycleElapsedTicks;
     private long tickCounter;
@@ -90,15 +89,14 @@ public class BossBarService {
         this.gameStateSupplier = gameStateSupplier;
         this.trackedPlayers = ConcurrentHashMap.newKeySet();
         this.activeBars = new ConcurrentHashMap<>();
+        this.hubPlayerStates = new ConcurrentHashMap<>();
+        this.gamePlayerStates = new ConcurrentHashMap<>();
         this.legacyAdapter = new LegacyBossBarAdapter(plugin);
         this.messageStore = corePlugin == null || corePlugin.getMongoManager() == null
                 ? null
                 : new BossBarMessageStore(corePlugin.getMongoManager());
         this.gameMessages = defaultGameMessages();
         this.hubMessages = defaultHubMessages();
-        this.currentGameMessage = null;
-        this.currentHubMessage = null;
-        this.currentHubTransition = null;
         this.domainColorIndex = 0;
         this.domainColorCycleElapsedTicks = 0L;
         this.tickCounter = 0L;
@@ -108,28 +106,12 @@ public class BossBarService {
         if (tickTask != null) {
             return;
         }
-        rotateGameMessage();
-        rotateHubMessage();
         requestMessageRefresh();
         for (Player player : Bukkit.getOnlinePlayers()) {
             show(player);
         }
         tickTask = plugin.getServer().getScheduler().runTaskTimer(plugin, this::tick, 1L, TICK_INTERVAL);
-        if (isHubServer()) {
-            hubMessageTask = plugin.getServer().getScheduler().runTaskTimer(
-                    plugin,
-                    this::rotateHubMessage,
-                    HUB_MESSAGE_ROTATION_INTERVAL_TICKS,
-                    HUB_MESSAGE_ROTATION_INTERVAL_TICKS
-            );
-        } else if (isGameServer()) {
-            hubMessageTask = plugin.getServer().getScheduler().runTaskTimer(
-                    plugin,
-                    this::rotateGameMessage,
-                    GAME_MESSAGE_ROTATION_INTERVAL_TICKS,
-                    GAME_MESSAGE_ROTATION_INTERVAL_TICKS
-            );
-        }
+        hubMessageTask = null;
         if (messageStore != null) {
             storeRefreshTask = plugin.getServer().getScheduler().runTaskTimer(
                     plugin,
@@ -159,14 +141,21 @@ public class BossBarService {
         }
         trackedPlayers.clear();
         activeBars.clear();
-        currentHubTransition = null;
+        hubPlayerStates.clear();
+        gamePlayerStates.clear();
     }
 
     public void show(Player player) {
         if (player == null) {
             return;
         }
-        trackedPlayers.add(player.getUniqueId());
+        UUID uuid = player.getUniqueId();
+        trackedPlayers.add(uuid);
+        if (isHubServer()) {
+            resetHubPlayerState(uuid);
+        } else if (isGameServer()) {
+            resetGamePlayerState(uuid);
+        }
         if (tickTask != null) {
             updatePlayerBar(player, resolveGameState());
         }
@@ -178,6 +167,8 @@ public class BossBarService {
         }
         UUID uuid = player.getUniqueId();
         trackedPlayers.remove(uuid);
+        hubPlayerStates.remove(uuid);
+        gamePlayerStates.remove(uuid);
         destroyBar(uuid, player);
     }
 
@@ -200,6 +191,8 @@ public class BossBarService {
             Player player = Bukkit.getPlayer(uuid);
             if (player == null || !player.isOnline()) {
                 trackedPlayers.remove(uuid);
+                hubPlayerStates.remove(uuid);
+                gamePlayerStates.remove(uuid);
                 destroyBar(uuid, null);
                 continue;
             }
@@ -208,7 +201,7 @@ public class BossBarService {
     }
 
     private void updatePlayerBar(Player player, GameState state) {
-        DisplayState display = resolveDisplayState(state);
+        DisplayState display = resolveDisplayState(player, state);
         if (display == null || display.text == null || display.text.trim().isEmpty()) {
             destroyBar(player.getUniqueId(), player);
             return;
@@ -237,27 +230,22 @@ public class BossBarService {
         legacyAdapter.update(player, current, display.text, display.value, anchor);
     }
 
-    private DisplayState resolveDisplayState(GameState state) {
+    private DisplayState resolveDisplayState(Player player, GameState state) {
         if (isHubServer()) {
-            BossBarMessage hubMessage = currentHubMessage;
-            if (hubMessage == null) {
-                hubMessage = firstMessage(hubMessages);
-            }
+            BossBarMessage hubMessage = resolveHubMessage(player == null ? null : player.getUniqueId());
             if (hubMessage == null) {
                 return null;
             }
             String text = formatTemplate(hubMessage.getText());
             text = forceBold(text);
-            text = resolveAnimatedText(text, hubMessage, currentHubTransition);
+            MessageTransition transition = resolveHubTransition(player == null ? null : player.getUniqueId(), hubMessage);
+            text = resolveAnimatedText(text, hubMessage, transition);
             return new DisplayState(text, sanitizeValue(hubMessage.getValue()));
         }
         if (state == GameState.IN_GAME || state == GameState.ENDING) {
             return null;
         }
-        BossBarMessage gameMessage = currentGameMessage;
-        if (gameMessage == null) {
-            gameMessage = firstMessage(gameMessages);
-        }
+        BossBarMessage gameMessage = resolveGameMessage(player == null ? null : player.getUniqueId());
         if (gameMessage == null) {
             return null;
         }
@@ -300,51 +288,6 @@ public class BossBarService {
         return baseStyle + styled;
     }
 
-    private void rotateHubMessage() {
-        if (!isHubServer()) {
-            return;
-        }
-        currentHubMessage = nextHubMessage(hubMessages, currentHubMessage);
-        currentHubTransition = createTransition(currentHubMessage);
-    }
-
-    private void rotateGameMessage() {
-        if (!isGameServer()) {
-            return;
-        }
-        currentGameMessage = nextHubMessage(gameMessages, currentGameMessage);
-    }
-
-    private BossBarMessage nextHubMessage(List<BossBarMessage> messages, BossBarMessage current) {
-        if (messages == null || messages.isEmpty()) {
-            return null;
-        }
-        if (current == null) {
-            return messages.get(0);
-        }
-        for (int i = 0; i < messages.size(); i++) {
-            BossBarMessage message = messages.get(i);
-            if (!sameMessage(message, current)) {
-                continue;
-            }
-            int nextIndex = (i + 1) % messages.size();
-            return messages.get(nextIndex);
-        }
-        return messages.get(0);
-    }
-
-    private boolean sameMessage(BossBarMessage first, BossBarMessage second) {
-        if (first == null || second == null) {
-            return false;
-        }
-        String firstId = first.getId();
-        String secondId = second.getId();
-        if (firstId != null && secondId != null && !firstId.isEmpty() && !secondId.isEmpty()) {
-            return firstId.equals(secondId);
-        }
-        return first.getText().equals(second.getText());
-    }
-
     private void requestMessageRefresh() {
         if (messageStore == null || plugin == null || !plugin.isEnabled()) {
             return;
@@ -376,34 +319,11 @@ public class BossBarService {
             this.hubMessages = Collections.unmodifiableList(new ArrayList<>(loadedHub));
         }
         if (isHubServer()) {
-            BossBarMessage resolvedHub = resolveCurrentMessage(hubMessages, currentHubMessage);
-            if (resolvedHub == null) {
-                currentHubMessage = firstMessage(hubMessages);
-                currentHubTransition = createTransition(currentHubMessage);
-            } else {
-                currentHubMessage = resolvedHub;
-            }
+            normalizeHubPlayerStates();
         }
         if (isGameServer()) {
-            BossBarMessage resolvedGame = resolveCurrentMessage(gameMessages, currentGameMessage);
-            if (resolvedGame == null) {
-                currentGameMessage = firstMessage(gameMessages);
-            } else {
-                currentGameMessage = resolvedGame;
-            }
+            normalizeGamePlayerStates();
         }
-    }
-
-    private BossBarMessage resolveCurrentMessage(List<BossBarMessage> messages, BossBarMessage target) {
-        if (messages == null || messages.isEmpty() || target == null) {
-            return null;
-        }
-        for (BossBarMessage message : messages) {
-            if (sameMessage(message, target)) {
-                return message;
-            }
-        }
-        return null;
     }
 
     private List<BossBarMessage> defaultGameMessages() {
@@ -427,6 +347,140 @@ public class BossBarService {
         return messages.get(0);
     }
 
+    private void resetHubPlayerState(UUID uuid) {
+        if (uuid == null) {
+            return;
+        }
+        BossBarMessage first = firstMessage(hubMessages);
+        if (first == null) {
+            hubPlayerStates.remove(uuid);
+            return;
+        }
+        hubPlayerStates.put(uuid, new PlayerMessageState(0, createTransition(first)));
+    }
+
+    private void normalizeHubPlayerStates() {
+        if (hubMessages == null || hubMessages.isEmpty()) {
+            hubPlayerStates.clear();
+            return;
+        }
+        for (UUID uuid : new ArrayList<>(hubPlayerStates.keySet())) {
+            PlayerMessageState state = hubPlayerStates.get(uuid);
+            if (state == null) {
+                continue;
+            }
+            if (state.messageIndex < 0 || state.messageIndex >= hubMessages.size()) {
+                state.messageIndex = 0;
+            }
+            BossBarMessage current = hubMessages.get(state.messageIndex);
+            if (state.transition == null || !state.transition.matches(resolveMessageKey(current))) {
+                state.transition = createTransition(current);
+            }
+        }
+    }
+
+    private BossBarMessage resolveHubMessage(UUID uuid) {
+        if (uuid == null || hubMessages == null || hubMessages.isEmpty()) {
+            if (uuid != null) {
+                hubPlayerStates.remove(uuid);
+            }
+            return null;
+        }
+        PlayerMessageState state = hubPlayerStates.computeIfAbsent(uuid,
+                ignored -> new PlayerMessageState(0, createTransition(hubMessages.get(0))));
+        if (state.messageIndex < 0 || state.messageIndex >= hubMessages.size()) {
+            state.messageIndex = 0;
+        }
+
+        BossBarMessage current = hubMessages.get(state.messageIndex);
+        if (state.transition == null || !state.transition.matches(resolveMessageKey(current))) {
+            state.transition = createTransition(current);
+        }
+
+        long elapsedTicks = transitionElapsedTicks(state.transition, current, HUB_MESSAGE_ROTATION_INTERVAL_TICKS);
+        if (elapsedTicks >= HUB_MESSAGE_ROTATION_INTERVAL_TICKS) {
+            long steps = Math.max(1L, elapsedTicks / HUB_MESSAGE_ROTATION_INTERVAL_TICKS);
+            state.messageIndex = (int) ((state.messageIndex + steps) % hubMessages.size());
+            current = hubMessages.get(state.messageIndex);
+            state.transition = createTransition(current);
+        }
+        return current;
+    }
+
+    private MessageTransition resolveHubTransition(UUID uuid, BossBarMessage current) {
+        if (uuid == null || current == null) {
+            return null;
+        }
+        PlayerMessageState state = hubPlayerStates.get(uuid);
+        if (state == null) {
+            return null;
+        }
+        if (state.transition == null || !state.transition.matches(resolveMessageKey(current))) {
+            state.transition = createTransition(current);
+        }
+        return state.transition;
+    }
+
+    private void resetGamePlayerState(UUID uuid) {
+        if (uuid == null) {
+            return;
+        }
+        BossBarMessage first = firstMessage(gameMessages);
+        if (first == null) {
+            gamePlayerStates.remove(uuid);
+            return;
+        }
+        gamePlayerStates.put(uuid, new PlayerMessageState(0, createTransition(first)));
+    }
+
+    private void normalizeGamePlayerStates() {
+        if (gameMessages == null || gameMessages.isEmpty()) {
+            gamePlayerStates.clear();
+            return;
+        }
+        for (UUID uuid : new ArrayList<>(gamePlayerStates.keySet())) {
+            PlayerMessageState state = gamePlayerStates.get(uuid);
+            if (state == null) {
+                continue;
+            }
+            if (state.messageIndex < 0 || state.messageIndex >= gameMessages.size()) {
+                state.messageIndex = 0;
+            }
+            BossBarMessage current = gameMessages.get(state.messageIndex);
+            if (state.transition == null || !state.transition.matches(resolveMessageKey(current))) {
+                state.transition = createTransition(current);
+            }
+        }
+    }
+
+    private BossBarMessage resolveGameMessage(UUID uuid) {
+        if (uuid == null || gameMessages == null || gameMessages.isEmpty()) {
+            if (uuid != null) {
+                gamePlayerStates.remove(uuid);
+            }
+            return null;
+        }
+        PlayerMessageState state = gamePlayerStates.computeIfAbsent(uuid,
+                ignored -> new PlayerMessageState(0, createTransition(gameMessages.get(0))));
+        if (state.messageIndex < 0 || state.messageIndex >= gameMessages.size()) {
+            state.messageIndex = 0;
+        }
+
+        BossBarMessage current = gameMessages.get(state.messageIndex);
+        if (state.transition == null || !state.transition.matches(resolveMessageKey(current))) {
+            state.transition = createTransition(current);
+        }
+
+        long elapsedTicks = transitionElapsedTicks(state.transition, current, GAME_MESSAGE_ROTATION_INTERVAL_TICKS);
+        if (elapsedTicks >= GAME_MESSAGE_ROTATION_INTERVAL_TICKS) {
+            long steps = Math.max(1L, elapsedTicks / GAME_MESSAGE_ROTATION_INTERVAL_TICKS);
+            state.messageIndex = (int) ((state.messageIndex + steps) % gameMessages.size());
+            current = gameMessages.get(state.messageIndex);
+            state.transition = createTransition(current);
+        }
+        return current;
+    }
+
     private String resolveAnimatedText(String text, BossBarMessage message, MessageTransition transition) {
         String source = text == null ? "" : text;
         if (message == null) {
@@ -445,21 +499,25 @@ public class BossBarService {
         ChatColor startColor = resolveConfiguredColor(message.getStartColor(), ChatColor.YELLOW);
         ChatColor endColor = resolveConfiguredColor(message.getEndColor(), ChatColor.WHITE);
         ChatColor animationColor = resolveConfiguredColor(message.getAnimationColor(), ChatColor.GOLD);
-        long elapsedTicks = transitionElapsedTicks(transition, message);
+        ChatColor firstColor = resolveConfiguredColor(message.getFirstColor(), endColor);
+        ChatColor secondColor = resolveConfiguredColor(message.getSecondColor(), startColor);
+        long elapsedTicks = transitionElapsedTicks(transition, message, HUB_MESSAGE_ROTATION_INTERVAL_TICKS);
 
         if (elapsedTicks < HUB_MESSAGE_PRE_ANIMATION_DELAY_TICKS) {
             return style(plainText, startColor);
         }
         long animationElapsedTicks = elapsedTicks - HUB_MESSAGE_PRE_ANIMATION_DELAY_TICKS;
         if (animationElapsedTicks >= HUB_MESSAGE_ANIMATION_WINDOW_TICKS) {
-            return style(plainText, endColor);
+            return animationType == TransitionAnimationType.FLASH
+                    ? style(plainText, startColor)
+                    : style(plainText, endColor);
         }
 
         if (animationType == TransitionAnimationType.SWEEP) {
             return buildSweepText(plainText, animationElapsedTicks, startColor, endColor, animationColor);
         }
         if (animationType == TransitionAnimationType.FLASH) {
-            return buildFlashText(plainText, animationElapsedTicks, startColor, endColor, message);
+            return buildFlashText(plainText, animationElapsedTicks, startColor, firstColor, secondColor);
         }
         return source;
     }
@@ -511,41 +569,22 @@ public class BossBarService {
     private String buildFlashText(String plainText,
                                   long elapsedTicks,
                                   ChatColor startColor,
-                                  ChatColor endColor,
-                                  BossBarMessage message) {
-        long startTick = secondsToTicks(message.getStartSeconds());
-        long endTick = secondsToTicks(message.getEndSeconds());
-        if (endTick < startTick) {
-            endTick = startTick;
-        }
-
-        if (elapsedTicks < startTick) {
-            return style(plainText, startColor);
-        }
-        if (elapsedTicks > endTick) {
-            return style(plainText, endColor);
-        }
-
-        long elapsedInWindow = elapsedTicks - startTick;
+                                  ChatColor firstColor,
+                                  ChatColor secondColor) {
         long flashFrames = FLASH_COUNT * 2L;
-        long frame = elapsedInWindow / FLASH_STEP_TICKS;
+        long frame = elapsedTicks / FLASH_STEP_TICKS;
         if (frame < flashFrames) {
-            return frame % 2L == 0L ? style(plainText, endColor) : style(plainText, startColor);
+            return frame % 2L == 0L ? style(plainText, firstColor) : style(plainText, secondColor);
         }
-        return style(plainText, endColor);
+        return style(plainText, startColor);
     }
 
-    private long secondsToTicks(double seconds) {
-        double clamped = Math.max(0.0D, Math.min(4.0D, seconds));
-        return (long) (clamped * 20.0D);
-    }
-
-    private long transitionElapsedTicks(MessageTransition transition, BossBarMessage message) {
+    private long transitionElapsedTicks(MessageTransition transition, BossBarMessage message, long fallbackTicks) {
         if (transition == null || message == null) {
-            return HUB_MESSAGE_ROTATION_INTERVAL_TICKS;
+            return fallbackTicks;
         }
         if (!transition.matches(resolveMessageKey(message))) {
-            return HUB_MESSAGE_ROTATION_INTERVAL_TICKS;
+            return fallbackTicks;
         }
         long elapsedMillis = Math.max(0L, System.currentTimeMillis() - transition.startedAtMillis);
         return elapsedMillis / TICK_MILLIS;
@@ -712,6 +751,16 @@ public class BossBarService {
         }
         if (target != null && target.isOnline()) {
             legacyAdapter.destroy(target, current);
+        }
+    }
+
+    private static final class PlayerMessageState {
+        private int messageIndex;
+        private MessageTransition transition;
+
+        private PlayerMessageState(int messageIndex, MessageTransition transition) {
+            this.messageIndex = messageIndex;
+            this.transition = transition;
         }
     }
 
