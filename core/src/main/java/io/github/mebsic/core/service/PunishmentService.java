@@ -161,9 +161,9 @@ public class PunishmentService {
 
     public String formatMuteMessage(Punishment punishment) {
         String line = MUTE_SEPARATOR_LINE;
-        String reason = punishment == null ? null : punishment.getReason();
+        String reason = normalizeReason(punishment == null ? null : punishment.getReason());
         if (reason == null || reason.trim().isEmpty()) {
-            reason = "No reason provided.";
+            reason = "No reason provided";
         }
         MuteReasonType reasonType = MuteReasonType.resolve(reason);
         if (reasonType != null) {
@@ -193,9 +193,9 @@ public class PunishmentService {
     }
 
     public String formatBanMessage(Punishment punishment, boolean includeBanIdDetails) {
-        String reason = punishment == null ? null : punishment.getReason();
+        String reason = normalizeReason(punishment == null ? null : punishment.getReason());
         if (reason == null || reason.trim().isEmpty()) {
-            reason = "No reason provided.";
+            reason = "No reason provided";
         }
         Long expiresAt = punishment == null ? null : punishment.getExpiresAt();
         boolean permanent = expiresAt == null || expiresAt <= 0L;
@@ -225,9 +225,9 @@ public class PunishmentService {
     }
 
     public String formatKickMessage(Punishment punishment) {
-        String reason = punishment == null ? null : punishment.getReason();
+        String reason = normalizeReason(punishment == null ? null : punishment.getReason());
         if (reason == null || reason.trim().isEmpty()) {
-            reason = "No reason provided.";
+            reason = "No reason provided";
         }
         String header = ChatColor.RED + "You have been kicked from this server!\n";
         String findOutMore = ChatColor.GRAY + "Find out more: " + ChatColor.AQUA + resolveSupportUrl(reason) + "\n";
@@ -388,13 +388,14 @@ public class PunishmentService {
     }
 
     private String resolveStoredReason(PunishmentType type, String reason) {
-        if (reason != null && !reason.trim().isEmpty()) {
-            return reason;
+        String normalizedReason = normalizeReason(reason);
+        if (normalizedReason != null && !normalizedReason.isEmpty()) {
+            return normalizedReason;
         }
         if (type == PunishmentType.KICK) {
-            return "Kicked by staff.";
+            return "Kicked by staff";
         }
-        return "No reason provided.";
+        return "No reason provided";
     }
 
     private String generatePunishmentId(PunishmentType type) {
@@ -471,22 +472,32 @@ public class PunishmentService {
     }
 
     private String formatMuteHeaderReason(String reason) {
-        if (reason == null || reason.trim().isEmpty()) {
-            return "an unspecified reason.";
+        String normalized = normalizeReason(reason);
+        if (normalized == null || normalized.isEmpty()) {
+            return "an unspecified reason";
         }
-        String normalized = reason.trim();
         String verbosePrefix = "you have been muted for ";
         if (normalized.regionMatches(true, 0, verbosePrefix, 0, verbosePrefix.length())) {
             normalized = normalized.substring(verbosePrefix.length()).trim();
+            if (normalized.isEmpty()) {
+                return "an unspecified reason";
+            }
         }
         if (!normalized.isEmpty()
                 && Character.isUpperCase(normalized.charAt(0))
                 && (normalized.length() == 1 || Character.isLowerCase(normalized.charAt(1)))) {
             normalized = Character.toLowerCase(normalized.charAt(0)) + normalized.substring(1);
         }
-        char end = normalized.charAt(normalized.length() - 1);
-        if (end != '.' && end != '!' && end != '?') {
-            normalized += ".";
+        return normalized;
+    }
+
+    private String normalizeReason(String reason) {
+        if (reason == null) {
+            return null;
+        }
+        String normalized = reason.trim();
+        while (normalized.endsWith(".")) {
+            normalized = normalized.substring(0, normalized.length() - 1).trim();
         }
         return normalized;
     }

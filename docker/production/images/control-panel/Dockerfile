@@ -6,6 +6,10 @@ RUN apk add --no-cache python3 py3-pip \
     && pip3 install --no-cache-dir --break-system-packages "pymongo>=4.7,<5"
 
 COPY server.py /app/server.py
+COPY API.py /app/API.py
+COPY autoscale.py /app/autoscale.py
+COPY config.py /app/config.py
+COPY docker.py /app/docker.py
 
 ENV PYTHONUNBUFFERED=1
 

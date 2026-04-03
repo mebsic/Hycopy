@@ -131,9 +131,9 @@ public class PunishmentHistoryCommand implements CommandExecutor {
     }
 
     private String formatEntry(int index, Punishment punishment) {
-        String reason = punishment == null ? null : punishment.getReason();
+        String reason = trimTrailingPeriods(punishment == null ? null : punishment.getReason());
         if (reason == null || reason.trim().isEmpty()) {
-            reason = "No reason provided.";
+            reason = "No reason provided";
         }
 
         String actorName = punishment == null ? null : punishment.getActorName();
@@ -225,6 +225,17 @@ public class PunishmentHistoryCommand implements CommandExecutor {
             }
         }
         return null;
+    }
+
+    private String trimTrailingPeriods(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim();
+        while (normalized.endsWith(".")) {
+            normalized = normalized.substring(0, normalized.length() - 1).trim();
+        }
+        return normalized;
     }
 
     private void sendInvalidUsage(CommandSender sender) {
