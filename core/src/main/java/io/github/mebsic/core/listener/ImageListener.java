@@ -345,9 +345,6 @@ public class ImageListener implements Listener {
                     pendingRuntimeFrameUuids.add(frame.getUniqueId());
                 }
                 applyFrameFacing(frame, facing);
-                if (frame.getLocation() != null && frame.getLocation().distanceSquared(tileLocation) > 0.01d) {
-                    frame.teleport(tileLocation);
-                }
 
                 MapTile tile = mapTiles.get(index);
                 if (tile != null && tile.mapView != null) {
