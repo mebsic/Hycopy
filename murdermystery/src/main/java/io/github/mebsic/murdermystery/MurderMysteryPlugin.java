@@ -17,7 +17,8 @@ import io.github.mebsic.game.service.BossBarService;
 import io.github.mebsic.game.service.QueueService;
 import io.github.mebsic.game.command.StartCommand;
 import io.github.mebsic.hub.listener.HubCosmeticsListener;
-import io.github.mebsic.core.listener.HubImageDisplayListener;
+import io.github.mebsic.core.listener.ImageListener;
+import io.github.mebsic.core.listener.ItemFrameListener;
 import io.github.mebsic.core.listener.HubLeaderboardListener;
 import io.github.mebsic.core.listener.HubNpcListener;
 import io.github.mebsic.core.listener.HubParkourListener;
@@ -101,7 +102,8 @@ public class MurderMysteryPlugin extends JavaPlugin implements HubContext {
     private HubParkourListener hubParkourListener;
     private HubNpcListener hubNpcListener;
     private HubLeaderboardListener hubLeaderboardListener;
-    private HubImageDisplayListener hubImageDisplayListener;
+    private ImageListener hubImageDisplayListener;
+    private ItemFrameListener itemFrameListener;
 
     @Override
     public void onEnable() {
@@ -281,6 +283,7 @@ public class MurderMysteryPlugin extends JavaPlugin implements HubContext {
             hubImageDisplayListener.shutdown();
             hubImageDisplayListener = null;
         }
+        itemFrameListener = null;
         if (hubParkourListener != null) {
             hubParkourListener.shutdown();
             hubParkourListener = null;
@@ -335,6 +338,8 @@ public class MurderMysteryPlugin extends JavaPlugin implements HubContext {
         this.registryService.start();
         getServer().getPluginManager().registerEvents(new MurderMysteryListener(this, gameManager, queueService), this);
         getServer().getPluginManager().registerEvents(new SpectatorListener(corePlugin, gameManager), this);
+        this.itemFrameListener = new ItemFrameListener(serverType, null);
+        getServer().getPluginManager().registerEvents(itemFrameListener, this);
         this.tipService = new TipService(
                 this,
                 gameManager,
@@ -384,7 +389,8 @@ public class MurderMysteryPlugin extends JavaPlugin implements HubContext {
             }
         }
         this.hubLeaderboardListener = new HubLeaderboardListener(this, corePlugin, serverType);
-        this.hubImageDisplayListener = new HubImageDisplayListener(this, corePlugin, serverType);
+        this.hubImageDisplayListener = new ImageListener(this, corePlugin, serverType);
+        this.itemFrameListener = new ItemFrameListener(serverType, hubImageDisplayListener);
         corePlugin.setHubParkourCommandHandler(hubParkourListener);
         TablistService tablistService = new TablistService(coreApi, serverType);
         getServer().getPluginManager().registerEvents(new HubListener(this), this);
@@ -396,6 +402,7 @@ public class MurderMysteryPlugin extends JavaPlugin implements HubContext {
         }
         getServer().getPluginManager().registerEvents(hubLeaderboardListener, this);
         getServer().getPluginManager().registerEvents(hubImageDisplayListener, this);
+        getServer().getPluginManager().registerEvents(itemFrameListener, this);
         subscribeToHubMapConfigUpdates();
         this.tablistTask = getServer().getScheduler().runTaskTimer(this, tablistService::updateAll, 20L, 20L);
         this.hubScoreboardTask = getServer().getScheduler().runTaskTimer(this,
@@ -449,7 +456,12 @@ public class MurderMysteryPlugin extends JavaPlugin implements HubContext {
         if (!updatedKey.equalsIgnoreCase(currentKey)) {
             return;
         }
-        getServer().getScheduler().runTask(this, this::reloadHubSpawnFromMapConfig);
+        getServer().getScheduler().runTask(this, () -> {
+            reloadHubSpawnFromMapConfig();
+            if (hubImageDisplayListener != null) {
+                hubImageDisplayListener.refreshNow();
+            }
+        });
     }
 
     private void reloadHubSpawnFromMapConfig() {

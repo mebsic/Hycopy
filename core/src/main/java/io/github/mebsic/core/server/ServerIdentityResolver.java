@@ -45,7 +45,7 @@ public final class ServerIdentityResolver {
 
     private static boolean applyDefaults(FileConfiguration config) {
         boolean changed = false;
-        String group = firstNonBlank(config.getString("server.group", ""), env("GAME_TYPE"), MongoManager.MURDER_MYSTERY_COLLECTION);
+        String group = firstNonBlank(config.getString("server.group", ""), env("GAME_TYPE"), MongoManager.MURDER_MYSTERY_GAME_KEY);
         changed |= setStringIfMissing(config, "server.group", group);
         changed |= setStringIfMissing(config, "server.type", inferType());
         changed |= setStringIfMissing(config, "server.address", firstNonBlank(env("HOSTNAME"), "localhost"));

@@ -177,6 +177,10 @@ public class MurderMysteryListener implements Listener {
         MurderMysteryGamePlayer victimData = gameManager.getMurderMysteryPlayer(victim);
         if (victimData == null || !victimData.isAlive()) {
             event.setCancelled(true);
+            Entity damager = event.getDamager();
+            if (damager instanceof Arrow || damager instanceof Snowball) {
+                removeProjectileEntity(damager);
+            }
             return;
         }
 
@@ -259,7 +263,7 @@ public class MurderMysteryListener implements Listener {
             double distanceMeters = projectileDistanceMeters(snowball, shooterPlayer, victim);
             String distanceSuffix = formatDistanceSuffix(distanceMeters);
             gameManager.sendMurdererKnifeKillMessage(shooterPlayer, victim, distanceMeters);
-            gameManager.handleDeath(victim, shooterPlayer, "The Murderer threw their knife at you! " + distanceSuffix, MurderMysteryGameManager.KillType.THROWN_KNIFE);
+            gameManager.handleDeath(victim, shooterPlayer, "The Murderer threw their Knife at you! " + distanceSuffix, MurderMysteryGameManager.KillType.THROWN_KNIFE);
         }
     }
 

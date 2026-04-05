@@ -357,7 +357,7 @@ public class MapManager {
         }
         addGameTypeKeyVariants(keys, typeName);
         addGameTypeKeyVariants(keys, type.getGameTypeDisplayName());
-        addGameTypeKeyVariants(keys, MongoManager.MURDER_MYSTERY_COLLECTION);
+        addGameTypeKeyVariants(keys, MongoManager.MURDER_MYSTERY_GAME_KEY);
 
         return new ArrayList<>(keys);
     }

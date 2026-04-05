@@ -338,7 +338,7 @@ public class HubLeaderboardListener implements Listener {
 
     private String modeNameForType(ServerType type) {
         String normalized = gameTypeToken(type);
-        if (MongoManager.MURDER_MYSTERY_COLLECTION.equals(normalized)) {
+        if (MongoManager.MURDER_MYSTERY_GAME_KEY.equals(normalized)) {
             return "Classic";
         }
         return "Default";
@@ -442,7 +442,7 @@ public class HubLeaderboardListener implements Listener {
                 continue;
             }
             Document statsRoot = doc.get("stats", Document.class);
-            Document stats = statsRoot == null ? null : statsRoot.get(MongoManager.MURDER_MYSTERY_COLLECTION, Document.class);
+            Document stats = statsRoot == null ? null : statsRoot.get(MongoManager.MURDER_MYSTERY_GAME_KEY, Document.class);
             Rank rank = parseRank(doc.getString("rank"));
             String mvpPlusPlusPrefixColor = safeText(doc.getString("mvpPlusPlusPrefixColor"));
             ChatColor nameColor = RankFormatUtil.baseColor(

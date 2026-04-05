@@ -30,6 +30,7 @@ import io.github.mebsic.proxy.manager.MongoManager;
 import io.github.mebsic.proxy.service.ServerRegistryService;
 import io.github.mebsic.proxy.service.BlockService;
 import io.github.mebsic.proxy.service.ChatChannelService;
+import io.github.mebsic.proxy.service.ChatMessageService;
 import io.github.mebsic.proxy.service.ChatRestrictionService;
 import io.github.mebsic.proxy.service.FriendService;
 import io.github.mebsic.proxy.service.PartyService;
@@ -124,6 +125,7 @@ public class HypixelProxyPlugin {
     private FriendService friendService;
     private BlockService blockService;
     private ChatChannelService chatChannelService;
+    private ChatMessageService chatMessageService;
     private ChatRestrictionService chatRestrictionService;
     private PartyService partyService;
     private StaffChatService staffChatService;
@@ -171,6 +173,7 @@ public class HypixelProxyPlugin {
             this.chatChannelService = new ChatChannelService(mongoDatabase);
             this.chatChannelService.bootstrapOnlinePlayers(proxy);
             this.chatRestrictionService = new ChatRestrictionService(mongoDatabase);
+            this.chatMessageService = new ChatMessageService(mongoDatabase, rankResolver);
             this.partyService = new PartyService(proxy, rankResolver);
             this.partyService.setMemberRemovedFromPartyListener(memberId -> {
                 if (chatChannelService != null) {
@@ -210,7 +213,8 @@ public class HypixelProxyPlugin {
                     registryService,
                     blockService,
                     chatRestrictionService,
-                    "party"
+                    "party",
+                    chatMessageService
             );
             PartyCommand partyAliasCommand = new PartyCommand(
                     proxy,
@@ -219,13 +223,15 @@ public class HypixelProxyPlugin {
                     registryService,
                     blockService,
                     chatRestrictionService,
-                    "p"
+                    "p",
+                    chatMessageService
             );
             PartyChatCommand partyChatCommand = new PartyChatCommand(
                     partyService,
                     rankResolver,
                     blockService,
-                    chatRestrictionService
+                    chatRestrictionService,
+                    chatMessageService
             );
             ChatCommand chatCommand = new ChatCommand(chatChannelService, partyService);
             StaffChatCommand staffChatCommand = new StaffChatCommand(staffChatService);
@@ -488,12 +494,19 @@ public class HypixelProxyPlugin {
 
         Player player = event.getPlayer();
         UUID playerId = player.getUniqueId();
-        if (chatChannelService.getChannel(playerId) != ChatChannelService.ChatChannel.PARTY) {
+        String message = currentResult.getMessage().orElse(event.getMessage());
+        if (message == null) {
             return;
         }
-
-        String message = currentResult.getMessage().orElse(event.getMessage());
-        if (message == null || message.trim().isEmpty()) {
+        boolean muted = chatRestrictionService != null && chatRestrictionService.isMuted(playerId);
+        ChatChannelService.ChatChannel channel = chatChannelService.getChannel(playerId);
+        if (channel != ChatChannelService.ChatChannel.PARTY) {
+            if (!muted) {
+                storeChatMessage(player, message, ChatChannelService.ChatChannel.ALL);
+            }
+            return;
+        }
+        if (message.trim().isEmpty()) {
             event.setResult(PlayerChatEvent.ChatResult.denied());
             return;
         }
@@ -507,7 +520,7 @@ public class HypixelProxyPlugin {
             event.setResult(PlayerChatEvent.ChatResult.denied());
             return;
         }
-        if (chatRestrictionService != null && chatRestrictionService.isMuted(playerId)) {
+        if (muted) {
             sendPartyChatFramed(player, Component.text("You are currently muted!", NamedTextColor.RED));
             event.setResult(PlayerChatEvent.ChatResult.denied());
             return;
@@ -525,6 +538,7 @@ public class HypixelProxyPlugin {
                 Components.partyChat(formatPartyChatName(playerId, player.getUsername()), message),
                 memberId -> canReceivePartyChat(playerId, memberId)
         );
+        storeChatMessage(player, message, ChatChannelService.ChatChannel.PARTY);
         event.setResult(PlayerChatEvent.ChatResult.denied());
     }
 
@@ -610,6 +624,7 @@ public class HypixelProxyPlugin {
         friendService = null;
         blockService = null;
         chatChannelService = null;
+        chatMessageService = null;
         chatRestrictionService = null;
         partyService = null;
         staffChatService = null;
@@ -733,6 +748,7 @@ public class HypixelProxyPlugin {
         ensureCollection(MongoManager.PROFILES_COLLECTION);
         ensureCollection(MongoManager.MAPS_COLLECTION);
         ensureCollection(MongoManager.AUTOSCALE_COLLECTION);
+        ensureCollection(MongoManager.CHAT_MESSAGES_COLLECTION);
         seedMotdDocument();
         seedDomainDocument();
     }
@@ -1483,6 +1499,29 @@ public class HypixelProxyPlugin {
             return true;
         }
         return !blockService.isEitherBlocked(senderId, recipientId);
+    }
+
+    private void storeChatMessage(Player player, String message, ChatChannelService.ChatChannel channel) {
+        if (player == null || message == null || chatMessageService == null) {
+            return;
+        }
+        chatMessageService.storeMessage(
+                player.getUniqueId(),
+                player.getUsername(),
+                resolveChatServerId(player),
+                channel,
+                message
+        );
+    }
+
+    private String resolveChatServerId(Player player) {
+        if (player == null) {
+            return "proxy";
+        }
+        return player.getCurrentServer()
+                .map(connection -> connection.getServerInfo().getName())
+                .filter(name -> name != null && !name.trim().isEmpty())
+                .orElse("proxy");
     }
 
     private boolean isStaff(UUID playerId) {

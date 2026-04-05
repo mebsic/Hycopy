@@ -20,9 +20,10 @@ public class MongoManager {
     public static final String FRIENDS_COLLECTION = "friends";
     public static final String PROXY_SETTINGS_COLLECTION = "proxy_settings";
     public static final String RANK_GIFT_HISTORY_COLLECTION = "rank_gift_history";
-    public static final String MURDER_MYSTERY_COLLECTION = "murdermystery";
+    public static final String CHAT_MESSAGES_COLLECTION = "chat_messages";
+    public static final String MURDER_MYSTERY_GAME_KEY = "murdermystery";
 
-    public static final String MAP_CONFIG_DEFAULT_GAME_KEY = MURDER_MYSTERY_COLLECTION;
+    public static final String MAP_CONFIG_DEFAULT_GAME_KEY = MURDER_MYSTERY_GAME_KEY;
     public static final String MAP_SPAWNS_KEY = "spawns";
     public static final String MAP_DROP_ITEMS_KEY = "dropItem";
     public static final String MAP_CREATED_AT_KEY = "createdAt";
@@ -65,14 +66,14 @@ public class MongoManager {
     public static final String MURDER_MYSTERY_ROLE_CHANCES_COLLECTION = "murdermystery_role_chances";
     public static final String MURDER_MYSTERY_KNIFE_MENU_STATE_COLLECTION = "murdermystery_knife_menu_state";
     public static final String MURDER_MYSTERY_INFORMATION_COLLECTION = "murdermystery_information";
-    public static final String MURDER_MYSTERY_GAME_TYPE = MURDER_MYSTERY_COLLECTION;
+    public static final String MURDER_MYSTERY_GAME_TYPE = MURDER_MYSTERY_GAME_KEY;
     public static final String MURDER_MYSTERY_RECORD_TYPE_FIELD = "recordType";
     public static final String MURDER_MYSTERY_GAME_TYPE_FIELD = "gameType";
     public static final String MURDER_MYSTERY_RARITY_FIELD = "rarity";
     public static final String MURDER_MYSTERY_KNIFE_SKIN_RECORD_TYPE = "knife_skin";
     public static final String MURDER_MYSTERY_ROLE_CHANCE_RECORD_TYPE = "role_chance";
     public static final String MURDER_MYSTERY_KNIFE_MENU_STATE_RECORD_TYPE = "knife_menu_state";
-    public static final String MURDER_MYSTERY_INFORMATION_DOCUMENT_ID = MURDER_MYSTERY_COLLECTION;
+    public static final String MURDER_MYSTERY_INFORMATION_DOCUMENT_ID = MURDER_MYSTERY_GAME_KEY;
     public static final String MURDER_MYSTERY_TOKENS_KEY = "tokens";
     public static final String MURDER_MYSTERY_BOW_KILLS_KEY = "bowKills";
     public static final String MURDER_MYSTERY_KNIFE_KILLS_KEY = "knifeKills";

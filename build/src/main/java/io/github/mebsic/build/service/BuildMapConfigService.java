@@ -497,6 +497,7 @@ public class BuildMapConfigService {
             return true;
         }
         Location location = player.getLocation();
+        boolean reset = false;
         try {
             synchronized (mapConfigLock) {
                 JsonObject root = loadMapConfigRoot(store, gameKey);
@@ -504,18 +505,43 @@ public class BuildMapConfigService {
                 JsonArray maps = getOrCreateArray(gameSection, "maps");
                 JsonObject map = findOrCreateMapByWorldDirectory(maps, mapWorld);
                 String resolvedMapName = mapWorldDirectoryOf(map, mapWorld);
-                long createdAt = System.currentTimeMillis();
-                map.add(MongoManager.MAP_HUB_SPAWN_KEY, toLocationJson(location, createdAt));
+                if (map.has(MongoManager.MAP_HUB_SPAWN_KEY)) {
+                    map.remove(MongoManager.MAP_HUB_SPAWN_KEY);
+                    reset = true;
+                } else {
+                    long createdAt = System.currentTimeMillis();
+                    map.add(MongoManager.MAP_HUB_SPAWN_KEY, toLocationJson(location, createdAt));
+                    // Setting hub spawn should always promote this map to active.
+                    gameSection.addProperty("activeMap", resolvedMapName);
+                }
                 applyMapRotationDefaults(gameSection, resolvedMapName);
-                // Setting hub spawn should always promote this map to active.
-                gameSection.addProperty("activeMap", resolvedMapName);
                 saveMapConfigRoot(store, gameKey, root);
             }
-            sendDone(player, location, null);
+            if (reset) {
+                player.sendMessage(ChatColor.GREEN + "Done!");
+            } else {
+                sendDone(player, location, null);
+            }
         } catch (Exception ex) {
             player.sendMessage(ChatColor.RED + "Failed to update map config in MongoDB!\n" + ex.getMessage());
         }
         return true;
+    }
+
+    public boolean hasHubSpawnConfigured(ServerType gameType, String worldDirectory) {
+        if (gameType == null || gameType == ServerType.UNKNOWN) {
+            return false;
+        }
+        List<MapLocationEntry> locations = loadMapLocations(gameType, worldDirectory);
+        if (locations == null || locations.isEmpty()) {
+            return false;
+        }
+        for (MapLocationEntry entry : locations) {
+            if (entry != null && entry.getType() == MapLocationType.HUB_SPAWN) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public boolean setHubImageDisplayFromMenu(Player player, ServerType gameType, String worldDirectory) {
@@ -541,26 +567,59 @@ public class BuildMapConfigService {
             return true;
         }
         Location location = player.getLocation();
+        boolean reset = false;
         try {
             synchronized (mapConfigLock) {
                 JsonObject root = loadMapConfigRoot(store, gameKey);
                 JsonObject gameSection = getOrCreateGameSection(root, gameKey);
-                JsonArray maps = getOrCreateArray(gameSection, "maps");
-                JsonObject map = findOrCreateMapByWorldDirectory(maps, mapWorld);
-                String resolvedMapName = mapWorldDirectoryOf(map, mapWorld);
+                JsonObject existingDisplay = resolveHubInformationImageDisplay(gameSection, gameType);
+                if (existingDisplay != null) {
+                    clearHubInformationImageDisplay(gameSection, gameType);
+                    reset = true;
+                    saveMapConfigRoot(store, gameKey, root);
+                } else {
+                    JsonArray maps = getOrCreateArray(gameSection, "maps");
+                    JsonObject map = findOrCreateMapByWorldDirectory(maps, mapWorld);
+                    String resolvedMapName = mapWorldDirectoryOf(map, mapWorld);
 
-                JsonObject serverTypeSection = getOrCreateServerTypeSection(gameSection, gameType);
-                JsonObject information = getOrCreateObject(serverTypeSection, MongoManager.MAP_INFORMATION_KEY);
-                information.add(MongoManager.MAP_INFORMATION_IMAGE_DISPLAY_KEY, toLocationJson(location, System.currentTimeMillis()));
+                    JsonObject serverTypeSection = getOrCreateServerTypeSection(gameSection, gameType);
+                    JsonObject information = getOrCreateObject(serverTypeSection, MongoManager.MAP_INFORMATION_KEY);
+                    JsonObject imageDisplay = toLocationJson(location, System.currentTimeMillis());
+                    imageDisplay.addProperty(
+                            "imageFacing",
+                            oppositeCardinalFacing(cardinalFacingFromYaw(location == null ? 0.0f : location.getYaw()))
+                    );
+                    information.add(MongoManager.MAP_INFORMATION_IMAGE_DISPLAY_KEY, imageDisplay);
 
-                applyMapRotationDefaults(gameSection, resolvedMapName);
-                saveMapConfigRoot(store, gameKey, root);
+                    applyMapRotationDefaults(gameSection, resolvedMapName);
+                    saveMapConfigRoot(store, gameKey, root);
+                }
             }
-            sendDone(player, location, null);
+            if (reset) {
+                player.sendMessage(ChatColor.GREEN + "Done!");
+            } else {
+                sendDone(player, null, null);
+            }
         } catch (Exception ex) {
             player.sendMessage(ChatColor.RED + "Failed to update map config in MongoDB!\n" + ex.getMessage());
         }
         return true;
+    }
+
+    public boolean hasHubImageDisplayConfigured(ServerType gameType, String worldDirectory) {
+        if (gameType == null || gameType == ServerType.UNKNOWN) {
+            return false;
+        }
+        List<MapLocationEntry> locations = loadMapLocations(gameType, worldDirectory);
+        if (locations == null || locations.isEmpty()) {
+            return false;
+        }
+        for (MapLocationEntry entry : locations) {
+            if (entry != null && entry.getType() == MapLocationType.HUB_IMAGE_DISPLAY) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public boolean addHubNpcFromMenu(Player player, ServerType gameType, String worldDirectory) {
@@ -698,6 +757,128 @@ public class BuildMapConfigService {
         return true;
     }
 
+    public boolean hasClickToPlayNpcConfigured(ServerType gameType, String worldDirectory) {
+        return hasHubNpcConfiguredByType(gameType, worldDirectory, MapLocationType.HUB_NPC);
+    }
+
+    public boolean hasProfileNpcConfigured(ServerType gameType, String worldDirectory) {
+        return hasHubNpcConfiguredByType(gameType, worldDirectory, MapLocationType.PROFILE_NPC);
+    }
+
+    public boolean hasHubNpcConfigured(ServerType gameType, String worldDirectory) {
+        return hasClickToPlayNpcConfigured(gameType, worldDirectory)
+                || hasProfileNpcConfigured(gameType, worldDirectory);
+    }
+
+    private boolean hasHubNpcConfiguredByType(ServerType gameType, String worldDirectory, MapLocationType targetType) {
+        if (gameType == null || gameType == ServerType.UNKNOWN || targetType == null) {
+            return false;
+        }
+        List<MapLocationEntry> locations = loadMapLocations(gameType, worldDirectory);
+        if (locations == null || locations.isEmpty()) {
+            return false;
+        }
+        for (MapLocationEntry entry : locations) {
+            if (entry == null || entry.getType() == null) {
+                continue;
+            }
+            if (entry.getType() == targetType) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public boolean resetClickToPlayNpcFromMenu(Player player, ServerType gameType, String worldDirectory) {
+        return resetHubNpcsFromMenu(player, gameType, worldDirectory, false, true);
+    }
+
+    public boolean resetProfileNpcFromMenu(Player player, ServerType gameType, String worldDirectory) {
+        return resetHubNpcsFromMenu(player, gameType, worldDirectory, true, false);
+    }
+
+    public boolean resetHubNpcsFromMenu(Player player, ServerType gameType, String worldDirectory) {
+        return resetHubNpcsFromMenu(player, gameType, worldDirectory, true, true);
+    }
+
+    private boolean resetHubNpcsFromMenu(Player player,
+                                         ServerType gameType,
+                                         String worldDirectory,
+                                         boolean resetProfileNpc,
+                                         boolean resetClickToPlayNpc) {
+        if (player == null || gameType == null || gameType == ServerType.UNKNOWN) {
+            return true;
+        }
+        if (!resetProfileNpc && !resetClickToPlayNpc) {
+            return true;
+        }
+        if (!gameType.isHub()) {
+            player.sendMessage(ChatColor.RED + "Hub NPCs can only be reset in hub edit mode!");
+            return true;
+        }
+        String mapWorld = safeString(worldDirectory);
+        if (mapWorld.isEmpty() && player.getWorld() != null) {
+            mapWorld = safeString(player.getWorld().getName());
+        }
+        if (mapWorld.isEmpty()) {
+            player.sendMessage(ChatColor.RED + "Failed to resolve the map world!");
+            return true;
+        }
+        String gameKey = gameKeyForType(gameType);
+        if (gameKey.isEmpty()) {
+            player.sendMessage(ChatColor.RED + "Failed to resolve game key for that game type!");
+            return true;
+        }
+        MapConfigStore store = mapConfigStore();
+        if (store == null) {
+            player.sendMessage(ChatColor.RED + "MongoDB map config store is unavailable!");
+            return true;
+        }
+        boolean changed = false;
+        try {
+            synchronized (mapConfigLock) {
+                JsonObject root = loadMapConfigRoot(store, gameKey);
+                JsonObject gameSection = getOrCreateGameSection(root, gameKey);
+                JsonArray maps = getOrCreateArray(gameSection, "maps");
+                JsonObject map = findMapByWorldDirectory(maps, mapWorld);
+                if (map == null) {
+                    map = findMap(maps, mapWorld);
+                }
+                if (map == null) {
+                    player.sendMessage(ChatColor.RED + "No saved map data found for this world!");
+                    return true;
+                }
+                JsonArray npcs = existingArray(map, MongoManager.MAP_NPCS_KEY);
+                JsonArray profileNpcs = existingArray(map, MongoManager.MAP_PROFILE_NPCS_KEY);
+                boolean hadClickToPlay = npcs != null && npcs.size() > 0;
+                boolean hadProfile = profileNpcs != null && profileNpcs.size() > 0;
+                changed = (resetClickToPlayNpc && hadClickToPlay) || (resetProfileNpc && hadProfile);
+                if (!changed) {
+                    return true;
+                }
+                if (resetClickToPlayNpc) {
+                    map.add(MongoManager.MAP_NPCS_KEY, new JsonArray());
+                }
+                if (resetProfileNpc) {
+                    map.add(MongoManager.MAP_PROFILE_NPCS_KEY, new JsonArray());
+                }
+                saveMapConfigRoot(store, gameKey, root);
+            }
+            if (changed) {
+                if (resetClickToPlayNpc) {
+                    despawnRuntimeNpcsForWorld(gameType, mapWorld, false, true);
+                }
+                if (resetProfileNpc) {
+                    despawnRuntimeNpcsForWorld(gameType, mapWorld, true, false);
+                }
+                player.sendMessage(ChatColor.GREEN + "Done!");
+            }
+        } catch (Exception ex) {
+            player.sendMessage(ChatColor.RED + "Failed to update map config in MongoDB!\n" + ex.getMessage());
+        }
+        return true;
+    }
+
     public String getLeaderboardMetricSelection(Player player) {
         if (player == null || player.getUniqueId() == null) {
             return MongoManager.LEADERBOARD_METRIC_KILLS;
@@ -744,9 +925,10 @@ public class BuildMapConfigService {
             player.sendMessage(ChatColor.RED + "MongoDB map config store is unavailable!");
             return true;
         }
-        Location location = player.getLocation();
-        String entityId = UUID.randomUUID().toString();
         String selectedMetric = getLeaderboardMetricSelection(player);
+        Location location = player.getLocation();
+        String entityId = "";
+        boolean reset = false;
         try {
             synchronized (mapConfigLock) {
                 JsonObject root = loadMapConfigRoot(store, gameKey);
@@ -756,29 +938,60 @@ public class BuildMapConfigService {
                 String resolvedMapName = mapWorldDirectoryOf(map, mapWorld);
 
                 JsonArray leaderboards = getOrCreateArray(map, MongoManager.MAP_LEADERBOARDS_KEY);
-                JsonObject board = toLocationJson(location, System.currentTimeMillis());
-                board.addProperty(MongoManager.MAP_ENTITY_ID_KEY, entityId);
-                board.addProperty(MongoManager.MAP_METRIC_KEY, normalizeLeaderboardMetric(selectedMetric));
-                board.addProperty(MongoManager.MAP_LEADERBOARD_TITLE_COLOR_KEY, ChatColor.AQUA.name());
-                board.addProperty(MongoManager.MAP_LEADERBOARD_MODE_COLOR_KEY, ChatColor.GRAY.name());
-                board.addProperty(MongoManager.MAP_LEADERBOARD_RANK_COLOR_KEY, ChatColor.YELLOW.name());
-                board.addProperty(MongoManager.MAP_LEADERBOARD_SEPARATOR_COLOR_KEY, ChatColor.GRAY.name());
-                board.addProperty(MongoManager.MAP_LEADERBOARD_VALUE_COLOR_KEY, ChatColor.YELLOW.name());
-                board.addProperty(MongoManager.MAP_LEADERBOARD_EMPTY_COLOR_KEY, ChatColor.DARK_GRAY.name());
-                board.addProperty(MongoManager.MAP_LEADERBOARD_FOOTER_COLOR_KEY, ChatColor.GRAY.name());
-                leaderboards = rebuildLeaderboardsForAdd(leaderboards, board, selectedMetric);
+                if (hasLeaderboardMetric(leaderboards, selectedMetric)) {
+                    leaderboards = rebuildLeaderboardsForAdd(leaderboards, null, selectedMetric);
+                    reset = true;
+                } else {
+                    entityId = UUID.randomUUID().toString();
+                    JsonObject board = toLocationJson(location, System.currentTimeMillis());
+                    board.addProperty(MongoManager.MAP_ENTITY_ID_KEY, entityId);
+                    board.addProperty(MongoManager.MAP_METRIC_KEY, normalizeLeaderboardMetric(selectedMetric));
+                    board.addProperty(MongoManager.MAP_LEADERBOARD_TITLE_COLOR_KEY, ChatColor.AQUA.name());
+                    board.addProperty(MongoManager.MAP_LEADERBOARD_MODE_COLOR_KEY, ChatColor.GRAY.name());
+                    board.addProperty(MongoManager.MAP_LEADERBOARD_RANK_COLOR_KEY, ChatColor.YELLOW.name());
+                    board.addProperty(MongoManager.MAP_LEADERBOARD_SEPARATOR_COLOR_KEY, ChatColor.GRAY.name());
+                    board.addProperty(MongoManager.MAP_LEADERBOARD_VALUE_COLOR_KEY, ChatColor.YELLOW.name());
+                    board.addProperty(MongoManager.MAP_LEADERBOARD_EMPTY_COLOR_KEY, ChatColor.DARK_GRAY.name());
+                    board.addProperty(MongoManager.MAP_LEADERBOARD_FOOTER_COLOR_KEY, ChatColor.GRAY.name());
+                    leaderboards = rebuildLeaderboardsForAdd(leaderboards, board, selectedMetric);
+                }
                 map.add(MongoManager.MAP_LEADERBOARDS_KEY, leaderboards);
 
                 applyMapRotationDefaults(gameSection, resolvedMapName);
                 saveMapConfigRoot(store, gameKey, root);
             }
             despawnRuntimeLeaderboardsForMetric(gameType, mapWorld, selectedMetric);
-            spawnLeaderboardRuntime(entityId, location, gameType, mapWorld, selectedMetric, player.getUniqueId(), player.getName());
-            sendDone(player, location, null);
+            if (reset) {
+                player.sendMessage(ChatColor.GREEN + "Done!");
+            } else {
+                spawnLeaderboardRuntime(entityId, location, gameType, mapWorld, selectedMetric, player.getUniqueId(), player.getName());
+                sendDone(player, location, null);
+            }
         } catch (Exception ex) {
             player.sendMessage(ChatColor.RED + "Failed to update map config in MongoDB!\n" + ex.getMessage());
         }
         return true;
+    }
+
+    public boolean hasLeaderboardConfigured(ServerType gameType, String worldDirectory, String metric) {
+        if (gameType == null || gameType == ServerType.UNKNOWN) {
+            return false;
+        }
+        String targetMetric = normalizeLeaderboardMetric(metric);
+        List<MapLocationEntry> locations = loadMapLocations(gameType, worldDirectory);
+        if (locations == null || locations.isEmpty()) {
+            return false;
+        }
+        for (MapLocationEntry entry : locations) {
+            if (entry == null || entry.getType() != MapLocationType.LEADERBOARD) {
+                continue;
+            }
+            String entryMetric = normalizeLeaderboardMetric(entry.getItemName());
+            if (targetMetric.equals(entryMetric)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public boolean handleParkourSetupFromMenu(Player player, ServerType gameType, String worldDirectory, boolean checkpointClick) {
@@ -1035,6 +1248,24 @@ public class BuildMapConfigService {
             rebuilt.add(replacement);
         }
         return rebuilt;
+    }
+
+    private boolean hasLeaderboardMetric(JsonArray current, String metric) {
+        String targetMetric = normalizeLeaderboardMetric(metric);
+        if (current == null) {
+            return false;
+        }
+        for (JsonElement raw : current) {
+            if (raw == null || !raw.isJsonObject()) {
+                continue;
+            }
+            JsonObject candidate = raw.getAsJsonObject();
+            String candidateMetric = normalizeLeaderboardMetric(safeString(candidate, MongoManager.MAP_METRIC_KEY));
+            if (targetMetric.equals(candidateMetric)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void despawnRuntimeNpcsForWorld(ServerType gameType,
@@ -2432,6 +2663,40 @@ public class BuildMapConfigService {
         json.addProperty("pitch", pitch);
         json.addProperty(MongoManager.MAP_CREATED_AT_KEY, createdAt <= 0L ? System.currentTimeMillis() : createdAt);
         return json;
+    }
+
+    private String cardinalFacingFromYaw(float yaw) {
+        float normalized = yaw % 360.0f;
+        if (normalized < 0.0f) {
+            normalized += 360.0f;
+        }
+        if (normalized >= 45.0f && normalized < 135.0f) {
+            return "WEST";
+        }
+        if (normalized >= 135.0f && normalized < 225.0f) {
+            return "NORTH";
+        }
+        if (normalized >= 225.0f && normalized < 315.0f) {
+            return "EAST";
+        }
+        return "SOUTH";
+    }
+
+    private String oppositeCardinalFacing(String facing) {
+        String normalized = safeString(facing).toUpperCase(Locale.ROOT);
+        if ("NORTH".equals(normalized)) {
+            return "SOUTH";
+        }
+        if ("SOUTH".equals(normalized)) {
+            return "NORTH";
+        }
+        if ("EAST".equals(normalized)) {
+            return "WEST";
+        }
+        if ("WEST".equals(normalized)) {
+            return "EAST";
+        }
+        return "SOUTH";
     }
 
     private void sendDone(Player player, Location location, String itemName) {

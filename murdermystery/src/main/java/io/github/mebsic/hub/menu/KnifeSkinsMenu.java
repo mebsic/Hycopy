@@ -189,7 +189,7 @@ public class KnifeSkinsMenu extends Menu {
             boolean nextOwnedFirst = ownedFirst;
             if (click.isRightClick()) {
                 if (!canToggleOwnedFirst) {
-                    player.sendMessage(ChatColor.RED + "You don't own any knife skins yet!");
+                    player.sendMessage(ChatColor.RED + "You don't own any Knife Skins yet!");
                     return;
                 }
                 nextOwnedFirst = !ownedFirst;

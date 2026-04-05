@@ -4,6 +4,8 @@ import io.github.mebsic.core.util.MojangApi;
 import io.github.mebsic.core.server.ServerType;
 import io.github.mebsic.core.util.CommonMessages;
 import io.github.mebsic.proxy.service.BlockService;
+import io.github.mebsic.proxy.service.ChatChannelService;
+import io.github.mebsic.proxy.service.ChatMessageService;
 import io.github.mebsic.proxy.service.ChatRestrictionService;
 import io.github.mebsic.proxy.service.PartyService.DemoteResult;
 import io.github.mebsic.proxy.service.PartyService;
@@ -46,14 +48,15 @@ public class PartyCommand implements SimpleCommand {
     private final ServerRegistryService registry;
     private final BlockService blocks;
     private final ChatRestrictionService chatRestrictions;
+    private final ChatMessageService chatMessages;
     private final String commandRoot;
 
     public PartyCommand(ProxyServer proxy, PartyService parties) {
-        this(proxy, parties, null, null, null, null, "party");
+        this(proxy, parties, null, null, null, null, "party", null);
     }
 
     public PartyCommand(ProxyServer proxy, PartyService parties, RankResolver rankResolver, String commandRoot) {
-        this(proxy, parties, rankResolver, null, null, null, commandRoot);
+        this(proxy, parties, rankResolver, null, null, null, commandRoot, null);
     }
 
     public PartyCommand(ProxyServer proxy,
@@ -61,7 +64,7 @@ public class PartyCommand implements SimpleCommand {
                         RankResolver rankResolver,
                         ServerRegistryService registry,
                         String commandRoot) {
-        this(proxy, parties, rankResolver, registry, null, null, commandRoot);
+        this(proxy, parties, rankResolver, registry, null, null, commandRoot, null);
     }
 
     public PartyCommand(ProxyServer proxy,
@@ -70,13 +73,15 @@ public class PartyCommand implements SimpleCommand {
                         ServerRegistryService registry,
                         BlockService blocks,
                         ChatRestrictionService chatRestrictions,
-                        String commandRoot) {
+                        String commandRoot,
+                        ChatMessageService chatMessages) {
         this.proxy = proxy;
         this.parties = parties;
         this.rankResolver = rankResolver;
         this.registry = registry;
         this.blocks = blocks;
         this.chatRestrictions = chatRestrictions;
+        this.chatMessages = chatMessages;
         String safeRoot = commandRoot == null ? "" : commandRoot.trim().toLowerCase(Locale.ROOT);
         this.commandRoot = safeRoot.isEmpty() ? "party" : safeRoot;
     }
@@ -822,6 +827,7 @@ public class PartyCommand implements SimpleCommand {
                 Components.partyChat(formatPartyChatName(senderId, player.getUsername()), message),
                 memberId -> canReceivePartyChat(senderId, memberId)
         );
+        storePartyChatMessage(player, message);
     }
 
     private boolean canReceivePartyChat(UUID senderId, UUID recipientId) {
@@ -1142,6 +1148,23 @@ public class PartyCommand implements SimpleCommand {
             builder.append(args[i]);
         }
         return builder.toString();
+    }
+
+    private void storePartyChatMessage(Player player, String message) {
+        if (player == null || message == null || chatMessages == null) {
+            return;
+        }
+        String serverId = player.getCurrentServer()
+                .map(connection -> connection.getServerInfo().getName())
+                .filter(name -> name != null && !name.trim().isEmpty())
+                .orElse("proxy");
+        chatMessages.storeMessage(
+                player.getUniqueId(),
+                player.getUsername(),
+                serverId,
+                ChatChannelService.ChatChannel.PARTY,
+                message
+        );
     }
 
     private boolean isStaff(UUID uuid) {

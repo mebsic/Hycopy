@@ -11,20 +11,17 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Rotation;
 import org.bukkit.World;
+import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.ItemFrame;
 import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.map.MapCanvas;
 import org.bukkit.map.MapRenderer;
 import org.bukkit.map.MapView;
 import org.bukkit.plugin.Plugin;
-import org.bukkit.scheduler.BukkitTask;
 
 import javax.imageio.ImageIO;
 import java.awt.Graphics2D;
@@ -38,23 +35,19 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.mongodb.client.model.Filters.eq;
-import com.mongodb.client.model.UpdateOptions;
 
-public class HubImageDisplayListener implements Listener {
-    private static final String MAP_CONFIG_UPDATE_CHANNEL = "map_config_update";
-    private static final String MAP_CONFIG_UPDATE_PREFIX = "maps:";
-    private static final long IMAGE_INITIAL_REFRESH_DELAY_TICKS = 1L;
-    private static final long IMAGE_REFRESH_INTERVAL_TICKS = 1200L;
-    private static final long IMAGE_REFRESH_THROTTLE_MILLIS = 15_000L;
+public class ImageListener implements Listener {
     private static final int IMAGE_SOURCE_CONNECT_TIMEOUT_MILLIS = 10_000;
     private static final int IMAGE_SOURCE_READ_TIMEOUT_MILLIS = 10_000;
     private static final String IMAGE_HTTP_USER_AGENT = "ImageService";
@@ -62,65 +55,52 @@ public class HubImageDisplayListener implements Listener {
     private static final int IMAGE_GRID_WIDTH = 15;
     private static final int IMAGE_GRID_HEIGHT = 6;
     private static final int IMAGE_TILE_SIZE = 128;
+    private static final int IMAGE_TOTAL_WIDTH = IMAGE_GRID_WIDTH * IMAGE_TILE_SIZE;
+    private static final int IMAGE_TOTAL_HEIGHT = IMAGE_GRID_HEIGHT * IMAGE_TILE_SIZE;
     private static final int IMAGE_TOTAL_TILES = IMAGE_GRID_WIDTH * IMAGE_GRID_HEIGHT;
+    private static final String IMAGE_FACING_KEY = "imageFacing";
+    private static final String IMAGE_URL_KEY = "imageUrl";
+    private static final String IMAGE_ENABLED_KEY = "imageEnabled";
 
     private final Plugin plugin;
     private final CorePlugin corePlugin;
     private final ServerType serverType;
     private final AtomicBoolean refreshInFlight;
-    private final BukkitTask refreshTask;
+    private final AtomicBoolean runtimeSettingsDefaultsEnsured;
     private final List<MapTile> mapTiles;
+    private final Set<UUID> pendingRuntimeFrameUuids;
     private volatile String activeGameKey;
-    private volatile long lastRefreshRequestedAt;
+    private volatile String cachedImageSource;
+    private volatile BufferedImage cachedScaledImage;
     private RuntimeImage runtimeImage;
 
-    public HubImageDisplayListener(Plugin plugin, CorePlugin corePlugin, ServerType serverType) {
+    public ImageListener(Plugin plugin, CorePlugin corePlugin, ServerType serverType) {
         this.plugin = plugin;
         this.corePlugin = corePlugin;
         this.serverType = serverType == null ? ServerType.UNKNOWN : serverType;
         this.refreshInFlight = new AtomicBoolean(false);
+        this.runtimeSettingsDefaultsEnsured = new AtomicBoolean(false);
         this.activeGameKey = MongoManager.MAP_CONFIG_DEFAULT_GAME_KEY;
         this.mapTiles = new ArrayList<MapTile>();
-        ensureImageSourceDocument();
-        subscribeToMapConfigUpdates();
-        this.refreshTask = startRefreshTask();
-        refreshDisplay(true);
+        this.pendingRuntimeFrameUuids = Collections.newSetFromMap(new ConcurrentHashMap<UUID, Boolean>());
+        this.cachedImageSource = "";
+        this.cachedScaledImage = null;
+        refreshDisplay();
     }
 
     public void shutdown() {
-        if (refreshTask != null) {
-            refreshTask.cancel();
-        }
         despawnRuntimeImage();
         mapTiles.clear();
     }
 
-    private BukkitTask startRefreshTask() {
-        if (plugin == null || !serverType.isHub()) {
-            return null;
-        }
-        return plugin.getServer().getScheduler().runTaskTimer(
-                plugin,
-                this::refreshDisplay,
-                IMAGE_INITIAL_REFRESH_DELAY_TICKS,
-                IMAGE_REFRESH_INTERVAL_TICKS
-        );
+    public void refreshNow() {
+        refreshDisplay();
     }
 
     private void refreshDisplay() {
-        refreshDisplay(false);
-    }
-
-    private void refreshDisplay(boolean bypassThrottle) {
-        if (plugin == null || !serverType.isHub()) {
+        if (plugin == null || !supportsImageDisplayServerType()) {
             return;
         }
-        long now = System.currentTimeMillis();
-        long elapsed = now - lastRefreshRequestedAt;
-        if (!bypassThrottle && elapsed >= 0L && elapsed < IMAGE_REFRESH_THROTTLE_MILLIS) {
-            return;
-        }
-        lastRefreshRequestedAt = now;
         if (!refreshInFlight.compareAndSet(false, true)) {
             return;
         }
@@ -131,7 +111,19 @@ public class HubImageDisplayListener implements Listener {
             try {
                 config = resolveImageConfig();
                 if (config != null && config.enabled && !config.imageSource.isEmpty()) {
-                    image = loadImage(config.imageSource);
+                    String source = safeText(config.imageSource);
+                    BufferedImage cached = cachedScaledImage;
+                    if (!source.isEmpty() && source.equals(cachedImageSource) && cached != null) {
+                        image = cached;
+                    } else {
+                        BufferedImage loaded = loadImage(source);
+                        if (loaded != null) {
+                            BufferedImage scaled = isGridSized(loaded) ? loaded : scaleImageForGrid(loaded);
+                            cachedImageSource = source;
+                            cachedScaledImage = scaled;
+                            image = scaled;
+                        }
+                    }
                 }
             } catch (Exception ex) {
                 imageError = safeText(ex.getMessage());
@@ -181,31 +173,107 @@ public class HubImageDisplayListener implements Listener {
         if (facing == null || facing == BlockFace.SELF || facing == BlockFace.UP || facing == BlockFace.DOWN) {
             facing = BlockFace.SOUTH;
         }
+        facing = resolveBestSupportedFacing(world, config.location, facing);
 
         ensureMapTiles(world);
         if (mapTiles.size() != IMAGE_TOTAL_TILES) {
             return;
         }
 
-        BufferedImage scaled = scaleImageForGrid(image);
+        BufferedImage scaled = isGridSized(image) ? image : scaleImageForGrid(image);
         applyMapTileImages(scaled);
         ensureRuntimeFrames(world, config.location, facing);
     }
 
+    private BlockFace resolveBestSupportedFacing(World world, ImageLocation location, BlockFace preferred) {
+        if (world == null || location == null) {
+            return preferred == null ? BlockFace.SOUTH : preferred;
+        }
+        List<BlockFace> candidates = new ArrayList<BlockFace>(4);
+        addFacingCandidate(candidates, preferred);
+        addFacingCandidate(candidates, BlockFace.NORTH);
+        addFacingCandidate(candidates, BlockFace.SOUTH);
+        addFacingCandidate(candidates, BlockFace.EAST);
+        addFacingCandidate(candidates, BlockFace.WEST);
+        if (candidates.isEmpty()) {
+            return preferred == null ? BlockFace.SOUTH : preferred;
+        }
+
+        BlockFace best = candidates.get(0);
+        int bestScore = -1;
+        for (BlockFace candidate : candidates) {
+            int score = countSupportedTiles(world, location, candidate);
+            if (score > bestScore) {
+                bestScore = score;
+                best = candidate;
+            }
+        }
+        return best;
+    }
+
+    private void addFacingCandidate(List<BlockFace> candidates, BlockFace face) {
+        if (candidates == null || face == null
+                || face == BlockFace.UP
+                || face == BlockFace.DOWN
+                || face == BlockFace.SELF) {
+            return;
+        }
+        if (!candidates.contains(face)) {
+            candidates.add(face);
+        }
+    }
+
+    private int countSupportedTiles(World world, ImageLocation location, BlockFace facing) {
+        if (world == null || location == null || facing == null) {
+            return 0;
+        }
+        int supported = 0;
+        BlockFace supportFace = facing.getOppositeFace();
+        for (int rowTop = 0; rowTop < IMAGE_GRID_HEIGHT; rowTop++) {
+            for (int col = 0; col < IMAGE_GRID_WIDTH; col++) {
+                Location tile = tileLocation(world, location, facing, col, rowTop);
+                if (tile == null) {
+                    continue;
+                }
+                Block support = tile.getBlock().getRelative(supportFace);
+                if (isSolidSupport(support == null ? null : support.getType())) {
+                    supported++;
+                }
+            }
+        }
+        return supported;
+    }
+
+    private boolean isSolidSupport(Material type) {
+        if (type == null || type == Material.AIR) {
+            return false;
+        }
+        try {
+            return type.isSolid();
+        } catch (Exception ignored) {
+            return type != Material.AIR;
+        }
+    }
+
     private BufferedImage scaleImageForGrid(BufferedImage source) {
-        int width = IMAGE_GRID_WIDTH * IMAGE_TILE_SIZE;
-        int height = IMAGE_GRID_HEIGHT * IMAGE_TILE_SIZE;
-        BufferedImage scaled = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        BufferedImage scaled = new BufferedImage(IMAGE_TOTAL_WIDTH, IMAGE_TOTAL_HEIGHT, BufferedImage.TYPE_INT_RGB);
         Graphics2D graphics = scaled.createGraphics();
         try {
             graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
             graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
             graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            graphics.drawImage(source, 0, 0, width, height, null);
+            graphics.drawImage(source, 0, 0, IMAGE_TOTAL_WIDTH, IMAGE_TOTAL_HEIGHT, null);
         } finally {
             graphics.dispose();
         }
         return scaled;
+    }
+
+    private boolean isGridSized(BufferedImage image) {
+        if (image == null) {
+            return false;
+        }
+        return image.getWidth() == IMAGE_TOTAL_WIDTH && image.getHeight() == IMAGE_TOTAL_HEIGHT;
     }
 
     private void ensureMapTiles(World world) {
@@ -281,6 +349,11 @@ public class HubImageDisplayListener implements Listener {
                 if (frame == null) {
                     continue;
                 }
+                if (frame.getUniqueId() != null) {
+                    // Protect newly spawned frames immediately so physics cannot break
+                    // unsupported/floating placements before runtimeImage is updated.
+                    pendingRuntimeFrameUuids.add(frame.getUniqueId());
+                }
                 applyFrameFacing(frame, facing);
                 if (frame.getLocation() != null && frame.getLocation().distanceSquared(tileLocation) > 0.01d) {
                     frame.teleport(tileLocation);
@@ -314,6 +387,7 @@ public class HubImageDisplayListener implements Listener {
         runtime.imageSource = "";
         runtime.frameUuids = next;
         runtimeImage = runtime;
+        pendingRuntimeFrameUuids.clear();
     }
 
     private Location tileLocation(World world, ImageLocation anchor, BlockFace facing, int col, int rowTop) {
@@ -393,6 +467,7 @@ public class HubImageDisplayListener implements Listener {
     private void despawnRuntimeImage() {
         RuntimeImage runtime = runtimeImage;
         runtimeImage = null;
+        pendingRuntimeFrameUuids.clear();
         if (runtime == null || runtime.frameUuids == null || runtime.frameUuids.isEmpty()) {
             return;
         }
@@ -508,17 +583,19 @@ public class HubImageDisplayListener implements Listener {
     }
 
     private BlockFace resolveFacing(ImageLocation location, String override) {
-        BlockFace configured = parseFacing(override);
-        if (configured != null && configured != BlockFace.SELF && configured != BlockFace.UP && configured != BlockFace.DOWN) {
-            return configured;
+        BlockFace configuredFacing = parseFacing(override);
+        if (configuredFacing != null
+                && configuredFacing != BlockFace.SELF
+                && configuredFacing != BlockFace.UP
+                && configuredFacing != BlockFace.DOWN) {
+            return configuredFacing;
         }
         float yaw = location == null ? 0.0f : location.yaw;
-        BlockFace playerFacing = yawToBlockFace(yaw);
-        if (playerFacing == null) {
+        BlockFace derivedFacing = yawToBlockFace(yaw);
+        if (derivedFacing == null) {
             return BlockFace.SOUTH;
         }
-        BlockFace opposite = playerFacing.getOppositeFace();
-        return opposite == null ? BlockFace.SOUTH : opposite;
+        return derivedFacing;
     }
 
     private BlockFace parseFacing(String raw) {
@@ -553,65 +630,36 @@ public class HubImageDisplayListener implements Listener {
         return BlockFace.SOUTH;
     }
 
-    private void subscribeToMapConfigUpdates() {
-        if (corePlugin == null || !serverType.isHub()) {
-            return;
-        }
-        if (corePlugin.getPubSubService() == null) {
-            return;
-        }
-        corePlugin.getPubSubService().subscribe(MAP_CONFIG_UPDATE_CHANNEL, this::handleMapConfigUpdateMessage);
+    private boolean supportsImageDisplayServerType() {
+        return serverType != null && (serverType.isHub() || serverType.isGame());
     }
 
-    private void handleMapConfigUpdateMessage(String message) {
-        String updatedKey = parseUpdatedGameKey(message);
-        if (updatedKey.isEmpty()) {
-            return;
-        }
-        if (!shouldReloadForGameKey(updatedKey)) {
-            return;
-        }
-        plugin.getServer().getScheduler().runTask(plugin, () -> refreshDisplay(true));
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void onJoin(PlayerJoinEvent event) {
-        if (event == null || event.getPlayer() == null || plugin == null || !serverType.isHub()) {
-            return;
-        }
-        plugin.getServer().getScheduler().runTaskLater(plugin, this::refreshDisplay, 2L);
-    }
-
-    private String parseUpdatedGameKey(String message) {
-        String raw = safeText(message);
-        if (raw.isEmpty()) {
-            return "";
-        }
-        String key = raw;
-        if (raw.toLowerCase(Locale.ROOT).startsWith(MAP_CONFIG_UPDATE_PREFIX)) {
-            key = raw.substring(MAP_CONFIG_UPDATE_PREFIX.length());
-        }
-        key = MapConfigStore.normalizeGameKey(key);
-        if (key.isEmpty()) {
-            return "";
-        }
-        return key;
-    }
-
-    private boolean shouldReloadForGameKey(String updatedKey) {
-        String normalized = MapConfigStore.normalizeGameKey(updatedKey);
-        if (normalized.isEmpty()) {
+    public boolean isRuntimeImageFrameEntity(Entity entity) {
+        if (!(entity instanceof ItemFrame) || entity.getUniqueId() == null) {
             return false;
         }
-        if (normalized.equalsIgnoreCase(safeText(activeGameKey))) {
+        RuntimeImage runtime = runtimeImage;
+        UUID entityId = entity.getUniqueId();
+        if (entityId != null && pendingRuntimeFrameUuids.contains(entityId)) {
             return true;
         }
-        return containsIgnoreCase(resolveGameKeyCandidates(), normalized);
+        if (runtime == null || runtime.frameUuids == null || runtime.frameUuids.isEmpty()) {
+            return false;
+        }
+        for (UUID frameUuid : runtime.frameUuids) {
+            if (frameUuid != null && frameUuid.equals(entityId)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private ResolvedImageConfig resolveImageConfig() {
+        RuntimeImageSettings runtimeSettings = loadRuntimeImageSettings();
+        if (runtimeSettings == null) {
+            runtimeSettings = RuntimeImageSettings.DEFAULT;
+        }
         List<String> gameKeyCandidates = resolveGameKeyCandidates();
-        ImageSourceOverride sourceOverride = resolveImageSourceOverride();
         for (String gameKey : gameKeyCandidates) {
             if (gameKey == null || gameKey.trim().isEmpty()) {
                 continue;
@@ -646,20 +694,9 @@ public class HubImageDisplayListener implements Listener {
             if (resolvedGameKey.isEmpty()) {
                 resolvedGameKey = MongoManager.MAP_CONFIG_DEFAULT_GAME_KEY;
             }
-            String resolvedSource = parsed.imageSource;
-            String resolvedFacing = parsed.facingOverride;
-            boolean resolvedEnabled = parsed.enabled;
-            if (sourceOverride != null) {
-                if (!sourceOverride.imageSource.isEmpty()) {
-                    resolvedSource = sourceOverride.imageSource;
-                }
-                if (!sourceOverride.facingOverride.isEmpty()) {
-                    resolvedFacing = sourceOverride.facingOverride;
-                }
-                if (sourceOverride.enabled != null) {
-                    resolvedEnabled = sourceOverride.enabled;
-                }
-            }
+            String resolvedSource = runtimeSettings.imageSource;
+            String resolvedFacing = parsed.imageFacing;
+            boolean resolvedEnabled = parsed.enabled && runtimeSettings.enabled;
             return new ResolvedImageConfig(
                     resolvedGameKey,
                     parsed.location,
@@ -675,125 +712,79 @@ public class HubImageDisplayListener implements Listener {
         if (information == null) {
             return null;
         }
-        ImageLocation location = parseImageLocation(information.get(MongoManager.MAP_INFORMATION_IMAGE_DISPLAY_KEY));
-        if (location == null) {
-            location = parseImageLocation(information.get("imageLocation"));
-        }
-        if (location == null) {
-            location = parseImageLocation(information.get("imageDisplayLocation"));
-        }
-        if (location == null) {
-            location = parseImageLocation(information.get("location"));
-        }
-
-        String source = safeText(information.get("imageUrl"));
-        if (source.isEmpty()) {
-            source = safeText(information.get("imageSource"));
-        }
-        if (source.isEmpty()) {
-            source = safeText(information.get("imagePath"));
-        }
-        if (source.isEmpty()) {
-            source = safeText(information.get("source"));
-        }
-        String facingOverride = safeText(information.get("imageFacing"));
-
         Document imageDisplaySection = asDocument(information.get(MongoManager.MAP_INFORMATION_IMAGE_DISPLAY_KEY));
-        if (imageDisplaySection != null) {
-            if (source.isEmpty()) {
-                source = safeText(imageDisplaySection.get("url"));
-            }
-            if (source.isEmpty()) {
-                source = safeText(imageDisplaySection.get("source"));
-            }
-            if (source.isEmpty()) {
-                source = safeText(imageDisplaySection.get("path"));
-            }
-            if (facingOverride.isEmpty()) {
-                facingOverride = safeText(imageDisplaySection.get("facing"));
-            }
-        }
-
-        Document imageSection = asDocument(information.get("image"));
-        if (imageSection != null) {
-            if (source.isEmpty()) {
-                source = safeText(imageSection.get("url"));
-            }
-            if (source.isEmpty()) {
-                source = safeText(imageSection.get("source"));
-            }
-            if (source.isEmpty()) {
-                source = safeText(imageSection.get("path"));
-            }
-            if (location == null) {
-                location = parseImageLocation(imageSection.get("location"));
-            }
-            if (location == null) {
-                location = parseImageLocation(imageSection);
-            }
-            if (facingOverride.isEmpty()) {
-                facingOverride = safeText(imageSection.get("facing"));
-            }
-        } else if (source.isEmpty()) {
-            source = safeText(information.get("image"));
-        }
-
-        Boolean enabledValue = readBoolean(information.get("imageEnabled"));
-        if (enabledValue == null) {
-            enabledValue = readBoolean(information.get("enabled"));
-        }
-        boolean enabled = enabledValue == null || enabledValue;
-        if (!enabled && location == null && source.isEmpty()) {
-            return new ImageInformation(null, "", false, "");
-        }
-        if (location == null && source.isEmpty()) {
+        if (imageDisplaySection == null) {
             return null;
         }
-        return new ImageInformation(location, source, enabled, facingOverride);
+        ImageLocation location = parseImageLocation(imageDisplaySection);
+        String imageFacing = safeText(imageDisplaySection.get(IMAGE_FACING_KEY));
+        Boolean enabledValue = readBoolean(imageDisplaySection.get("enabled"));
+        boolean enabled = enabledValue == null || enabledValue;
+        if (!enabled && location == null) {
+            return new ImageInformation(null, false, "");
+        }
+        if (location == null) {
+            return null;
+        }
+        return new ImageInformation(location, enabled, imageFacing);
+    }
+
+    private RuntimeImageSettings loadRuntimeImageSettings() {
+        if (corePlugin == null || corePlugin.getMongoManager() == null) {
+            return RuntimeImageSettings.DEFAULT;
+        }
+        MongoCollection<Document> informationCollection = corePlugin.getMongoManager()
+                .getCollection(MongoManager.MURDER_MYSTERY_INFORMATION_COLLECTION);
+        if (informationCollection == null) {
+            return RuntimeImageSettings.DEFAULT;
+        }
+        ensureRuntimeImageSettingsDefaults(informationCollection);
+        Document information = informationCollection
+                .find(eq("_id", MongoManager.MURDER_MYSTERY_INFORMATION_DOCUMENT_ID))
+                .first();
+        if (information == null) {
+            return RuntimeImageSettings.DEFAULT;
+        }
+        String imageUrl = safeText(information.get(IMAGE_URL_KEY));
+        Boolean enabled = readBoolean(information.get(IMAGE_ENABLED_KEY));
+        return new RuntimeImageSettings(imageUrl, enabled == null || enabled);
+    }
+
+    private void ensureRuntimeImageSettingsDefaults(MongoCollection<Document> informationCollection) {
+        if (informationCollection == null || runtimeSettingsDefaultsEnsured.get()) {
+            return;
+        }
+        try {
+            Document existing = informationCollection
+                    .find(eq("_id", MongoManager.MURDER_MYSTERY_INFORMATION_DOCUMENT_ID))
+                    .first();
+            if (existing == null) {
+                informationCollection.insertOne(
+                        new Document("_id", MongoManager.MURDER_MYSTERY_INFORMATION_DOCUMENT_ID)
+                                .append(IMAGE_ENABLED_KEY, true)
+                                .append(IMAGE_URL_KEY, "")
+                );
+            }
+            runtimeSettingsDefaultsEnsured.set(true);
+        } catch (Exception ignored) {
+            // Keep runtime image loading functional even if defaults insert fails.
+        }
     }
 
     private ImageLocation parseImageLocation(Object rawLocation) {
         Document locationDoc = asDocument(rawLocation);
-        if (locationDoc != null) {
-            String world = safeText(locationDoc.get("world"));
-            Double x = readDouble(locationDoc.get("x"));
-            Double y = readDouble(locationDoc.get("y"));
-            Double z = readDouble(locationDoc.get("z"));
-            if (!world.isEmpty() && x != null && y != null && z != null) {
-                float yaw = readFloat(locationDoc.get("yaw"), 0.0f);
-                float pitch = readFloat(locationDoc.get("pitch"), 0.0f);
-                return new ImageLocation(world, x, y, z, yaw, pitch);
-            }
-            Object nested = locationDoc.get("location");
-            if (nested != null && nested != rawLocation) {
-                ImageLocation nestedLocation = parseImageLocation(nested);
-                if (nestedLocation != null) {
-                    return nestedLocation;
-                }
-            }
+        if (locationDoc == null) {
             return null;
         }
-
-        String serialized = rawLocation instanceof String ? safeText(rawLocation) : "";
-        if (serialized.isEmpty()) {
+        String world = safeText(locationDoc.get("world"));
+        Double x = readDouble(locationDoc.get("x"));
+        Double y = readDouble(locationDoc.get("y"));
+        Double z = readDouble(locationDoc.get("z"));
+        if (world.isEmpty() || x == null || y == null || z == null) {
             return null;
         }
-        String[] parts = serialized.split(",");
-        if (parts.length < 4) {
-            return null;
-        }
-        String world = safeText(parts[0]);
-        if (world.isEmpty()) {
-            return null;
-        }
-        Double x = readDouble(parts[1]);
-        Double y = readDouble(parts[2]);
-        Double z = readDouble(parts[3]);
-        if (x == null || y == null || z == null) {
-            return null;
-        }
-        float yaw = parts.length > 4 ? readFloat(parts[4], 0.0f) : 0.0f;
-        float pitch = parts.length > 5 ? readFloat(parts[5], 0.0f) : 0.0f;
+        float yaw = readFloat(locationDoc.get("yaw"), 0.0f);
+        float pitch = readFloat(locationDoc.get("pitch"), 0.0f);
         return new ImageLocation(world, x, y, z, yaw, pitch);
     }
 
@@ -850,57 +841,6 @@ public class HubImageDisplayListener implements Listener {
             candidates.add(MongoManager.MAP_CONFIG_DEFAULT_GAME_KEY);
         }
         return candidates;
-    }
-
-    private ImageSourceOverride resolveImageSourceOverride() {
-        if (corePlugin == null || corePlugin.getMongoManager() == null) {
-            return null;
-        }
-        MongoCollection<Document> collection = corePlugin.getMongoManager().getCollection(MongoManager.MURDER_MYSTERY_COLLECTION);
-        if (collection == null) {
-            return null;
-        }
-        Document record = collection.find(eq("_id", MongoManager.MURDER_MYSTERY_COLLECTION)).first();
-        return parseImageSourceOverride(record);
-    }
-
-    private void ensureImageSourceDocument() {
-        if (corePlugin == null || corePlugin.getMongoManager() == null) {
-            return;
-        }
-        MongoCollection<Document> collection = corePlugin.getMongoManager().getCollection(MongoManager.MURDER_MYSTERY_COLLECTION);
-        if (collection == null) {
-            return;
-        }
-        Document defaults = new Document();
-        defaults.put("_id", MongoManager.MURDER_MYSTERY_COLLECTION);
-        defaults.put("imageUrl", "");
-        defaults.put("imageEnabled", true);
-        defaults.put("imageFacing", "");
-        try {
-            collection.updateOne(
-                    eq("_id", MongoManager.MURDER_MYSTERY_COLLECTION),
-                    new Document("$setOnInsert", defaults),
-                    new UpdateOptions().upsert(true)
-            );
-        } catch (Exception ex) {
-            if (plugin != null) {
-                plugin.getLogger().warning("Failed to ensure default hub image source document: " + safeText(ex.getMessage()));
-            }
-        }
-    }
-
-    private ImageSourceOverride parseImageSourceOverride(Document record) {
-        if (record == null) {
-            return null;
-        }
-        String source = safeText(record.get("imageUrl"));
-        String facing = safeText(record.get("imageFacing"));
-        Boolean enabled = readBoolean(record.get("imageEnabled"));
-        if (source.isEmpty() && facing.isEmpty() && enabled == null) {
-            return null;
-        }
-        return new ImageSourceOverride(source, facing, enabled);
     }
 
     private void addGameKeyCandidate(List<String> candidates, String raw) {
@@ -1053,15 +993,13 @@ public class HubImageDisplayListener implements Listener {
 
     private static final class ImageInformation {
         private final ImageLocation location;
-        private final String imageSource;
         private final boolean enabled;
-        private final String facingOverride;
+        private final String imageFacing;
 
-        private ImageInformation(ImageLocation location, String imageSource, boolean enabled, String facingOverride) {
+        private ImageInformation(ImageLocation location, boolean enabled, String imageFacing) {
             this.location = location;
-            this.imageSource = imageSource == null ? "" : imageSource;
             this.enabled = enabled;
-            this.facingOverride = facingOverride == null ? "" : facingOverride;
+            this.imageFacing = imageFacing == null ? "" : imageFacing;
         }
     }
 
@@ -1085,14 +1023,13 @@ public class HubImageDisplayListener implements Listener {
         }
     }
 
-    private static final class ImageSourceOverride {
+    private static final class RuntimeImageSettings {
+        private static final RuntimeImageSettings DEFAULT = new RuntimeImageSettings("", true);
         private final String imageSource;
-        private final String facingOverride;
-        private final Boolean enabled;
+        private final boolean enabled;
 
-        private ImageSourceOverride(String imageSource, String facingOverride, Boolean enabled) {
+        private RuntimeImageSettings(String imageSource, boolean enabled) {
             this.imageSource = imageSource == null ? "" : imageSource;
-            this.facingOverride = facingOverride == null ? "" : facingOverride;
             this.enabled = enabled;
         }
     }
@@ -1124,9 +1061,11 @@ public class HubImageDisplayListener implements Listener {
 
     private static final class StaticImageMapRenderer extends MapRenderer {
         private BufferedImage image;
+        private final Set<UUID> renderedForPlayers = new HashSet<UUID>();
 
         private void setImage(BufferedImage image) {
             this.image = image;
+            this.renderedForPlayers.clear();
         }
 
         @Override
@@ -1134,7 +1073,15 @@ public class HubImageDisplayListener implements Listener {
             if (canvas == null || image == null) {
                 return;
             }
+            UUID playerId = player == null ? null : player.getUniqueId();
+            if (playerId == null) {
+                return;
+            }
+            if (renderedForPlayers.contains(playerId)) {
+                return;
+            }
             canvas.drawImage(0, 0, image);
+            renderedForPlayers.add(playerId);
         }
     }
 }

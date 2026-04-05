@@ -95,7 +95,7 @@ public class BuildEditLocationsMenu extends Menu {
             }
             lore.add("");
             lore.add(ChatColor.YELLOW + "Click to teleport!");
-            lore.add(ChatColor.DARK_GRAY + "Right-click to delete!");
+            lore.add(ChatColor.DARK_GRAY + "Right-click to delete");
             set(inventory, LOCATION_SLOTS[i], buildLocationItem(entry, lore));
         }
         // Re-apply footer controls so they always stay visible in submenus.

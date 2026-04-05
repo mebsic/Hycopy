@@ -729,6 +729,7 @@ public class GameManager {
         for (PotionEffect effect : player.getActivePotionEffects()) {
             player.removePotionEffect(effect.getType());
         }
+        setPlayerEntityCollision(player, true);
         player.setAllowFlight(false);
         player.setFlying(false);
         player.setGameMode(GameMode.ADVENTURE);
@@ -748,6 +749,7 @@ public class GameManager {
         int speedLevel = profile == null ? 0 : clampSpectatorSpeed(profile.getSpectatorSpeedLevel());
         boolean nightVision = profile == null || profile.isSpectatorNightVisionEnabled();
         player.setGameMode(GameMode.ADVENTURE);
+        setPlayerEntityCollision(player, false);
         player.setAllowFlight(true);
         player.setFlying(true);
         SpectatorItems.applyTo(player, plugin.getServerType());
@@ -767,6 +769,17 @@ public class GameManager {
 
     public void restoreDeadSpectatorState(Player player) {
         applyDeadSpectatorState(player);
+    }
+
+    private void setPlayerEntityCollision(Player player, boolean collidesWithEntities) {
+        if (player == null) {
+            return;
+        }
+        try {
+            player.spigot().setCollidesWithEntities(collidesWithEntities);
+        } catch (Throwable ignored) {
+            // Some forks may not expose this API consistently; continue without hard-failing.
+        }
     }
 
     protected void updateSpectatorVisibility(Player spectator) {
@@ -984,23 +997,12 @@ public class GameManager {
             if (player == null) {
                 continue;
             }
-            GamePlayer gamePlayer = players.get(uuid);
-            if (gamePlayer != null && !gamePlayer.isAlive()) {
-                SpectatorItems.applyPostGameTo(player, plugin.getServerType());
-                continue;
-            }
-            player.getInventory().clear();
-            player.getInventory().setArmorContents(null);
-            setReturnToLobbyItem(player);
+            SpectatorItems.applyPostGameTo(player, plugin.getServerType());
         }
     }
 
     private void applyPostGameSpectatorItems() {
         for (Map.Entry<UUID, GamePlayer> entry : players.entrySet()) {
-            GamePlayer gamePlayer = entry.getValue();
-            if (gamePlayer == null || gamePlayer.isAlive()) {
-                continue;
-            }
             Player player = Bukkit.getPlayer(entry.getKey());
             if (player == null) {
                 continue;

@@ -66,3 +66,4 @@ docker/production/maps/*
 ### Docker production plugins ###
 docker/production/plugins/*
 problems-report.html
+web-admin/

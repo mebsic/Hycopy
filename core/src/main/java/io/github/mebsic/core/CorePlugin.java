@@ -339,6 +339,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
         mongo.ensureCollection(MongoManager.SERVER_REGISTRY_COLLECTION);
         mongo.ensureCollection(MongoManager.BOSS_BAR_MESSAGES_COLLECTION);
         mongo.ensureCollection(MongoManager.RANK_GIFT_HISTORY_COLLECTION);
+        mongo.ensureCollection(MongoManager.CHAT_MESSAGES_COLLECTION);
         mongo.ensureCollection(MongoManager.MAPS_COLLECTION);
         mongo.ensureCollection(MongoManager.PROXY_SETTINGS_COLLECTION);
     }

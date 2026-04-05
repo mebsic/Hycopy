@@ -37,6 +37,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -190,10 +191,14 @@ public class SpectatorListener implements Listener {
         if (senderId == null || message == null) {
             return;
         }
+        if (message.trim().isEmpty()) {
+            return;
+        }
         Player sender = Bukkit.getPlayer(senderId);
         if (sender == null || !sender.isOnline() || !isDeadSpectator(sender)) {
             return;
         }
+        storeSpectatorChatMessage(sender, message);
         DeadChatSenderStyle senderStyle = buildDeadChatSenderStyle(sender);
         String deadLine = DEAD_CHAT_PREFIX
                 + senderStyle.formattedName
@@ -208,6 +213,93 @@ public class SpectatorListener implements Listener {
             }
             online.sendMessage(deadLine);
         }
+    }
+
+    private void storeSpectatorChatMessage(Player sender, String message) {
+        if (sender == null || message == null || message.trim().isEmpty() || plugin == null) {
+            return;
+        }
+        UUID senderId = sender.getUniqueId();
+        String fallbackIgn = sender.getName();
+        String safeMessage = message;
+        plugin.getServer().getScheduler().runTaskAsynchronously(
+                plugin,
+                () -> persistSpectatorChatMessage(senderId, fallbackIgn, safeMessage)
+        );
+    }
+
+    private void persistSpectatorChatMessage(UUID senderId, String fallbackIgn, String message) {
+        if (senderId == null || message == null || message.trim().isEmpty() || plugin == null) {
+            return;
+        }
+        MongoManager mongo = plugin.getMongoManager();
+        if (mongo == null) {
+            return;
+        }
+        MongoCollection<Document> collection = mongo.getCollection(MongoManager.CHAT_MESSAGES_COLLECTION);
+        if (collection == null) {
+            return;
+        }
+        ChatProfileReference profile = resolveChatProfileReference(mongo, senderId, fallbackIgn);
+        Document doc = new Document("serverId", resolveChatServerId())
+                .append("type", "ALL")
+                .append("rank", profile.rank)
+                .append("message", message)
+                .append("date", new Date())
+                .append("uuid", senderId.toString())
+                .append("ign", profile.ign);
+        try {
+            collection.insertOne(doc);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private ChatProfileReference resolveChatProfileReference(MongoManager mongo, UUID senderId, String fallbackIgn) {
+        String safeFallback = fallbackIgn == null ? "Unknown" : fallbackIgn.trim();
+        if (safeFallback.isEmpty()) {
+            safeFallback = "Unknown";
+        }
+        if (mongo == null || senderId == null) {
+            return new ChatProfileReference(safeFallback, "DEFAULT");
+        }
+        try {
+            MongoCollection<Document> profiles = mongo.getProfiles();
+            if (profiles == null) {
+                return new ChatProfileReference(safeFallback, "DEFAULT");
+            }
+            Document profile = profiles.find(Filters.eq("uuid", senderId.toString()))
+                    .projection(new Document("name", 1).append("rank", 1))
+                    .first();
+            if (profile == null) {
+                return new ChatProfileReference(safeFallback, "DEFAULT");
+            }
+            String storedIgn = safeString(profile.getString("name"));
+            String ign = storedIgn.isEmpty() ? safeFallback : storedIgn;
+            String rank = normalizeStoredRank(profile.getString("rank"));
+            return new ChatProfileReference(ign, rank);
+        } catch (Exception ignored) {
+            return new ChatProfileReference(safeFallback, "DEFAULT");
+        }
+    }
+
+    private String normalizeStoredRank(String rank) {
+        if (rank == null) {
+            return "DEFAULT";
+        }
+        String normalized = rank.trim().toUpperCase(Locale.ROOT);
+        return normalized.isEmpty() ? "DEFAULT" : normalized;
+    }
+
+    private String resolveChatServerId() {
+        String configured = safeString(currentServerId);
+        if (!configured.isEmpty()) {
+            return configured;
+        }
+        if (plugin == null) {
+            return "unknown";
+        }
+        String dynamic = safeString(plugin.getConfig().getString("server.id", ""));
+        return dynamic.isEmpty() ? "unknown" : dynamic;
     }
 
     private DeadChatSenderStyle buildDeadChatSenderStyle(Player player) {
@@ -609,11 +701,14 @@ public class SpectatorListener implements Listener {
             return false;
         }
         GamePlayer gamePlayer = gameManager.getPlayer(player);
-        if (gamePlayer == null || gamePlayer.isAlive()) {
+        if (gamePlayer == null) {
             return false;
         }
         GameState state = gameManager.getState();
-        return state == GameState.IN_GAME || state == GameState.ENDING;
+        if (state == GameState.ENDING) {
+            return true;
+        }
+        return state == GameState.IN_GAME && !gamePlayer.isAlive();
     }
 
     private static final class FollowState {
@@ -645,6 +740,16 @@ public class SpectatorListener implements Listener {
 
         private boolean shouldShowTargetLost(long nowMillis) {
             return targetLostUntilMillis > nowMillis;
+        }
+    }
+
+    private static final class ChatProfileReference {
+        private final String ign;
+        private final String rank;
+
+        private ChatProfileReference(String ign, String rank) {
+            this.ign = ign == null || ign.trim().isEmpty() ? "Unknown" : ign;
+            this.rank = rank == null || rank.trim().isEmpty() ? "DEFAULT" : rank;
         }
     }
 

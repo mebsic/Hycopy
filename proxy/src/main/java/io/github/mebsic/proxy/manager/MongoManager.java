@@ -8,6 +8,7 @@ public final class MongoManager {
     public static final String SERVER_REGISTRY_COLLECTION = "server_registry";
     public static final String MAPS_COLLECTION = "maps";
     public static final String AUTOSCALE_COLLECTION = "autoscale";
+    public static final String CHAT_MESSAGES_COLLECTION = "chat_messages";
 
     public static final String PROXY_SETTINGS_MOTD_DOCUMENT_ID = "motd";
     public static final String PROXY_SETTINGS_MOTD_TEXT_FIELD = "text";

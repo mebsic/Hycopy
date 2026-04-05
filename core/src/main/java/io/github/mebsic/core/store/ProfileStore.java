@@ -167,7 +167,7 @@ public class ProfileStore {
             profile.setSpectatorFirstPersonEnabled(spectatorFirstPersonEnabled);
         }
         Document statsRoot = doc.get("stats", Document.class);
-        Document stats = statsRoot == null ? null : statsRoot.get(MongoManager.MURDER_MYSTERY_COLLECTION, Document.class);
+        Document stats = statsRoot == null ? null : statsRoot.get(MongoManager.MURDER_MYSTERY_GAME_KEY, Document.class);
         if (stats != null) {
             Stats s = profile.getStats();
             s.addKills(readStatValue(stats, MongoManager.MURDER_MYSTERY_LIFETIME_KILLS_KEY));
@@ -193,7 +193,7 @@ public class ProfileStore {
         }
         profile.setRanksGifted(readGiftedRanks(doc));
         Document cosmeticsRoot = doc.get("cosmetics", Document.class);
-        Document cosmetics = cosmeticsRoot == null ? null : cosmeticsRoot.get(MongoManager.MURDER_MYSTERY_COLLECTION, Document.class);
+        Document cosmetics = cosmeticsRoot == null ? null : cosmeticsRoot.get(MongoManager.MURDER_MYSTERY_GAME_KEY, Document.class);
         if (cosmetics != null) {
             for (CosmeticType type : CosmeticType.values()) {
                 Document typeDoc = cosmetics.get(type.name().toLowerCase(), Document.class);
@@ -263,7 +263,7 @@ public class ProfileStore {
             }
             murderMysteryStats.append(entry.getKey(), Math.max(0, value));
         }
-        Document stats = new Document(MongoManager.MURDER_MYSTERY_COLLECTION, murderMysteryStats);
+        Document stats = new Document(MongoManager.MURDER_MYSTERY_GAME_KEY, murderMysteryStats);
         Document cosmeticsByType = new Document();
         for (CosmeticType typeKey : CosmeticType.values()) {
             Document typeDoc = new Document();
@@ -315,7 +315,7 @@ public class ProfileStore {
             }
             cosmeticsByType.append(typeKey.name().toLowerCase(), typeDoc);
         }
-        Document cosmetics = new Document(MongoManager.MURDER_MYSTERY_COLLECTION, cosmeticsByType);
+        Document cosmetics = new Document(MongoManager.MURDER_MYSTERY_GAME_KEY, cosmeticsByType);
         Rank rank = profile.getRank() == null ? Rank.DEFAULT : profile.getRank();
         String mvpPlusPlusPrefixColor = null;
         if (canUseMvpPlusPlusPrefixColor(rank)) {

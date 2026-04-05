@@ -755,5 +755,4 @@ public final class MapConfigResolver {
             return null;
         }
     }
-
 }

@@ -41,7 +41,7 @@ public class ServerRegistryService {
         String identity = ServerIdentityResolver.resolveIdentity(config, "lobby1A");
         this.serverId = identity;
         this.type = ServerTypeResolver.resolve(config, ServerType.MURDER_MYSTERY_HUB);
-        this.group = config.getString("server.group", MongoManager.MURDER_MYSTERY_COLLECTION);
+        this.group = config.getString("server.group", MongoManager.MURDER_MYSTERY_GAME_KEY);
         this.address = config.getString("server.address", "hub");
         this.port = config.getInt("server.port", 25565);
         this.heartbeatSeconds = Math.max(1, config.getInt("server.heartbeatSeconds", 2));

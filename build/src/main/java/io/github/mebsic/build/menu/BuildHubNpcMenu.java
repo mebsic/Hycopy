@@ -41,9 +41,11 @@ public class BuildHubNpcMenu extends Menu {
             return;
         }
         inventory.clear();
+        boolean clickToPlayConfigured = hasClickToPlayNpcConfigured(player);
+        boolean profileConfigured = hasProfileNpcConfigured(player);
 
-        set(inventory, CLICK_TO_PLAY_SLOT, clickToPlayItem());
-        set(inventory, PROFILE_SLOT, profileNpcItem());
+        set(inventory, CLICK_TO_PLAY_SLOT, clickToPlayItem(clickToPlayConfigured));
+        set(inventory, PROFILE_SLOT, profileNpcItem(profileConfigured));
         set(inventory, BACK_SLOT, backItem());
         set(inventory, CLOSE_SLOT, item(Material.BARRIER, ChatColor.RED + "Close"));
     }
@@ -75,36 +77,50 @@ public class BuildHubNpcMenu extends Menu {
             player.closeInventory();
             return;
         }
+        boolean clickToPlayConfigured = hasClickToPlayNpcConfigured(player);
+        boolean profileConfigured = hasProfileNpcConfigured(player);
         if (slot == CLICK_TO_PLAY_SLOT) {
-            mapConfigService.addClickToPlayNpcFromMenu(player, gameType, worldDirectory);
+            if (clickToPlayConfigured) {
+                mapConfigService.resetClickToPlayNpcFromMenu(player, gameType, worldDirectory);
+            } else {
+                mapConfigService.addClickToPlayNpcFromMenu(player, gameType, worldDirectory);
+            }
             player.closeInventory();
             return;
         }
         if (slot == PROFILE_SLOT) {
-            mapConfigService.addProfileNpcFromMenu(player, gameType, worldDirectory);
+            if (profileConfigured) {
+                mapConfigService.resetProfileNpcFromMenu(player, gameType, worldDirectory);
+            } else {
+                mapConfigService.addProfileNpcFromMenu(player, gameType, worldDirectory);
+            }
             player.closeInventory();
         }
     }
 
-    private ItemStack clickToPlayItem() {
+    private ItemStack clickToPlayItem(boolean configured) {
         return item(
                 npcMenuIconMaterial(),
                 ChatColor.GREEN + "Click to Play NPC",
                 ChatColor.GRAY + "This will add the " + gameTypeLabel(),
                 ChatColor.GRAY + "Click to Play NPC with a unique skin.",
                 "",
-                ChatColor.YELLOW + "Click to add!"
+                configured
+                        ? ChatColor.YELLOW + "Click to reset!"
+                        : ChatColor.YELLOW + "Click to add!"
         );
     }
 
-    private ItemStack profileNpcItem() {
+    private ItemStack profileNpcItem(boolean configured) {
         return item(
                 npcMenuIconMaterial(),
                 ChatColor.GREEN + "Profile NPC",
                 ChatColor.GRAY + "This will add a Profile NPC that shows",
                 ChatColor.GRAY + "player stats for " + gameTypeLabel() + ".",
                 "",
-                ChatColor.YELLOW + "Click to add!"
+                configured
+                        ? ChatColor.YELLOW + "Click to reset!"
+                        : ChatColor.YELLOW + "Click to add!"
         );
     }
 
@@ -142,6 +158,38 @@ public class BuildHubNpcMenu extends Menu {
             }
         }
         return out.length() == 0 ? "Game" : out.toString();
+    }
+
+    private boolean hasClickToPlayNpcConfigured(Player player) {
+        return hasHubNpcConfigured(player, true);
+    }
+
+    private boolean hasProfileNpcConfigured(Player player) {
+        return hasHubNpcConfigured(player, false);
+    }
+
+    private boolean hasHubNpcConfigured(Player player, boolean clickToPlayNpc) {
+        if (mapConfigService == null || gameType == null || gameType == ServerType.UNKNOWN || !gameType.isHub()) {
+            return false;
+        }
+        if (isNpcConfigured(worldDirectory, clickToPlayNpc)) {
+            return true;
+        }
+        if (player == null || player.getWorld() == null) {
+            return false;
+        }
+        String currentWorld = safe(player.getWorld().getName());
+        if (currentWorld.isEmpty() || currentWorld.equalsIgnoreCase(worldDirectory)) {
+            return false;
+        }
+        return isNpcConfigured(currentWorld, clickToPlayNpc);
+    }
+
+    private boolean isNpcConfigured(String targetWorld, boolean clickToPlayNpc) {
+        if (clickToPlayNpc) {
+            return mapConfigService.hasClickToPlayNpcConfigured(gameType, targetWorld);
+        }
+        return mapConfigService.hasProfileNpcConfigured(gameType, targetWorld);
     }
 
     private static String safe(String value) {

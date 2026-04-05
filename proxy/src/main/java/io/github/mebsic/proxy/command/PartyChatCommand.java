@@ -2,6 +2,8 @@ package io.github.mebsic.proxy.command;
 
 import io.github.mebsic.core.util.CommonMessages;
 import io.github.mebsic.proxy.service.BlockService;
+import io.github.mebsic.proxy.service.ChatChannelService;
+import io.github.mebsic.proxy.service.ChatMessageService;
 import io.github.mebsic.proxy.service.ChatRestrictionService;
 import io.github.mebsic.proxy.service.PartyService;
 import io.github.mebsic.proxy.service.RankResolver;
@@ -21,19 +23,29 @@ public class PartyChatCommand implements SimpleCommand {
     private final RankResolver rankResolver;
     private final BlockService blocks;
     private final ChatRestrictionService chatRestrictions;
+    private final ChatMessageService chatMessages;
 
     public PartyChatCommand(PartyService parties, RankResolver rankResolver) {
-        this(parties, rankResolver, null, null);
+        this(parties, rankResolver, null, null, null);
     }
 
     public PartyChatCommand(PartyService parties,
                             RankResolver rankResolver,
                             BlockService blocks,
                             ChatRestrictionService chatRestrictions) {
+        this(parties, rankResolver, blocks, chatRestrictions, null);
+    }
+
+    public PartyChatCommand(PartyService parties,
+                            RankResolver rankResolver,
+                            BlockService blocks,
+                            ChatRestrictionService chatRestrictions,
+                            ChatMessageService chatMessages) {
         this.parties = parties;
         this.rankResolver = rankResolver;
         this.blocks = blocks;
         this.chatRestrictions = chatRestrictions;
+        this.chatMessages = chatMessages;
     }
 
     @Override
@@ -70,6 +82,7 @@ public class PartyChatCommand implements SimpleCommand {
                 Components.partyChat(formatPartyChatName(playerId, player.getUsername()), message),
                 memberId -> canReceivePartyChat(playerId, memberId)
         );
+        storePartyChatMessage(player, message);
     }
 
     private boolean canReceivePartyChat(UUID senderId, UUID recipientId) {
@@ -105,6 +118,23 @@ public class PartyChatCommand implements SimpleCommand {
             builder.append(args[i]);
         }
         return builder.toString();
+    }
+
+    private void storePartyChatMessage(Player player, String message) {
+        if (player == null || message == null || chatMessages == null) {
+            return;
+        }
+        String serverId = player.getCurrentServer()
+                .map(connection -> connection.getServerInfo().getName())
+                .filter(name -> name != null && !name.trim().isEmpty())
+                .orElse("proxy");
+        chatMessages.storeMessage(
+                player.getUniqueId(),
+                player.getUsername(),
+                serverId,
+                ChatChannelService.ChatChannel.PARTY,
+                message
+        );
     }
 
     private String formatPartyChatName(UUID uuid, String fallbackName) {

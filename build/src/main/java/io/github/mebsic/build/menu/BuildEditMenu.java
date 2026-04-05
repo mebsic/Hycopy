@@ -66,7 +66,7 @@ public class BuildEditMenu extends Menu {
             set(inventory, deleteSlot(), deleteMapItem());
         }
 
-        set(inventory, TOP_LEFT_SLOT, primaryActionItem());
+        set(inventory, TOP_LEFT_SLOT, primaryActionItem(player));
         set(inventory, TOP_MIDDLE_SLOT, secondaryActionItem());
         if (hasLocations) {
             set(inventory, TOP_RIGHT_SLOT, locationsItem());
@@ -77,7 +77,7 @@ public class BuildEditMenu extends Menu {
 
         if (isHubMode()) {
             set(inventory, BOTTOM_LEFT_SLOT, parkourItem(player));
-            set(inventory, BOTTOM_MIDDLE_SLOT, hubImageDisplayItem());
+            set(inventory, BOTTOM_MIDDLE_SLOT, hubImageDisplayItem(player));
             set(inventory, BOTTOM_RIGHT_SLOT, leaderboardItem(player));
         }
     }
@@ -229,14 +229,17 @@ public class BuildEditMenu extends Menu {
         return Material.BOOK;
     }
 
-    private ItemStack primaryActionItem() {
+    private ItemStack primaryActionItem(Player player) {
         if (isHubMode()) {
+            boolean configured = hasHubSpawnConfigured(player);
             return item(
                     resolveHubSpawnMaterial(),
                     ChatColor.GREEN + "Hub Spawn",
                     ChatColor.GRAY + "This will set the hub spawn.",
                     "",
-                    ChatColor.YELLOW + "Click to set!"
+                    configured
+                            ? ChatColor.YELLOW + "Click to reset!"
+                            : ChatColor.YELLOW + "Click to set!"
             );
         }
         List<String> lore = new ArrayList<String>();
@@ -317,28 +320,36 @@ public class BuildEditMenu extends Menu {
         if (mapConfigService != null) {
             metric = mapConfigService.getLeaderboardMetricSelection(player);
         }
+        boolean configured = hasLeaderboardConfigured(player, metric);
         String gameLabel = hubGameTypeLabel();
+        List<String> lore = new ArrayList<String>();
+        lore.add(ChatColor.GRAY + "This will add a Top 10 Leaderboard");
+        lore.add(ChatColor.GRAY + "hologram for " + gameLabel + ".");
+        lore.add("");
+        lore.add(ChatColor.GOLD + "Leaderboard Type: " + leaderboardTypeLabel(metric));
+        lore.add("");
+        lore.add(configured ? ChatColor.YELLOW + "Click to reset!" : ChatColor.YELLOW + "Click to add!");
+        if (!configured) {
+            lore.add(ChatColor.DARK_GRAY + "Right-click to change leaderboard type");
+        }
         return item(
                 resolveSignMaterial(),
                 ChatColor.GREEN + "Leaderboards",
-                ChatColor.GRAY + "This will add a Top 10 Leaderboard",
-                ChatColor.GRAY + "hologram for " + gameLabel + ".",
-                "",
-                ChatColor.GOLD + "Leaderboard Type: " + leaderboardTypeLabel(metric),
-                "",
-                ChatColor.YELLOW + "Click to add!",
-                ChatColor.DARK_GRAY + "Right-click to change leaderboard type!"
+                lore
         );
     }
 
-    private ItemStack hubImageDisplayItem() {
+    private ItemStack hubImageDisplayItem(Player player) {
+        boolean configured = hasHubImageDisplayConfigured(player);
         return item(
                 Material.MAP,
                 ChatColor.GREEN + "Information",
                 ChatColor.GRAY + "This will add an image which",
                 ChatColor.GRAY + "displays in the hub.",
                 "",
-                ChatColor.YELLOW + "Click to add!"
+                configured
+                        ? ChatColor.YELLOW + "Click to reset!"
+                        : ChatColor.YELLOW + "Click to add!"
         );
     }
 
@@ -463,6 +474,57 @@ public class BuildEditMenu extends Menu {
             return false;
         }
         return mapConfigService.hasParkourCourseConfigured(gameType, currentWorld);
+    }
+
+    private boolean hasHubSpawnConfigured(Player player) {
+        if (!isHubMode() || mapConfigService == null || gameType == null || gameType == ServerType.UNKNOWN) {
+            return false;
+        }
+        if (mapConfigService.hasHubSpawnConfigured(gameType, worldDirectory)) {
+            return true;
+        }
+        if (player == null || player.getWorld() == null) {
+            return false;
+        }
+        String currentWorld = safe(player.getWorld().getName());
+        if (currentWorld.isEmpty() || currentWorld.equalsIgnoreCase(worldDirectory)) {
+            return false;
+        }
+        return mapConfigService.hasHubSpawnConfigured(gameType, currentWorld);
+    }
+
+    private boolean hasLeaderboardConfigured(Player player, String metric) {
+        if (!isHubMode() || mapConfigService == null || gameType == null || gameType == ServerType.UNKNOWN) {
+            return false;
+        }
+        if (mapConfigService.hasLeaderboardConfigured(gameType, worldDirectory, metric)) {
+            return true;
+        }
+        if (player == null || player.getWorld() == null) {
+            return false;
+        }
+        String currentWorld = safe(player.getWorld().getName());
+        if (currentWorld.isEmpty() || currentWorld.equalsIgnoreCase(worldDirectory)) {
+            return false;
+        }
+        return mapConfigService.hasLeaderboardConfigured(gameType, currentWorld, metric);
+    }
+
+    private boolean hasHubImageDisplayConfigured(Player player) {
+        if (!isHubMode() || mapConfigService == null || gameType == null || gameType == ServerType.UNKNOWN) {
+            return false;
+        }
+        if (mapConfigService.hasHubImageDisplayConfigured(gameType, worldDirectory)) {
+            return true;
+        }
+        if (player == null || player.getWorld() == null) {
+            return false;
+        }
+        String currentWorld = safe(player.getWorld().getName());
+        if (currentWorld.isEmpty() || currentWorld.equalsIgnoreCase(worldDirectory)) {
+            return false;
+        }
+        return mapConfigService.hasHubImageDisplayConfigured(gameType, currentWorld);
     }
 
     private static String resolveTitle(String worldDirectory, ServerType gameType) {
