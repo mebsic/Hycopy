@@ -93,6 +93,49 @@ Use strong unique values locally and never commit real secrets.
 - [Getting Started with Docker](https://github.com/mebsic/Hypixel/wiki/Getting-Started-with-Docker)
 - [Creating and Configuring Maps](https://github.com/mebsic/Hypixel/wiki/Creating-and-Configuring-Maps)
 
+## Contributing
+
+### 1. Start with an Issue
+
+- Search existing issues before opening a new one.
+- For bugs, include reproduction steps, expected behavior, actual behavior, and logs/screenshots when possible.
+- For features, describe the use case and scope before starting implementation.
+
+### 2. Fork and Branch
+
+1. Fork the repository.
+2. Create a branch from `main` with a clear, focused name:
+   - `feat/<short-description>`
+   - `fix/<short-description>`
+   - `docs/<short-description>`
+
+### 3. Make Focused Changes
+
+- Keep each pull request scoped to one logical change.
+- Follow existing code style and project structure in `core`, `murdermystery`, `build`, and `proxy`.
+- Add or update tests when behavior changes.
+- Never commit secrets; use `.env` placeholders only.
+
+### 4. Validate Locally
+
+Before opening a PR, run relevant local checks for your change (for example unit tests and integration flow checks in your local environment).
+
+### 5. Open a Pull Request
+
+- Link the related issue using keywords like `Closes #123` when applicable.
+- Use a clear PR title and description that includes:
+  - what changed
+  - why it changed
+  - how it was tested
+- Include screenshots/logs for UI or gameplay-affecting changes.
+- Keep PRs small enough for straightforward review.
+
+### 6. Review and Merge
+
+- Respond to review feedback with follow-up commits (avoid force-pushing away review history unless asked).
+- Rebase or merge `main` if needed to resolve conflicts.
+- A maintainer will merge after approval and successful checks.
+
 ## License
 
 This project is licensed under the GNU General Public License v3.0.
