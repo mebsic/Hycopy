@@ -371,13 +371,6 @@ public class PunishmentService {
                 + "Thanks for reporting it!";
     }
 
-    private String resolveMessage(String value, String fallback) {
-        if (value == null || value.trim().isEmpty()) {
-            return fallback;
-        }
-        return value;
-    }
-
     private String resolveBanKickMessage(PunishmentAction action, UUID targetUuid) {
         if (action != null && action.message != null && !action.message.trim().isEmpty()) {
             return action.message;

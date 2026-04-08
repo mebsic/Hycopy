@@ -1745,25 +1745,6 @@ public class HubNpcListener implements Listener {
         }
     }
 
-    private boolean invokeBooleanMethod(Object target, boolean value, String... methodNames) {
-        if (target == null || methodNames == null) {
-            return false;
-        }
-        for (String methodName : methodNames) {
-            if (methodName == null || methodName.isEmpty()) {
-                continue;
-            }
-            try {
-                Method method = target.getClass().getMethod(methodName, boolean.class);
-                method.invoke(target, Boolean.valueOf(value));
-                return true;
-            } catch (Exception ignored) {
-                // Try next method variant.
-            }
-        }
-        return false;
-    }
-
     private boolean invokeSingleArgMethod(Object target, Object arg, String... methodNames) {
         if (target == null || arg == null || methodNames == null) {
             return false;

@@ -23,10 +23,12 @@ import org.bukkit.event.entity.EntityShootBowEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerItemDamageEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerPickupItemEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.metadata.FixedMetadataValue;
 import org.bukkit.metadata.MetadataValue;
@@ -91,6 +93,19 @@ public class MurderMysteryListener implements Listener {
         if (gameManager.getState() == GameState.IN_GAME) {
             event.setCancelled(true);
         }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onItemDamage(PlayerItemDamageEvent event) {
+        Player player = event.getPlayer();
+        if (!gameManager.isInGame(player)) {
+            return;
+        }
+        if (gameManager.getState() != GameState.IN_GAME) {
+            return;
+        }
+        event.setCancelled(true);
+        resyncDamagedItemSlots(player, event.getItem());
     }
 
     @EventHandler
@@ -290,7 +305,7 @@ public class MurderMysteryListener implements Listener {
 
     @EventHandler
     public void onAnyDamage(EntityDamageEvent event) {
-        if (gameManager.isDroppedBowDisplay(event.getEntity()) || gameManager.isCorpseDisplay(event.getEntity())) {
+        if (gameManager.isDroppedBowDisplay(event.getEntity())) {
             event.setCancelled(true);
             if (event instanceof EntityDamageByEntityEvent) {
                 EntityDamageByEntityEvent byEntityEvent = (EntityDamageByEntityEvent) event;
@@ -325,6 +340,8 @@ public class MurderMysteryListener implements Listener {
             return;
         }
         Player player = (Player) event.getEntity();
+        ItemStack heldItem = player.getItemInHand();
+        ItemStack bowSnapshot = heldItem != null && heldItem.getType() == Material.BOW ? heldItem.clone() : null;
         Entity projectileEntity = event.getProjectile() instanceof Entity ? (Entity) event.getProjectile() : null;
         if (event.isCancelled()) {
             removeProjectileEntity(projectileEntity);
@@ -359,8 +376,18 @@ public class MurderMysteryListener implements Listener {
         Object projectile = event.getProjectile();
         if (projectile instanceof Arrow) {
             Arrow launchedArrow = (Arrow) projectile;
+            // Fix arrow bounce
+            launchedArrow.setVelocity(launchedArrow.getVelocity());
             setProjectileLaunchMetadata(launchedArrow, player);
             gameManager.trackRoundArrow(launchedArrow);
+            if (bowSnapshot != null) {
+                plugin.getServer().getScheduler().runTask(plugin, () -> {
+                    if (!gameManager.isInGame(player) || gameManager.getState() != GameState.IN_GAME) {
+                        return;
+                    }
+                    resyncDamagedItemSlots(player, bowSnapshot);
+                });
+            }
         }
         if (!isDetectiveLikeCooldownRole(gp.getRole(), gp)) {
             return;
@@ -471,6 +498,82 @@ public class MurderMysteryListener implements Listener {
             return;
         }
         projectile.remove();
+    }
+
+    private void resyncDamagedItemSlots(Player player, ItemStack damagedItem) {
+        if (player == null || damagedItem == null || damagedItem.getType() == Material.AIR) {
+            return;
+        }
+        PlayerInventory inventory = player.getInventory();
+
+        ItemStack[] contents = inventory.getContents();
+        if (contents != null) {
+            for (int slot = 0; slot < contents.length; slot++) {
+                ItemStack slotItem = contents[slot];
+                if (!isSameItemForResync(slotItem, damagedItem)) {
+                    continue;
+                }
+                inventory.setItem(slot, copyItemWithDurability(slotItem, damagedItem));
+                return;
+            }
+        }
+
+        ItemStack helmet = inventory.getHelmet();
+        if (isSameItemForResync(helmet, damagedItem)) {
+            inventory.setHelmet(copyItemWithDurability(helmet, damagedItem));
+            return;
+        }
+        ItemStack chestplate = inventory.getChestplate();
+        if (isSameItemForResync(chestplate, damagedItem)) {
+            inventory.setChestplate(copyItemWithDurability(chestplate, damagedItem));
+            return;
+        }
+        ItemStack leggings = inventory.getLeggings();
+        if (isSameItemForResync(leggings, damagedItem)) {
+            inventory.setLeggings(copyItemWithDurability(leggings, damagedItem));
+            return;
+        }
+        ItemStack boots = inventory.getBoots();
+        if (isSameItemForResync(boots, damagedItem)) {
+            inventory.setBoots(copyItemWithDurability(boots, damagedItem));
+            return;
+        }
+
+        int heldSlot = inventory.getHeldItemSlot();
+        ItemStack heldItem = inventory.getItem(heldSlot);
+        if (isSameItemForResync(heldItem, damagedItem)) {
+            inventory.setItem(heldSlot, copyItemWithDurability(heldItem, damagedItem));
+        }
+    }
+
+    private ItemStack copyItemWithDurability(ItemStack slotItem, ItemStack durabilitySource) {
+        if (slotItem == null || durabilitySource == null) {
+            return slotItem;
+        }
+        ItemStack copy = slotItem.clone();
+        copy.setDurability(durabilitySource.getDurability());
+        return copy;
+    }
+
+    private boolean isSameItemForResync(ItemStack a, ItemStack b) {
+        if (a == null || b == null) {
+            return false;
+        }
+        if (a == b) {
+            return true;
+        }
+        if (a.getType() != b.getType()) {
+            return false;
+        }
+        ItemMeta aMeta = a.getItemMeta();
+        ItemMeta bMeta = b.getItemMeta();
+        if (aMeta == null && bMeta == null) {
+            return true;
+        }
+        if (aMeta == null || bMeta == null) {
+            return false;
+        }
+        return aMeta.equals(bMeta);
     }
 
     private boolean isMurdererKnife(ItemStack item) {

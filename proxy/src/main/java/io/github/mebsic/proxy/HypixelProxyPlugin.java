@@ -49,6 +49,7 @@ import com.velocitypowered.api.command.CommandManager;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.command.CommandExecuteEvent;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
+import com.velocitypowered.api.event.connection.PluginMessageEvent;
 import com.velocitypowered.api.event.player.PlayerChooseInitialServerEvent;
 import com.velocitypowered.api.event.player.PlayerChatEvent;
 import com.velocitypowered.api.event.connection.PostLoginEvent;
@@ -63,6 +64,7 @@ import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
+import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier;
 import com.velocitypowered.api.util.Favicon;
 import com.velocitypowered.api.proxy.server.ServerPing;
 import net.kyori.adventure.text.Component;
@@ -73,6 +75,8 @@ import org.bson.Document;
 import org.slf4j.Logger;
 
 import java.io.IOException;
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashSet;
@@ -108,6 +112,9 @@ public class HypixelProxyPlugin {
     private static final long MONGO_SERVER_SELECTION_TIMEOUT_SECONDS = 3L;
     private static final long PARTY_FOLLOW_RETRY_DELAY_MILLIS = 750L;
     private static final long DEFERRED_POST_GAME_QUEUE_EXPIRY_MILLIS = 5L * 60L * 1000L;
+    private static final long PLAY_AGAIN_INTENT_WINDOW_MILLIS = 7_500L;
+    private static final MinecraftChannelIdentifier PLAY_AGAIN_INTENT_CHANNEL =
+            MinecraftChannelIdentifier.from("hypixel:playagain");
     private static final Pattern LEGACY_CODE = Pattern.compile("(?i)§[0-9A-FK-OR]");
     private final ProxyServer proxy;
     private final Logger logger;
@@ -137,6 +144,7 @@ public class HypixelProxyPlugin {
     private final AtomicLong redisFirstFailureAtMillis = new AtomicLong(0L);
     private volatile long infraHealthChecksStartedAtMillis;
     private final Map<UUID, DeferredQueueRequest> deferredPostGameQueueRequests = new ConcurrentHashMap<UUID, DeferredQueueRequest>();
+    private final Map<UUID, Long> recentPlayAgainIntents = new ConcurrentHashMap<UUID, Long>();
 
     @Inject
     public HypixelProxyPlugin(ProxyServer proxy, Logger logger, @DataDirectory Path dataDir) {
@@ -250,6 +258,7 @@ public class HypixelProxyPlugin {
             commands.register("chat", chatCommand);
             commands.register("staffchat", staffChatCommand);
             commands.register("sc", staffChatCommand);
+            proxy.getChannelRegistrar().register(PLAY_AGAIN_INTENT_CHANNEL);
             int refresh = config == null ? 1 : Math.max(1, config.getRegistryRefreshSeconds());
             proxy.getScheduler().buildTask(this, () -> {
                 if (registryService != null) {
@@ -346,6 +355,19 @@ public class HypixelProxyPlugin {
             builder.favicon(favicon);
         }
         event.setPing(builder.build());
+    }
+
+    @Subscribe
+    public void onPluginMessage(PluginMessageEvent event) {
+        if (event == null || !PLAY_AGAIN_INTENT_CHANNEL.equals(event.getIdentifier())) {
+            return;
+        }
+        event.setResult(PluginMessageEvent.ForwardResult.handled());
+        cleanupExpiredPlayAgainIntents(System.currentTimeMillis());
+        UUID playerId = readPlayAgainIntentPlayerId(event.getData());
+        if (playerId != null) {
+            recentPlayAgainIntents.put(playerId, System.currentTimeMillis());
+        }
     }
 
     @Subscribe
@@ -565,13 +587,14 @@ public class HypixelProxyPlugin {
             if (partyService.isInParty(playerId)
                     && !partyService.isLeader(playerId)
                     && !partyService.consumeAuthorizedGameJoin(playerId, targetName)) {
-                if (redirectUnauthorizedPostGamePartyMemberToHub(event)) {
+                boolean playAgainIntent = consumeRecentPlayAgainIntent(playerId);
+                if (redirectUnauthorizedPostGamePartyMemberToHub(event, playAgainIntent)) {
                     deferredPostGameQueueRequests.remove(playerId);
                     return;
                 }
                 boolean deferredPostGameQueue = rememberDeferredPostGameQueue(event.getPlayer(), targetType);
                 event.setResult(ServerPreConnectEvent.ServerResult.denied());
-                if (!deferredPostGameQueue) {
+                if (playAgainIntent || !deferredPostGameQueue) {
                     sendPartyLeaderWarpOnlyMessage(event.getPlayer());
                 }
                 return;
@@ -615,6 +638,8 @@ public class HypixelProxyPlugin {
     @Subscribe
     public void onShutdown(ProxyShutdownEvent event) {
         infrastructureFailure.set(true);
+        proxy.getChannelRegistrar().unregister(PLAY_AGAIN_INTENT_CHANNEL);
+        recentPlayAgainIntents.clear();
         if (queueOrchestrator != null) {
             queueOrchestrator.stop();
             queueOrchestrator = null;
@@ -664,6 +689,7 @@ public class HypixelProxyPlugin {
     @Subscribe
     public void onServerConnected(ServerConnectedEvent event) {
         UUID playerId = event.getPlayer().getUniqueId();
+        recentPlayAgainIntents.remove(playerId);
         String connectedServerName = event.getServer() == null
                 ? null
                 : event.getServer().getServerInfo().getName();
@@ -684,6 +710,7 @@ public class HypixelProxyPlugin {
     @Subscribe
     public void onDisconnect(DisconnectEvent event) {
         UUID playerId = event.getPlayer().getUniqueId();
+        recentPlayAgainIntents.remove(playerId);
         deferredPostGameQueueRequests.remove(playerId);
         if (chatChannelService != null) {
             chatChannelService.clear(playerId);
@@ -1111,7 +1138,8 @@ public class HypixelProxyPlugin {
         return Component.text(CommonMessages.NO_SERVERS_AVAILABLE, NamedTextColor.RED);
     }
 
-    private boolean redirectUnauthorizedPostGamePartyMemberToHub(ServerPreConnectEvent event) {
+    private boolean redirectUnauthorizedPostGamePartyMemberToHub(ServerPreConnectEvent event,
+                                                                 boolean notifyLeaderOnlyMessage) {
         if (event == null || registryService == null) {
             return false;
         }
@@ -1130,8 +1158,7 @@ public class HypixelProxyPlugin {
         if (sourceDetails == null || !sourceDetails.getType().isGame() || !isPostGameQueueState(sourceDetails.getState())) {
             return false;
         }
-        UUID playerId = player.getUniqueId();
-        if (playerId != null && shouldRedirectPostGamePartyMemberToLobby(playerId, sourceServerName)) {
+        if (notifyLeaderOnlyMessage) {
             sendPartyLeaderWarpOnlyMessage(player);
         }
         event.setResult(ServerPreConnectEvent.ServerResult.denied());
@@ -1512,6 +1539,48 @@ public class HypixelProxyPlugin {
             alias = alias.substring(1);
         }
         return alias.toLowerCase(Locale.ROOT);
+    }
+
+    private UUID readPlayAgainIntentPlayerId(byte[] data) {
+        if (data == null || data.length == 0) {
+            return null;
+        }
+        try (DataInputStream in = new DataInputStream(new ByteArrayInputStream(data))) {
+            String raw = in.readUTF();
+            if (raw == null || raw.trim().isEmpty()) {
+                return null;
+            }
+            return UUID.fromString(raw.trim());
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private boolean consumeRecentPlayAgainIntent(UUID playerId) {
+        if (playerId == null) {
+            return false;
+        }
+        long now = System.currentTimeMillis();
+        cleanupExpiredPlayAgainIntents(now);
+        Long markedAt = recentPlayAgainIntents.get(playerId);
+        if (markedAt == null) {
+            return false;
+        }
+        if (now - markedAt.longValue() > PLAY_AGAIN_INTENT_WINDOW_MILLIS) {
+            recentPlayAgainIntents.remove(playerId, markedAt);
+            return false;
+        }
+        return recentPlayAgainIntents.remove(playerId, markedAt);
+    }
+
+    private void cleanupExpiredPlayAgainIntents(long now) {
+        for (Map.Entry<UUID, Long> entry : recentPlayAgainIntents.entrySet()) {
+            UUID playerId = entry.getKey();
+            Long markedAt = entry.getValue();
+            if (playerId == null || markedAt == null || now - markedAt.longValue() > PLAY_AGAIN_INTENT_WINDOW_MILLIS) {
+                recentPlayAgainIntents.remove(playerId, markedAt);
+            }
+        }
     }
 
     private boolean isPunishmentDisconnect(String reason) {

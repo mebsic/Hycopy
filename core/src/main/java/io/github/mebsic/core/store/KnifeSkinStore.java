@@ -636,16 +636,6 @@ public class KnifeSkinStore {
         return new SeedSkin(id, material, displayName, rarity);
     }
 
-    private void updateCostsByRarity(String rarity) {
-        String normalized = normalizeRarity(rarity);
-        int cost = defaultCostForRarity(normalized);
-        Document filter = new Document(MongoManager.MURDER_MYSTERY_RECORD_TYPE_FIELD, MongoManager.MURDER_MYSTERY_KNIFE_SKIN_RECORD_TYPE)
-                .append(MongoManager.MURDER_MYSTERY_GAME_TYPE_FIELD, MongoManager.MURDER_MYSTERY_GAME_TYPE)
-                .append(MongoManager.MURDER_MYSTERY_RARITY_FIELD, new Document("$regex", "^" + normalized + "$").append("$options", "i"))
-                .append("id", new Document("$nin", NON_PURCHASABLE_IDS));
-        collection.updateMany(filter, new Document("$set", new Document("cost", cost)));
-    }
-
     private void updatePurchasableCostsByProgression() {
         // Common: skins 04..11
         updateSequentialCosts(4, 11, 250000, 100000);

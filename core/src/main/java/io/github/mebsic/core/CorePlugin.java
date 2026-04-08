@@ -81,6 +81,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerGameModeChangeEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.world.WorldLoadEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -110,6 +111,7 @@ import static com.mongodb.client.model.Filters.eq;
 
 public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
     private static final String FRIEND_VISIBILITY_UPDATE_CHANNEL = "friend_visibility_update";
+    private static final String PLAY_AGAIN_INTENT_CHANNEL = "hypixel:playagain";
     private static final long BLOCKED_CACHE_TTL_MILLIS = 5_000L;
     private static final int HOTBAR_SLOT_ONE_INDEX = 0;
     private static final int RANK_COLOR_GIFTED_RANKS_REQUIRED = 100;
@@ -155,6 +157,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
         }
         this.serverType = ServerTypeResolver.resolve(getConfig(), ServerType.MURDER_MYSTERY);
         getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
+        getServer().getMessenger().registerOutgoingPluginChannel(this, PLAY_AGAIN_INTENT_CHANNEL);
         applyWorldDefaults();
         getServer().getServicesManager().register(CoreApi.class, this, this, ServicePriority.Normal);
         getServer().getPluginManager().registerEvents(this, this);
@@ -588,6 +591,14 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
         enforceAdventureMode(event.getNewGameMode(), event.getPlayer());
     }
 
+    @EventHandler
+    public void onWorldLoad(WorldLoadEvent event) {
+        if (event == null || event.getWorld() == null) {
+            return;
+        }
+        applyWorldDefaults();
+    }
+
     private void enforceAdventureMode(GameMode requested, org.bukkit.entity.Player player) {
         if (player == null) {
             return;
@@ -614,6 +625,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
         boolean night = serverType == ServerType.MURDER_MYSTERY_HUB;
         long defaultTime = night ? 18000L : 1000L;
         boolean keepInventory = resolveGameplayToggle("gameplay.keepInventory", false);
+        boolean keepSpawnInMemory = resolveGameplayToggle("gameplay.keepSpawnInMemory", true);
         boolean weatherCycle = resolveGameplayToggle("gameplay.weatherCycle", true);
         boolean vanillaAchievements = resolveGameplayToggle("gameplay.vanillaAchievements", false);
         boolean allowAnimals = resolveGameplayToggle("gameplay.allowAnimals", true);
@@ -636,6 +648,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
             world.setTime(defaultTime);
             world.setGameRuleValue("doDaylightCycle", "false");
             world.setGameRuleValue("keepInventory", Boolean.toString(keepInventory));
+            world.setKeepSpawnInMemory(keepSpawnInMemory);
             world.setSpawnFlags(allowMonsters, allowAnimals);
             applyConfiguredGameRules(world, configuredGameRules);
         }

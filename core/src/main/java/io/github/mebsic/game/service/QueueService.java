@@ -43,6 +43,13 @@ public class QueueService {
         if (player == null) {
             return;
         }
+        if (gameManager == null) {
+            return;
+        }
+        if (task == null) {
+            gameManager.handleJoin(player);
+            return;
+        }
         UUID uuid = player.getUniqueId();
         pendingQuits.remove(uuid);
         pendingJoins.add(uuid);

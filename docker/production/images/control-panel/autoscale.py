@@ -92,21 +92,6 @@ def classify_service_kind(service_name):
     return None
 
 
-def count_ready_service_containers(compose_project, service_name):
-    ready = 0
-    containers = list_project_containers(compose_project, include_all=True)
-    for container in containers:
-        if container.get("service") != service_name:
-            continue
-        try:
-            lifecycle_status, health_status = inspect_container_state(container.get("id", ""))
-        except Exception:
-            continue
-        if is_container_ready_state(lifecycle_status, health_status):
-            ready += 1
-    return ready
-
-
 def count_ready_kind_containers(compose_project, kind, allowed_services=None):
     target_kind = classify_service_kind(kind)
     if target_kind is None:

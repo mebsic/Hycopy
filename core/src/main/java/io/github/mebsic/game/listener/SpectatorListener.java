@@ -48,6 +48,7 @@ import java.util.concurrent.ThreadLocalRandom;
 
 public class SpectatorListener implements Listener {
     private static final String CHANNEL = "BungeeCord";
+    private static final String PLAY_AGAIN_INTENT_CHANNEL = "hypixel:playagain";
     private static final String DEAD_CHAT_PREFIX = ChatColor.GRAY + "[DEAD CHAT] ";
     private static final long FOLLOW_ACTION_BAR_INTERVAL_TICKS = 1L;
     private static final long TARGET_LOST_ACTION_BAR_MILLIS = 3000L;
@@ -96,6 +97,7 @@ public class SpectatorListener implements Listener {
             ItemStack item = event.getItem();
             if (SpectatorItems.isPlayAgainItem(item) && canUsePlayAgain(player)) {
                 event.setCancelled(true);
+                notifyPlayAgainIntent(player);
                 requestGameTransfer(player.getUniqueId());
                 return;
             }
@@ -588,6 +590,19 @@ public class SpectatorListener implements Listener {
             String target = findBestGameServerName();
             plugin.getServer().getScheduler().runTask(plugin, () -> connectToGame(uuid, target));
         });
+    }
+
+    private void notifyPlayAgainIntent(Player player) {
+        if (player == null || plugin == null) {
+            return;
+        }
+        try {
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            DataOutputStream out = new DataOutputStream(bytes);
+            out.writeUTF(player.getUniqueId().toString());
+            player.sendPluginMessage(plugin, PLAY_AGAIN_INTENT_CHANNEL, bytes.toByteArray());
+        } catch (Exception ignored) {
+        }
     }
 
     private void connectToGame(UUID uuid, String targetServer) {

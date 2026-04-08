@@ -2368,29 +2368,6 @@ public class BuildMapConfigService {
         return -1;
     }
 
-    private int resolveCheckpointIndex(JsonArray checkpoints, MapLocationEntry entry) {
-        if (checkpoints == null || entry == null || checkpoints.size() == 0) {
-            return -1;
-        }
-        int fallback = entry.getItemData();
-        if (fallback >= 0 && fallback < checkpoints.size()) {
-            JsonElement raw = checkpoints.get(fallback);
-            if (raw != null && raw.isJsonObject() && matchesLocation(raw.getAsJsonObject(), entry)) {
-                return fallback;
-            }
-        }
-        for (int i = 0; i < checkpoints.size(); i++) {
-            JsonElement raw = checkpoints.get(i);
-            if (raw == null || !raw.isJsonObject()) {
-                continue;
-            }
-            if (matchesLocation(raw.getAsJsonObject(), entry)) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
     private void sortMostRecentFirst(List<MapLocationEntry> entries) {
         if (entries == null || entries.size() < 2) {
             return;
@@ -3540,26 +3517,6 @@ public class BuildMapConfigService {
         }
     }
 
-    private void sendProfileNpcStats(Player viewer, RuntimeNpc runtime) {
-        if (viewer == null || runtime == null) {
-            return;
-        }
-        Profile profile = corePlugin == null || viewer.getUniqueId() == null ? null : corePlugin.getProfile(viewer.getUniqueId());
-        String name = safeString(viewer.getName());
-        if (name.isEmpty()) {
-            name = "Player";
-        }
-        viewer.sendMessage(ChatColor.GOLD + "Profile NPC: " + ChatColor.YELLOW + name);
-        if (profile == null || profile.getStats() == null) {
-            viewer.sendMessage(ChatColor.RED + "Profile stats are not loaded!");
-            return;
-        }
-        viewer.sendMessage(ChatColor.GRAY + "Wins: " + ChatColor.AQUA + profile.getStats().getWins());
-        viewer.sendMessage(ChatColor.GRAY + "Wins as Murderer: " + ChatColor.AQUA + readWinsAsMurderer(profile));
-        viewer.sendMessage(ChatColor.GRAY + "Kills: " + ChatColor.AQUA + profile.getStats().getKills());
-        viewer.sendMessage(ChatColor.GRAY + "Games: " + ChatColor.AQUA + profile.getStats().getGames());
-    }
-
     private void spawnLeaderboardRuntime(String entityId,
                                          Location location,
                                          ServerType gameType,
@@ -3886,33 +3843,6 @@ public class BuildMapConfigService {
         Object legacy = stats.get("kills");
         if (legacy instanceof Number) {
             return Math.max(0, ((Number) legacy).intValue());
-        }
-        return 0;
-    }
-
-    private int readMurdererKills(Document stats) {
-        if (stats == null) {
-            return 0;
-        }
-        Object modern = stats.get(MongoManager.MURDER_MYSTERY_KILLS_AS_MURDERER_KEY);
-        if (modern instanceof Number) {
-            return Math.max(0, ((Number) modern).intValue());
-        }
-        Object legacy = stats.get("killsAsMurderer");
-        if (legacy instanceof Number) {
-            return Math.max(0, ((Number) legacy).intValue());
-        }
-        Document custom = stats.get("custom", Document.class);
-        if (custom == null) {
-            return 0;
-        }
-        Object customModern = custom.get(MongoManager.MURDER_MYSTERY_KILLS_AS_MURDERER_KEY);
-        if (customModern instanceof Number) {
-            return Math.max(0, ((Number) customModern).intValue());
-        }
-        Object customLegacy = custom.get("killsAsMurderer");
-        if (customLegacy instanceof Number) {
-            return Math.max(0, ((Number) customLegacy).intValue());
         }
         return 0;
     }
