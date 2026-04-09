@@ -20,10 +20,6 @@ public class BuildCommand implements SimpleCommand {
     private final RankResolver rankResolver;
     private final PartyService parties;
 
-    public BuildCommand(ServerRegistryService registry, RankResolver rankResolver) {
-        this(registry, rankResolver, null);
-    }
-
     public BuildCommand(ServerRegistryService registry, RankResolver rankResolver, PartyService parties) {
         this.registry = registry;
         this.rankResolver = rankResolver;

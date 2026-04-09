@@ -349,9 +349,9 @@ public class PartyCommand implements SimpleCommand {
         if (result == LeaveResult.DISBANDED) {
             if (partyLeaderId != null && !partyLeaderId.equals(playerId)) {
                 proxy.getPlayer(partyLeaderId).ifPresent(target ->
-                        sendFramedWithShort(
+                        sendFramed(
                                 target,
-                                singleLine(Component.text("The party was disbanded because it was empty!", NamedTextColor.RED))
+                                Component.text(PartyService.EMPTY_PARTY_DISBAND_MESSAGE, NamedTextColor.RED)
                         )
                 );
             }
@@ -479,7 +479,7 @@ public class PartyCommand implements SimpleCommand {
         }
         if (result.isDisbandedBecauseEmpty()) {
             sendFramed(player, Component.text(
-                    "The party was disbanded because all invites expired and the party was empty.",
+                    PartyService.EMPTY_PARTY_DISBAND_MESSAGE,
                     NamedTextColor.RED
             ));
         }

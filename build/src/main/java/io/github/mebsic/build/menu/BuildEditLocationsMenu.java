@@ -42,7 +42,7 @@ public class BuildEditLocationsMenu extends Menu {
                                   String worldDirectory,
                                   Menu parentMenu,
                                   int page) {
-        super(resolveTitle(worldDirectory, gameType), SIZE);
+        super(resolveTitle(worldDirectory), SIZE);
         this.mapConfigService = mapConfigService;
         this.gameType = gameType == null ? ServerType.UNKNOWN : gameType;
         this.worldDirectory = safe(worldDirectory);
@@ -61,10 +61,10 @@ public class BuildEditLocationsMenu extends Menu {
         set(inventory, mainMenuSlot(view), mainMenuItem());
         boolean paginated = view.totalPages > 1;
         if (paginated && view.page > 1) {
-            set(inventory, PREVIOUS_PAGE_SLOT, paginationItem(true, ChatColor.GREEN + "Page " + (view.page - 1)));
+            set(inventory, PREVIOUS_PAGE_SLOT, paginationItem(ChatColor.GREEN + "Page " + (view.page - 1)));
         }
         if (paginated && view.page < view.totalPages) {
-            set(inventory, NEXT_SLOT, paginationItem(false, ChatColor.GREEN + "Page " + (view.page + 1)));
+            set(inventory, NEXT_SLOT, paginationItem(ChatColor.GREEN + "Page " + (view.page + 1)));
         }
         if (view.entries.isEmpty()) {
             set(inventory, EMPTY_SLOT, item(
@@ -380,7 +380,7 @@ public class BuildEditLocationsMenu extends Menu {
         return star == null ? Material.PAPER : star;
     }
 
-    private ItemStack paginationItem(boolean left, String displayName) {
+    private ItemStack paginationItem(String displayName) {
         ItemStack stack = new ItemStack(Material.ARROW, 1);
         ItemMeta meta = stack.getItemMeta();
         if (meta == null) {
@@ -411,7 +411,7 @@ public class BuildEditLocationsMenu extends Menu {
         return item(Material.BOOK, ChatColor.GREEN + "Back to Main Menu");
     }
 
-    private static String resolveTitle(String worldDirectory, ServerType gameType) {
+    private static String resolveTitle(String worldDirectory) {
         String world = safe(worldDirectory);
         if (world.isEmpty()) {
             world = "world";

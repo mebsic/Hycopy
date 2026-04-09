@@ -31,6 +31,8 @@ public class PartyService {
     private static final long POLL_DURATION_MILLIS = POLL_DURATION_SECONDS * 1000L;
     private static final int[] POLL_COUNTDOWN_CHECKPOINTS = {20, 10};
     private static final int POLL_BAR_SQUARES = 10;
+    public static final String EMPTY_PARTY_DISBAND_MESSAGE =
+            "The party was disbanded because all invites expired and the party was empty.";
     private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacySection();
 
     public enum LeaveResult {
@@ -307,11 +309,6 @@ public class PartyService {
         return canInvite(member, party);
     }
 
-    public boolean isAllInviteEnabled(UUID member) {
-        Party party = getParty(member);
-        return party != null && party.allInviteEnabled;
-    }
-
     public Boolean toggleAllInvite(UUID member) {
         Party party = getParty(member);
         if (party == null || !party.leader.equals(member)) {
@@ -526,7 +523,7 @@ public class PartyService {
             if (proxy != null) {
                 proxy.getPlayer(leaderId).ifPresent(player ->
                         sendFramed(player, Component.text(
-                                "The party was disbanded because all invites expired and the party was empty.",
+                                EMPTY_PARTY_DISBAND_MESSAGE,
                                 NamedTextColor.RED
                         ))
                 );

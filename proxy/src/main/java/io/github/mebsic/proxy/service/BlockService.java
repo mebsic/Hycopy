@@ -28,10 +28,6 @@ public class BlockService {
     private final RankResolver rankResolver;
     private final Map<UUID, Set<UUID>> blockedPlayersByPlayer = new ConcurrentHashMap<>();
 
-    public BlockService(MongoDatabase database, String collectionName, RedisManager redis) {
-        this(database, collectionName, redis, null);
-    }
-
     public BlockService(MongoDatabase database, String collectionName, RedisManager redis, RankResolver rankResolver) {
         this.redis = redis;
         this.rankResolver = rankResolver;

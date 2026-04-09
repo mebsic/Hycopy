@@ -20,9 +20,9 @@ import java.util.UUID;
 
 public class BanCommand implements CommandExecutor {
     private static final DurationOption[] DURATION_OPTIONS = new DurationOption[] {
-            new DurationOption("7d", "7 days", 7L * 24L * 60L * 60L * 1000L),
-            new DurationOption("30d", "30 days", 30L * 24L * 60L * 60L * 1000L),
-            new DurationOption("90d", "90 days", 90L * 24L * 60L * 60L * 1000L)
+            new DurationOption("7d", 7L * 24L * 60L * 60L * 1000L),
+            new DurationOption("30d", 30L * 24L * 60L * 60L * 1000L),
+            new DurationOption("90d", 90L * 24L * 60L * 60L * 1000L)
     };
 
     private final CorePlugin plugin;
@@ -148,12 +148,10 @@ public class BanCommand implements CommandExecutor {
 
     private static class DurationOption {
         private final String token;
-        private final String display;
         private final long durationMillis;
 
-        private DurationOption(String token, String display, long durationMillis) {
+        private DurationOption(String token, long durationMillis) {
             this.token = token;
-            this.display = display;
             this.durationMillis = durationMillis;
         }
     }
