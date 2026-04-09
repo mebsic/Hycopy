@@ -16,6 +16,8 @@ public class Profile {
     private long hypixelExperience;
     private String plusColor;
     private String mvpPlusPlusPrefixColor;
+    private boolean hasActiveSubscription;
+    private long subscriptionExpiresAt;
     private boolean flightEnabled;
     private long buildModeExpiresAt;
     private boolean playerVisibilityEnabled;
@@ -39,6 +41,8 @@ public class Profile {
         this.hypixelExperience = 0L;
         this.plusColor = null;
         this.mvpPlusPlusPrefixColor = null;
+        this.hasActiveSubscription = false;
+        this.subscriptionExpiresAt = 0L;
         this.flightEnabled = false;
         this.buildModeExpiresAt = 0L;
         this.playerVisibilityEnabled = true;
@@ -123,6 +127,22 @@ public class Profile {
 
     public void setMvpPlusPlusPrefixColor(String mvpPlusPlusPrefixColor) {
         this.mvpPlusPlusPrefixColor = mvpPlusPlusPrefixColor;
+    }
+
+    public boolean hasActiveSubscription() {
+        return hasActiveSubscription;
+    }
+
+    public void setHasActiveSubscription(boolean hasActiveSubscription) {
+        this.hasActiveSubscription = hasActiveSubscription;
+    }
+
+    public long getSubscriptionExpiresAt() {
+        return subscriptionExpiresAt;
+    }
+
+    public void setSubscriptionExpiresAt(long subscriptionExpiresAt) {
+        this.subscriptionExpiresAt = Math.max(0L, subscriptionExpiresAt);
     }
 
     public boolean isFlightEnabled() {

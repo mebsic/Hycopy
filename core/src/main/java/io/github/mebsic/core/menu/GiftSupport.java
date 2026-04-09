@@ -38,6 +38,19 @@ public final class GiftSupport {
         return rank == null ? Rank.DEFAULT : rank;
     }
 
+    public static boolean hasMvpPlusSubscriptionBase(Rank rank) {
+        Rank safe = safeRank(rank);
+        return safe == Rank.MVP_PLUS || safe == Rank.MVP_PLUS_PLUS;
+    }
+
+    public static int normalizeMvpPlusPlusDays(Integer days) {
+        int safe = days == null ? 30 : Math.max(0, days);
+        if (safe == 30 || safe == 90 || safe == 180 || safe == 365) {
+            return safe;
+        }
+        return 30;
+    }
+
     public static String displayRank(Rank rank) {
         if (rank == null) {
             return "";

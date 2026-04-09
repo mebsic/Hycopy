@@ -60,8 +60,7 @@ public final class GiftDecisionHandler {
             return;
         }
         if (giftedRank == Rank.MVP_PLUS_PLUS
-                && previousTargetRank != Rank.MVP_PLUS
-                && previousTargetRank != Rank.MVP_PLUS_PLUS) {
+                && !GiftSupport.hasMvpPlusSubscriptionBase(previousTargetRank)) {
             service.remove(target.getUniqueId());
             sendGiftUnavailable(target);
             return;
@@ -81,18 +80,16 @@ public final class GiftDecisionHandler {
         ProfileCommandSyncService sync = plugin.getProfileCommandSyncService();
         Integer days = request.getMvpPlusPlusDays();
         if (giftedRank == Rank.MVP_PLUS_PLUS) {
-            boolean upgradedRank = previousTargetRank == Rank.MVP_PLUS;
-            if (upgradedRank) {
-                plugin.setRank(target.getUniqueId(), Rank.MVP_PLUS_PLUS);
-            }
-            if (upgradedRank && sync != null) {
-                sync.dispatchRankUpdate(target.getUniqueId(), Rank.MVP_PLUS_PLUS, null);
+            days = GiftSupport.normalizeMvpPlusPlusDays(days);
+            plugin.setRank(target.getUniqueId(), Rank.MVP_PLUS_PLUS, days, true);
+            if (sync != null) {
+                sync.dispatchRankUpdate(target.getUniqueId(), Rank.MVP_PLUS_PLUS, days, true, null);
             }
             GiftSupport.recordGiftHistoryAsync(plugin, gifter, target, previousTargetRank, Rank.MVP_PLUS_PLUS, safeCost, days);
         } else {
             plugin.setRank(target.getUniqueId(), giftedRank);
             if (sync != null) {
-                sync.dispatchRankUpdate(target.getUniqueId(), giftedRank, null);
+                sync.dispatchRankUpdate(target.getUniqueId(), giftedRank, null, false, null);
             }
             GiftSupport.recordGiftHistoryAsync(plugin, gifter, target, previousTargetRank, giftedRank, safeCost, null);
         }

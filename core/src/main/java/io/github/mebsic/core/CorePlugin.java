@@ -103,6 +103,9 @@ import java.util.HashMap;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.model.UpdateOptions;
@@ -115,6 +118,8 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
     private static final long BLOCKED_CACHE_TTL_MILLIS = 5_000L;
     private static final int HOTBAR_SLOT_ONE_INDEX = 0;
     private static final int RANK_COLOR_GIFTED_RANKS_REQUIRED = 100;
+    private static final long DAY_MILLIS = 24L * 60L * 60L * 1000L;
+    private static final ZoneId EASTERN_TIME_ZONE = ZoneId.of("America/New_York");
     private static final long BUILD_MODE_DURATION_MILLIS = 10L * 60L * 1000L;
     private static final int[] BUILD_MODE_WARNING_SECONDS = new int[]{300, 60, 30, 10, 5, 4, 3, 2, 1};
 
@@ -836,12 +841,51 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
 
     @Override
     public void setRank(UUID uuid, Rank rank) {
+        setRank(uuid, rank, null);
+    }
+
+    public void setRank(UUID uuid, Rank rank, Integer mvpPlusPlusDays) {
+        setRank(uuid, rank, mvpPlusPlusDays, true);
+    }
+
+    public void setRank(UUID uuid, Rank rank, Integer mvpPlusPlusDays, boolean accumulateSubscriptionDuration) {
         if (uuid == null || rank == null) {
             return;
         }
         boolean grantHubPerks = shouldEnableHubPerks(rank);
         Profile profile = profileService.getProfile(uuid);
         Player player = Bukkit.getPlayer(uuid);
+
+        Boolean hasActiveSubscriptionUpdate = null;
+        Long subscriptionExpiresAtUpdate = null;
+        if (rank == Rank.MVP_PLUS_PLUS && mvpPlusPlusDays != null && mvpPlusPlusDays > 0) {
+            long now = System.currentTimeMillis();
+            long baseTimestamp = now;
+            if (accumulateSubscriptionDuration) {
+                long existingExpiry = 0L;
+                boolean existingActive = false;
+                if (profile != null) {
+                    existingActive = profile.hasActiveSubscription();
+                    existingExpiry = profile.getSubscriptionExpiresAt();
+                } else if (isMongoEnabled() && profileStore != null) {
+                    String fallbackName = player == null ? null : player.getName();
+                    ProfileStore.ProfileMeta meta = profileStore.loadProfileMeta(uuid, fallbackName);
+                    if (meta != null) {
+                        existingActive = meta.hasActiveSubscription();
+                        existingExpiry = meta.getSubscriptionExpiresAt();
+                    }
+                }
+                if (existingActive && existingExpiry > now) {
+                    baseTimestamp = existingExpiry;
+                }
+            }
+            hasActiveSubscriptionUpdate = true;
+            subscriptionExpiresAtUpdate = calculateSubscriptionExpiryFromBase(baseTimestamp, mvpPlusPlusDays);
+        } else if (shouldExpireSubscriptionOnRankChange(rank)) {
+            hasActiveSubscriptionUpdate = false;
+            subscriptionExpiresAtUpdate = 0L;
+        }
+
         if (profile != null || player != null) {
             profileService.setRank(uuid, rank);
             profile = profileService.getProfile(uuid);
@@ -852,6 +896,12 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
                 if (grantHubPerks) {
                     profile.setFlightEnabled(true);
                 }
+                if (hasActiveSubscriptionUpdate != null) {
+                    profile.setHasActiveSubscription(hasActiveSubscriptionUpdate);
+                }
+                if (subscriptionExpiresAtUpdate != null) {
+                    profile.setSubscriptionExpiresAt(subscriptionExpiresAtUpdate);
+                }
             }
         }
 
@@ -861,7 +911,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
         }
 
         if (isMongoEnabled() && profileStore != null) {
-            profileStore.updateRank(uuid, name, rank);
+            profileStore.updateRank(uuid, name, rank, hasActiveSubscriptionUpdate, subscriptionExpiresAtUpdate);
         } else if (profile != null) {
             profileService.saveProfile(profile);
         }
@@ -1339,6 +1389,23 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
 
     private boolean shouldEnableHubPerks(Rank rank) {
         return rank == Rank.MVP_PLUS || rank == Rank.MVP_PLUS_PLUS;
+    }
+
+    private boolean shouldExpireSubscriptionOnRankChange(Rank rank) {
+        return rank != Rank.MVP_PLUS_PLUS;
+    }
+
+    public long calculateSubscriptionExpiryFromBase(long baseTimestamp, int durationDays) {
+        long safeBase = Math.max(0L, baseTimestamp);
+        int safeDays = Math.max(0, durationDays);
+        if (safeDays <= 0) {
+            return safeBase;
+        }
+        if (safeDays == 365) {
+            ZonedDateTime base = Instant.ofEpochMilli(safeBase).atZone(EASTERN_TIME_ZONE);
+            return base.plusYears(1).toInstant().toEpochMilli();
+        }
+        return safeBase + (safeDays * DAY_MILLIS);
     }
 
     private boolean isHubServer() {

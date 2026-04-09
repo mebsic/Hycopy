@@ -192,6 +192,8 @@ public class ProfileStore {
             }
         }
         profile.setRanksGifted(readGiftedRanks(doc));
+        profile.setHasActiveSubscription(readActiveSubscription(doc));
+        profile.setSubscriptionExpiresAt(readSubscriptionExpiresAt(doc));
         Document cosmeticsRoot = doc.get("cosmetics", Document.class);
         Document cosmetics = cosmeticsRoot == null ? null : cosmeticsRoot.get(MongoManager.MURDER_MYSTERY_GAME_KEY, Document.class);
         if (cosmetics != null) {
@@ -327,6 +329,8 @@ public class ProfileStore {
                 .append("networkLevel", profile.getNetworkLevel())
                 .append("networkGold", profile.getNetworkGold())
                 .append(MongoManager.PROFILE_RANKS_GIFTED_KEY, Math.max(0, profile.getRanksGifted()))
+                .append(MongoManager.PROFILE_HAS_ACTIVE_SUBSCRIPTION_KEY, profile.hasActiveSubscription())
+                .append(MongoManager.PROFILE_SUBSCRIPTION_EXPIRES_AT_KEY, profile.getSubscriptionExpiresAt())
                 .append("hypixelExperience", profile.getHypixelExperience())
                 .append("plusColor", profile.getPlusColor())
                 .append("mvpPlusPlusPrefixColor", mvpPlusPlusPrefixColor)
@@ -380,6 +384,10 @@ public class ProfileStore {
     }
 
     public void updateRank(UUID uuid, String name, Rank rank) {
+        updateRank(uuid, name, rank, null, null);
+    }
+
+    public void updateRank(UUID uuid, String name, Rank rank, Boolean hasActiveSubscription, Long subscriptionExpiresAt) {
         MongoCollection<Document> collection = mongo.getProfiles();
         Document update = new Document("rank", rank.name());
         if (!canUseMvpPlusPlusPrefixColor(rank)) {
@@ -388,11 +396,24 @@ public class ProfileStore {
         if (shouldEnableFlightOnRankGrant(rank)) {
             update.append("flightEnabled", true);
         }
+        if (hasActiveSubscription != null) {
+            update.append(MongoManager.PROFILE_HAS_ACTIVE_SUBSCRIPTION_KEY, hasActiveSubscription);
+        }
+        if (subscriptionExpiresAt != null) {
+            update.append(MongoManager.PROFILE_SUBSCRIPTION_EXPIRES_AT_KEY, Math.max(0L, subscriptionExpiresAt));
+        }
         if (name != null && !name.trim().isEmpty()) {
             update.append("name", name);
         }
+        Document setOnInsert = spectatorDefaultsDocument();
+        if (update.containsKey(MongoManager.PROFILE_HAS_ACTIVE_SUBSCRIPTION_KEY)) {
+            setOnInsert.remove(MongoManager.PROFILE_HAS_ACTIVE_SUBSCRIPTION_KEY);
+        }
+        if (update.containsKey(MongoManager.PROFILE_SUBSCRIPTION_EXPIRES_AT_KEY)) {
+            setOnInsert.remove(MongoManager.PROFILE_SUBSCRIPTION_EXPIRES_AT_KEY);
+        }
         collection.updateOne(eq("uuid", uuid.toString()),
-                new Document("$set", update).append("$setOnInsert", spectatorDefaultsDocument()),
+                new Document("$set", update).append("$setOnInsert", setOnInsert),
                 new com.mongodb.client.model.UpdateOptions().upsert(true));
     }
 
@@ -437,7 +458,9 @@ public class ProfileStore {
                         "networkLevel",
                         "networkGold",
                         "hypixelExperience",
-                        MongoManager.PROFILE_RANKS_GIFTED_KEY
+                        MongoManager.PROFILE_RANKS_GIFTED_KEY,
+                        MongoManager.PROFILE_HAS_ACTIVE_SUBSCRIPTION_KEY,
+                        MongoManager.PROFILE_SUBSCRIPTION_EXPIRES_AT_KEY
                 ))
                 .first();
         if (doc == null) {
@@ -486,6 +509,8 @@ public class ProfileStore {
         Integer networkGoldRaw = doc.getInteger("networkGold");
         int networkGold = networkGoldRaw == null ? 0 : Math.max(0, networkGoldRaw);
         int giftedRanks = readGiftedRanks(doc);
+        boolean hasActiveSubscription = readActiveSubscription(doc);
+        long subscriptionExpiresAt = readSubscriptionExpiresAt(doc);
         return new ProfileMeta(
                 name == null ? fallbackName : name,
                 rank,
@@ -496,7 +521,9 @@ public class ProfileStore {
                 playerVisibilityEnabled == null || playerVisibilityEnabled,
                 networkLevel,
                 networkGold,
-                giftedRanks
+                giftedRanks,
+                hasActiveSubscription,
+                subscriptionExpiresAt
         );
     }
 
@@ -518,7 +545,9 @@ public class ProfileStore {
                 .append("spectatorHideOtherSpectatorsEnabled", false)
                 .append("spectatorFirstPersonEnabled", false)
                 .append("buildModeExpiresAt", 0L)
-                .append(MongoManager.PROFILE_RANKS_GIFTED_KEY, 0);
+                .append(MongoManager.PROFILE_RANKS_GIFTED_KEY, 0)
+                .append(MongoManager.PROFILE_HAS_ACTIVE_SUBSCRIPTION_KEY, false)
+                .append(MongoManager.PROFILE_SUBSCRIPTION_EXPIRES_AT_KEY, 0L);
     }
 
     private static boolean canUseMvpPlusPlusPrefixColor(Rank rank) {
@@ -540,6 +569,25 @@ public class ProfileStore {
         return 0;
     }
 
+    private boolean readActiveSubscription(Document profile) {
+        if (profile == null) {
+            return false;
+        }
+        Boolean raw = profile.getBoolean(MongoManager.PROFILE_HAS_ACTIVE_SUBSCRIPTION_KEY);
+        return raw != null && raw;
+    }
+
+    private long readSubscriptionExpiresAt(Document profile) {
+        if (profile == null) {
+            return 0L;
+        }
+        Object raw = profile.get(MongoManager.PROFILE_SUBSCRIPTION_EXPIRES_AT_KEY);
+        if (raw instanceof Number) {
+            return Math.max(0L, ((Number) raw).longValue());
+        }
+        return 0L;
+    }
+
     private boolean isGiftedCounterKey(String key) {
         if (key == null || key.trim().isEmpty()) {
             return false;
@@ -558,6 +606,8 @@ public class ProfileStore {
         private final int networkLevel;
         private final int networkGold;
         private final int giftedRanks;
+        private final boolean hasActiveSubscription;
+        private final long subscriptionExpiresAt;
 
         public ProfileMeta(String name,
                            Rank rank,
@@ -568,7 +618,9 @@ public class ProfileStore {
                            boolean playerVisibilityEnabled,
                            int networkLevel,
                            int networkGold,
-                           int giftedRanks) {
+                           int giftedRanks,
+                           boolean hasActiveSubscription,
+                           long subscriptionExpiresAt) {
             this.name = name;
             this.rank = rank == null ? Rank.DEFAULT : rank;
             this.plusColor = plusColor;
@@ -579,6 +631,8 @@ public class ProfileStore {
             this.networkLevel = Math.max(0, networkLevel);
             this.networkGold = Math.max(0, networkGold);
             this.giftedRanks = Math.max(0, giftedRanks);
+            this.hasActiveSubscription = hasActiveSubscription;
+            this.subscriptionExpiresAt = Math.max(0L, subscriptionExpiresAt);
         }
 
         public String getName() {
@@ -619,6 +673,14 @@ public class ProfileStore {
 
         public int getGiftedRanks() {
             return giftedRanks;
+        }
+
+        public boolean hasActiveSubscription() {
+            return hasActiveSubscription;
+        }
+
+        public long getSubscriptionExpiresAt() {
+            return subscriptionExpiresAt;
         }
     }
 

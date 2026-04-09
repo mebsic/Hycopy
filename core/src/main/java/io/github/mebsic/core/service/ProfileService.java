@@ -201,6 +201,8 @@ public class ProfileService {
             profile.setPlayerVisibilityEnabled(update.meta.isPlayerVisibilityEnabled());
             profile.setNetworkLevel(update.meta.getNetworkLevel());
             profile.setNetworkGold(update.meta.getNetworkGold());
+            profile.setHasActiveSubscription(update.meta.hasActiveSubscription());
+            profile.setSubscriptionExpiresAt(update.meta.getSubscriptionExpiresAt());
             boolean giftedChanged = setGiftedRanks(profile, update.meta.getGiftedRanks());
             if (giftedChanged) {
                 dispatchGiftedCounterSync(update.uuid, readGiftedRanks(profile));
@@ -240,6 +242,12 @@ public class ProfileService {
             return true;
         }
         if (profile.getNetworkGold() != meta.getNetworkGold()) {
+            return true;
+        }
+        if (profile.hasActiveSubscription() != meta.hasActiveSubscription()) {
+            return true;
+        }
+        if (profile.getSubscriptionExpiresAt() != meta.getSubscriptionExpiresAt()) {
             return true;
         }
         return readGiftedRanks(profile) != Math.max(0, meta.getGiftedRanks());

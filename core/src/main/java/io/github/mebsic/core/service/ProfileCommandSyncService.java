@@ -32,6 +32,18 @@ public class ProfileCommandSyncService {
     }
 
     public void dispatchRankUpdate(UUID targetUuid, Rank rank, String targetMessage) {
+        dispatchRankUpdate(targetUuid, rank, null, targetMessage);
+    }
+
+    public void dispatchRankUpdate(UUID targetUuid, Rank rank, Integer mvpPlusPlusDays, String targetMessage) {
+        dispatchRankUpdate(targetUuid, rank, mvpPlusPlusDays, false, targetMessage);
+    }
+
+    public void dispatchRankUpdate(UUID targetUuid,
+                                   Rank rank,
+                                   Integer mvpPlusPlusDays,
+                                   boolean mvpPlusPlusAccumulate,
+                                   String targetMessage) {
         if (targetUuid == null || rank == null) {
             return;
         }
@@ -40,6 +52,8 @@ public class ProfileCommandSyncService {
                 ACTION_SET_RANK,
                 targetUuid.toString(),
                 rank.name(),
+                mvpPlusPlusDays == null ? null : Math.max(0, mvpPlusPlusDays),
+                mvpPlusPlusAccumulate,
                 null,
                 null,
                 0,
@@ -57,6 +71,8 @@ public class ProfileCommandSyncService {
                 targetUuid.toString(),
                 null,
                 null,
+                false,
+                null,
                 null,
                 Math.max(0, networkLevel),
                 targetMessage
@@ -72,6 +88,8 @@ public class ProfileCommandSyncService {
                 ACTION_SET_NETWORK_GOLD,
                 targetUuid.toString(),
                 null,
+                null,
+                false,
                 null,
                 null,
                 Math.max(0, networkGold),
@@ -92,6 +110,8 @@ public class ProfileCommandSyncService {
                 ACTION_SET_COUNTER,
                 targetUuid.toString(),
                 null,
+                null,
+                false,
                 counterKey.trim(),
                 clearCounterKey,
                 Math.max(0, counterValue),
@@ -167,7 +187,7 @@ public class ProfileCommandSyncService {
                 if (rank == null) {
                     return;
                 }
-                plugin.setRank(targetUuid, rank);
+                plugin.setRank(targetUuid, rank, action.mvpPlusPlusDays, action.mvpPlusPlusAccumulate);
                 sendTargetMessage(target, action.targetMessage);
                 return;
             }
@@ -298,6 +318,8 @@ public class ProfileCommandSyncService {
         private String action;
         private String targetUuid;
         private String rankName;
+        private Integer mvpPlusPlusDays;
+        private boolean mvpPlusPlusAccumulate;
         private String counterKey;
         private String clearCounterKey;
         private int networkLevel;
@@ -312,6 +334,8 @@ public class ProfileCommandSyncService {
                                      String action,
                                      String targetUuid,
                                      String rankName,
+                                     Integer mvpPlusPlusDays,
+                                     boolean mvpPlusPlusAccumulate,
                                      String counterKey,
                                      String clearCounterKey,
                                      int value,
@@ -320,6 +344,8 @@ public class ProfileCommandSyncService {
             this.action = action;
             this.targetUuid = targetUuid;
             this.rankName = rankName;
+            this.mvpPlusPlusDays = mvpPlusPlusDays;
+            this.mvpPlusPlusAccumulate = mvpPlusPlusAccumulate;
             this.counterKey = counterKey;
             this.clearCounterKey = clearCounterKey;
             if (ACTION_SET_NETWORK_LEVEL.equals(action)) {

@@ -17,7 +17,7 @@ commands:
   kick:
     usage: /kick <player> [reason]
   rank:
-    usage: /rank <player> <rank>
+    usage: /rank <player> <rank> [duration]
   rankcolor:
     usage: /rankcolor
   networklevel:
