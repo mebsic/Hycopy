@@ -24,6 +24,14 @@ public final class NetworkConstants {
         return "mc." + domain();
     }
 
+    public static String displayJoinHost() {
+        String resolvedDomain = domain();
+        if (DEFAULT_DOMAIN.equalsIgnoreCase(resolvedDomain)) {
+            return "mc." + resolvedDomain;
+        }
+        return resolvedDomain;
+    }
+
     public static String storeUrl() {
         return "https://store." + domain();
     }

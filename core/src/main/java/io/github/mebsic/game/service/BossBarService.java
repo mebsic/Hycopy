@@ -685,7 +685,7 @@ public class BossBarService {
     }
 
     private String resolveDomainLabel() {
-        return "MC." + NetworkConstants.domain().toUpperCase(Locale.ROOT);
+        return NetworkConstants.displayJoinHost().toUpperCase(Locale.ROOT);
     }
 
     private float sanitizeValue(float raw) {

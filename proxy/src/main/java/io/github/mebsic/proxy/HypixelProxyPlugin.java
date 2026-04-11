@@ -77,6 +77,7 @@ import org.slf4j.Logger;
 import java.io.IOException;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
+import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashSet;
@@ -116,6 +117,7 @@ public class HypixelProxyPlugin {
     private static final MinecraftChannelIdentifier PLAY_AGAIN_INTENT_CHANNEL =
             MinecraftChannelIdentifier.from("hypixel:playagain");
     private static final Pattern LEGACY_CODE = Pattern.compile("(?i)§[0-9A-FK-OR]");
+    private static final String DOMAIN_TO_CONNECT_FIELD = "domainToConnect";
     private final ProxyServer proxy;
     private final Logger logger;
     private final Path dataDir;
@@ -143,6 +145,7 @@ public class HypixelProxyPlugin {
     private final AtomicLong mongoFirstFailureAtMillis = new AtomicLong(0L);
     private final AtomicLong redisFirstFailureAtMillis = new AtomicLong(0L);
     private volatile long infraHealthChecksStartedAtMillis;
+    private static volatile String domainToConnect = "";
     private final Map<UUID, DeferredQueueRequest> deferredPostGameQueueRequests = new ConcurrentHashMap<UUID, DeferredQueueRequest>();
     private final Map<UUID, Long> recentPlayAgainIntents = new ConcurrentHashMap<UUID, Long>();
 
@@ -448,6 +451,12 @@ public class HypixelProxyPlugin {
     public void onInitialServer(PlayerChooseInitialServerEvent event) {
         if (isUpdateJoinLockActive()) {
             event.getPlayer().disconnect(updateJoinLockReason());
+            return;
+        }
+
+        String expectedConnectHost = domainToConnect;
+        if (shouldRejectJoinHost(event.getPlayer(), expectedConnectHost)) {
+            event.getPlayer().disconnect(domainJoinBlockedReason(expectedConnectHost));
             return;
         }
 
@@ -838,6 +847,18 @@ public class HypixelProxyPlugin {
         }
         MongoCollection<Document> collection = mongoDatabase.getCollection(collectionName);
         DomainSettingsStore.ensureDomainDocument(collection);
+        ensureDomainToConnectField(collection);
+    }
+
+    private void ensureDomainToConnectField(MongoCollection<Document> collection) {
+        if (collection == null) {
+            return;
+        }
+        collection.updateOne(
+                new Document("_id", MongoManager.PROXY_SETTINGS_DOMAIN_FIELD)
+                        .append(DOMAIN_TO_CONNECT_FIELD, new Document("$exists", false)),
+                new Document("$set", new Document(DOMAIN_TO_CONNECT_FIELD, NetworkConstants.DEFAULT_DOMAIN))
+        );
     }
 
     private void startDomainRefreshTask() {
@@ -857,13 +878,96 @@ public class HypixelProxyPlugin {
 
     private void refreshNetworkDomain(MongoCollection<Document> collection, boolean logChanges) {
         try {
-            boolean changed = DomainSettingsStore.refreshDomain(collection);
-            if (changed && logChanges) {
+            boolean domainChanged = DomainSettingsStore.refreshDomain(collection);
+            boolean domainToConnectChanged = refreshDomainToConnect(collection);
+            if (domainChanged && logChanges) {
                 logger.info("Updated network domain to {}", NetworkConstants.domain());
+            }
+            if (domainToConnectChanged && logChanges) {
+                logger.info("Updated domain-to-connect setting.");
             }
         } catch (Exception ex) {
             logger.debug("Failed to refresh proxy settings domain: {}", ex.getMessage());
         }
+    }
+
+    private boolean refreshDomainToConnect(MongoCollection<Document> collection) {
+        String resolved = resolveDomainToConnect(collection);
+        if (resolved.equals(domainToConnect)) {
+            return false;
+        }
+        domainToConnect = resolved;
+        return true;
+    }
+
+    private String resolveDomainToConnect(MongoCollection<Document> collection) {
+        if (collection == null) {
+            return "";
+        }
+        Document settingsDoc = collection.find(new Document("_id", MongoManager.PROXY_SETTINGS_DOMAIN_FIELD))
+                .projection(new Document(DOMAIN_TO_CONNECT_FIELD, 1))
+                .first();
+        if (settingsDoc == null) {
+            return "";
+        }
+        return normalizeExpectedJoinHost(settingsDoc.get(DOMAIN_TO_CONNECT_FIELD));
+    }
+
+    private boolean shouldRejectJoinHost(Player player, String requiredHost) {
+        String expected = normalizeExpectedJoinHost(requiredHost);
+        if (expected.isEmpty() || player == null) {
+            return false;
+        }
+        String joinedHost = resolveJoinedHost(player);
+        return joinedHost.isEmpty() || !joinedHost.equals(expected);
+    }
+
+    private String resolveJoinedHost(Player player) {
+        if (player == null) {
+            return "";
+        }
+        return player.getVirtualHost()
+                .map(InetSocketAddress::getHostString)
+                .map(this::normalizeExpectedJoinHost)
+                .orElse("");
+    }
+
+    private Component domainJoinBlockedReason(String requiredHost) {
+        String host = normalizeExpectedJoinHost(requiredHost);
+        return Component.text("Please connect using ", NamedTextColor.RED)
+                .append(Component.text(host, NamedTextColor.AQUA))
+                .append(Component.text("!", NamedTextColor.RED));
+    }
+
+    private String normalizeExpectedJoinHost(Object rawDomainOrHost) {
+        return normalizeDomainToConnectHost(rawDomainOrHost);
+    }
+
+    private static String normalizeDomainToConnectHost(Object rawDomainOrHost) {
+        if (rawDomainOrHost == null) {
+            return "";
+        }
+        String normalized = String.valueOf(rawDomainOrHost).trim().toLowerCase(Locale.ROOT);
+        if (normalized.isEmpty()) {
+            return "";
+        }
+        String defaultDomain = NetworkConstants.DEFAULT_DOMAIN.toLowerCase(Locale.ROOT);
+        String defaultMcHost = "mc." + defaultDomain;
+        if (normalized.equals(defaultDomain) || normalized.equals(defaultMcHost)) {
+            return defaultMcHost;
+        }
+        if (normalized.startsWith("mc.")) {
+            return normalized.substring("mc.".length());
+        }
+        return normalized;
+    }
+
+    private String normalizeJoinHost(Object rawValue) {
+        if (rawValue == null) {
+            return "";
+        }
+        String normalized = String.valueOf(rawValue).trim().toLowerCase(Locale.ROOT);
+        return normalized;
     }
 
     private int resolvePlayerCount(Object value) {
@@ -1709,8 +1813,12 @@ public class HypixelProxyPlugin {
 
     public static Component proxyRestartReconnectReason() {
         return Component.text(PROXY_RESTARTING_MESSAGE + ". " + PROXY_RECONNECT_TO_MESSAGE, NamedTextColor.RED)
-                .append(Component.text(NetworkConstants.mcHost(), NamedTextColor.AQUA))
+                .append(Component.text(domainToConnectHost(), NamedTextColor.AQUA))
                 .append(Component.text("!", NamedTextColor.RED));
+    }
+
+    public static String domainToConnectHost() {
+        return normalizeDomainToConnectHost(domainToConnect);
     }
 
     private static final class DeferredQueueRequest {

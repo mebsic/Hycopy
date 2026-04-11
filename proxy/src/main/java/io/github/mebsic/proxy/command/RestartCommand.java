@@ -6,7 +6,7 @@ import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.ServerConnection;
 import com.velocitypowered.api.scheduler.ScheduledTask;
 import io.github.mebsic.core.util.CommonMessages;
-import io.github.mebsic.core.util.NetworkConstants;
+import io.github.mebsic.proxy.HypixelProxyPlugin;
 import io.github.mebsic.proxy.service.RankResolver;
 import io.github.mebsic.proxy.service.ServerRegistryService;
 import net.kyori.adventure.text.Component;
@@ -288,7 +288,7 @@ public class RestartCommand implements SimpleCommand {
 
     private Component restartDisconnectReason() {
         return Component.text("This server is restarting. Please reconnect to ", NamedTextColor.RED)
-                .append(Component.text(NetworkConstants.mcHost(), NamedTextColor.AQUA))
+                .append(Component.text(HypixelProxyPlugin.domainToConnectHost(), NamedTextColor.AQUA))
                 .append(Component.text("!", NamedTextColor.RED));
     }
 

@@ -5,7 +5,6 @@ import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.scheduler.ScheduledTask;
 import io.github.mebsic.core.util.CommonMessages;
-import io.github.mebsic.core.util.NetworkConstants;
 import io.github.mebsic.proxy.HypixelProxyPlugin;
 import io.github.mebsic.proxy.service.RankResolver;
 import net.kyori.adventure.text.Component;
@@ -174,7 +173,7 @@ public class UpdateCommand implements SimpleCommand {
     private void broadcastRestartSoon() {
         Component firstLine = withGoldObfuscatedPrefix(Component.text(HypixelProxyPlugin.PROXY_RESTARTING_MESSAGE + " soon.", NamedTextColor.RED));
         Component secondLine = withGoldObfuscatedPrefix(Component.text(HypixelProxyPlugin.PROXY_RECONNECT_TO_MESSAGE, NamedTextColor.RED)
-                .append(Component.text(NetworkConstants.mcHost(), NamedTextColor.AQUA))
+                .append(Component.text(HypixelProxyPlugin.domainToConnectHost(), NamedTextColor.AQUA))
                 .append(Component.text("!", NamedTextColor.RED)));
         broadcastFramed(firstLine.append(Component.newline()).append(secondLine));
     }
@@ -185,7 +184,7 @@ public class UpdateCommand implements SimpleCommand {
                 .append(Component.text(String.valueOf(secondsRemaining), NamedTextColor.GOLD))
                 .append(Component.text(unit + ".", NamedTextColor.RED)));
         Component secondLine = withGoldObfuscatedPrefix(Component.text(HypixelProxyPlugin.PROXY_RECONNECT_TO_MESSAGE, NamedTextColor.RED)
-                .append(Component.text(NetworkConstants.mcHost(), NamedTextColor.AQUA))
+                .append(Component.text(HypixelProxyPlugin.domainToConnectHost(), NamedTextColor.AQUA))
                 .append(Component.text("!", NamedTextColor.RED)));
         broadcastFramed(firstLine.append(Component.newline()).append(secondLine));
     }

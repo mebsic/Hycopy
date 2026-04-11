@@ -407,7 +407,7 @@ public class TablistService {
 
     private String tabHeader() {
         return ChatColor.AQUA + "You are playing on "
-                + ChatColor.YELLOW + ChatColor.BOLD + "MC." + NetworkConstants.domain().toUpperCase(Locale.ROOT);
+                + ChatColor.YELLOW + ChatColor.BOLD + NetworkConstants.displayJoinHost().toUpperCase(Locale.ROOT);
     }
 
     private String tabFooter() {

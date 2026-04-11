@@ -95,8 +95,8 @@ public final class ServerIdentityResolver {
             return "build";
         }
         long hashSeed = Integer.toUnsignedLong(serverId.hashCode());
-        int number = (int) (hashSeed % 10L) + 1;
-        char suffix = (char) ('A' + (int) ((hashSeed / 10L) % 26L));
+        int number = (int) (hashSeed % 99L) + 1;
+        char suffix = (char) ('A' + (int) ((hashSeed / 99L) % 26L));
         String prefix = type.isHub() ? "lobby" : "mini";
         return prefix + number + suffix;
     }
@@ -219,7 +219,7 @@ public final class ServerIdentityResolver {
         } catch (NumberFormatException ex) {
             return null;
         }
-        if (number < 1 || number > 10) {
+        if (number < 1 || number > 99) {
             return null;
         }
         return number + String.valueOf(Character.toUpperCase(letter));

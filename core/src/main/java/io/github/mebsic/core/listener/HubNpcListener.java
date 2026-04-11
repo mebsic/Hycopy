@@ -71,8 +71,6 @@ public class HubNpcListener implements Listener {
     private static final String CITIZENS_PLUGIN_NAME = "Citizens";
     private static final String CITIZENS_NAMEPLATE_VISIBLE_KEY = "nameplate-visible";
     private static final String CITIZENS_DEFAULT_NAME = "NPC";
-    private static final String PROFILE_NPC_NAME_PREFIX = "ProfileNpc";
-    private static final String CLICK_TO_PLAY_NPC_NAME_PREFIX = "ClickPlayNpc";
 
     private final JavaPlugin plugin;
     private final CorePlugin corePlugin;
@@ -92,7 +90,6 @@ public class HubNpcListener implements Listener {
     private final List<ProfileNpcTemplate> profileNpcTemplates;
     private final Map<UUID, List<RuntimeNpc>> profileNpcsByViewer;
     private volatile String activeGameKey;
-    private int npcNameSequence;
 
     public HubNpcListener(JavaPlugin plugin, CorePlugin corePlugin, ServerType serverType) {
         this.plugin = plugin;
@@ -1184,16 +1181,9 @@ public class HubNpcListener implements Listener {
     }
 
     private synchronized String resolveCitizensNpcName(NpcKind kind) {
-        npcNameSequence++;
-        String suffix = Integer.toString(npcNameSequence);
-        String prefix = kind == NpcKind.PROFILE ? PROFILE_NPC_NAME_PREFIX : CLICK_TO_PLAY_NPC_NAME_PREFIX;
-        int maxPrefixLength = Math.max(1, 16 - suffix.length());
-        if (prefix.length() > maxPrefixLength) {
-            prefix = prefix.substring(0, maxPrefixLength);
-        }
-        String name = prefix + suffix;
-        if (name.length() > 16) {
-            name = name.substring(0, 16);
+        String name = UUID.randomUUID().toString().replace("-", "");
+        if (name.length() > 10) {
+            name = name.substring(0, 10);
         }
         return name.isEmpty() ? CITIZENS_DEFAULT_NAME : name;
     }
