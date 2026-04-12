@@ -38,7 +38,7 @@ commands:
   clear:
     usage: /clear [onlinePlayer]
   teleport:
-    usage: /teleport <player> | /teleport <from> <to> | /teleport all
+    usage: /teleport <player> | /teleport <from> <to> | /teleport <x> <y> <z> | /teleport all
     aliases: [tp]
   fly:
     usage: /fly

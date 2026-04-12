@@ -180,7 +180,7 @@ public class RestartCommand implements SimpleCommand {
 
     private void sendInvalidUsage(Player player) {
         player.sendMessage(Component.text("Invalid usage! Correct usage:", NamedTextColor.RED));
-        player.sendMessage(Component.text("/restart <duration> <REASON>", NamedTextColor.RED));
+        player.sendMessage(Component.text("/restart <duration> <reason>", NamedTextColor.RED));
         player.sendMessage(Component.text("Available durations:", NamedTextColor.RED));
         for (DurationOption option : DURATION_OPTIONS) {
             player.sendMessage(Component.text(option.token, NamedTextColor.RED));

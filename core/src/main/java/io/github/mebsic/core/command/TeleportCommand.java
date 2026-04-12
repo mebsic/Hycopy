@@ -58,9 +58,25 @@ public class TeleportCommand implements CommandExecutor {
             return true;
         }
 
+        if (args.length == 3) {
+            try {
+                double x = Double.parseDouble(args[0]);
+                double y = Double.parseDouble(args[1]);
+                double z = Double.parseDouble(args[2]);
+                Location current = player.getLocation();
+                Location target = new Location(current.getWorld(), x, y, z, current.getYaw(), current.getPitch());
+                player.teleport(target);
+                player.sendMessage(ChatColor.GREEN + "Teleported to " + x + ", " + y + ", " + z);
+                return true;
+            } catch (NumberFormatException ignored) {
+                // Fall through to usage message.
+            }
+        }
+
         player.sendMessage(ChatColor.RED + "Invalid usage! Correct usage:");
         player.sendMessage(ChatColor.RED + "/" + label + " <player>");
         player.sendMessage(ChatColor.RED + "/" + label + " <from> <to>");
+        player.sendMessage(ChatColor.RED + "/" + label + " <x> <y> <z>");
         player.sendMessage(ChatColor.RED + "/" + label + " all");
         return true;
     }

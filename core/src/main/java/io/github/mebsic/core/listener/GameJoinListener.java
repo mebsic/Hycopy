@@ -8,7 +8,6 @@ import io.github.mebsic.core.server.ServerType;
 import io.github.mebsic.core.service.CoreApi;
 import io.github.mebsic.core.util.RankFormatUtil;
 import io.github.mebsic.game.model.GameState;
-import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -43,28 +42,22 @@ public class GameJoinListener implements Listener {
         if (!serverType.isGame()) {
             return;
         }
-        event.setJoinMessage(null);
-        UUID uuid = event.getPlayer().getUniqueId();
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            Player player = Bukkit.getPlayer(uuid);
-            if (player == null || !player.isOnline()) {
-                return;
-            }
-            ChatColor nameColor = resolveNameColor(uuid);
-            nameColors.put(uuid, nameColor);
-            int currentPlayers = player.getServer().getOnlinePlayers().size();
-            int maxPlayers = playerCountProvider.getMaxPlayers(serverType);
-            if (maxPlayers <= 0) {
-                maxPlayers = Math.max(currentPlayers, player.getServer().getMaxPlayers());
-            }
-            String message = nameColor + player.getName()
-                    + ChatColor.YELLOW + " has joined ("
-                    + ChatColor.AQUA + currentPlayers
-                    + ChatColor.YELLOW + "/"
-                    + ChatColor.AQUA + maxPlayers
-                    + ChatColor.YELLOW + ")!";
-            player.getServer().broadcastMessage(message);
-        }, 2L);
+        Player player = event.getPlayer();
+        UUID uuid = player.getUniqueId();
+        ChatColor nameColor = resolveNameColor(uuid);
+        nameColors.put(uuid, nameColor);
+        int currentPlayers = player.getServer().getOnlinePlayers().size();
+        int maxPlayers = playerCountProvider.getMaxPlayers(serverType);
+        if (maxPlayers <= 0) {
+            maxPlayers = Math.max(currentPlayers, player.getServer().getMaxPlayers());
+        }
+        String message = nameColor + player.getName()
+                + ChatColor.YELLOW + " has joined ("
+                + ChatColor.AQUA + currentPlayers
+                + ChatColor.YELLOW + "/"
+                + ChatColor.AQUA + maxPlayers
+                + ChatColor.YELLOW + ")!";
+        event.setJoinMessage(message);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)

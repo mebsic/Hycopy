@@ -128,7 +128,7 @@ public class BanCommand implements CommandExecutor {
 
     private void sendInvalidUsage(CommandSender sender) {
         sender.sendMessage(ChatColor.RED + "Invalid usage! Correct usage:");
-        sender.sendMessage(ChatColor.RED + "/ban <player> [duration] <reasonCode>");
+        sender.sendMessage(ChatColor.RED + "/ban <player> [duration] <reason>");
         sender.sendMessage(ChatColor.RED + "Available durations:");
         for (DurationOption option : DURATION_OPTIONS) {
             sender.sendMessage(ChatColor.RED + option.token);
