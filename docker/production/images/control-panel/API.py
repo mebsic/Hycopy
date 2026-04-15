@@ -362,6 +362,19 @@ class RolloutHandler(http.server.BaseHTTPRequestHandler):
                 self.json_response(400, {"error": f"invalid json body: {exc}"})
                 return
 
+            request_source = str(payload.get("source") or "").strip()
+            request_reason = str(payload.get("reason") or "").strip()
+            request_context = {}
+            if request_source:
+                request_context["source"] = request_source
+            if request_reason:
+                request_context["reason"] = request_reason
+            if request_context:
+                print(
+                    "restart request context "
+                    + " ".join(f"{key}={value}" for key, value in request_context.items())
+                )
+
             requested_mode = normalize_restart_mode(payload.get("mode"))
             if payload.get("mode") is not None and not requested_mode:
                 self.json_response(400, {"error": "mode must be one of: restart, recreate, rebuild"})
@@ -631,6 +644,7 @@ class RolloutHandler(http.server.BaseHTTPRequestHandler):
                         "scaledToMinimum": scaled_to_minimum,
                         "restartServiceOrder": list(config.RESTART_SERVICE_ORDER),
                         "healthWaitSeconds": config.RESTART_HEALTH_WAIT_SECONDS,
+                        "requestContext": request_context,
                     },
                 )
             except Exception as exc:

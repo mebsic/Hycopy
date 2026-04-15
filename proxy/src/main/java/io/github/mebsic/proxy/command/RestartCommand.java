@@ -269,6 +269,9 @@ public class RestartCommand implements SimpleCommand {
         restartInProgress.set(false);
         // Keep this lightweight/non-blocking so restart scheduling never stalls proxy work.
         scheduledTasks.clear();
+        if (registryService != null) {
+            registryService.markServerRestarting(targetServer);
+        }
         Component disconnectReason = restartDisconnectReason();
         for (Player online : proxy.getAllPlayers()) {
             if (online == null) {

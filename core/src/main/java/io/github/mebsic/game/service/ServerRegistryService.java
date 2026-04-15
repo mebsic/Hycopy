@@ -71,17 +71,17 @@ public class ServerRegistryService {
         this.client = createMongoClient(mongoUri);
         MongoDatabase db = client.getDatabase(mongoDatabase);
         this.collection = db.getCollection(MongoManager.SERVER_REGISTRY_COLLECTION);
-        sendUpdate("online");
+        sendUpdate("online", true);
         this.task = plugin.getServer().getScheduler().runTaskTimerAsynchronously(
                 plugin,
-                () -> sendUpdate("online"),
+                () -> sendUpdate("online", false),
                 20L,
                 heartbeatSeconds * 20L
         );
     }
 
     public void stop() {
-        sendUpdate("offline");
+        sendUpdate("offline", false);
         if (task != null) {
             task.cancel();
             task = null;
@@ -107,7 +107,7 @@ public class ServerRegistryService {
         return MongoClients.create(settings);
     }
 
-    private void sendUpdate(String status) {
+    private void sendUpdate(String status, boolean clearRestartingFlag) {
         if (collection == null) {
             return;
         }
@@ -128,8 +128,12 @@ public class ServerRegistryService {
                 .append("state", state)
                 .append("status", status)
                 .append("lastHeartbeat", System.currentTimeMillis());
-
-        collection.updateOne(new Document("_id", serverId), new Document("$set", doc), new UpdateOptions().upsert(true));
+        Document update = new Document("$set", doc);
+        if (clearRestartingFlag) {
+            update.append("$unset", new Document("restarting", "")
+                    .append("restartRequestedAt", ""));
+        }
+        collection.updateOne(new Document("_id", serverId), update, new UpdateOptions().upsert(true));
     }
 
     private void cleanupStaleRecords() {

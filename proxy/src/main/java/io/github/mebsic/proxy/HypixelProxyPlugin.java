@@ -460,6 +460,11 @@ public class HypixelProxyPlugin {
             return;
         }
 
+        if (infrastructureFailure.get()) {
+            event.getPlayer().disconnect(proxyRestartReconnectReason());
+            return;
+        }
+
         if (connectUsingDomain) {
             String expectedConnectHost = domainToConnect;
             if (shouldRejectJoinHost(event.getPlayer(), expectedConnectHost)) {
@@ -1266,11 +1271,11 @@ public class HypixelProxyPlugin {
         if (!infrastructureFailure.compareAndSet(false, true)) {
             return;
         }
-        Component reason = noServersAvailableMessage();
+        Component reason = proxyRestartReconnectReason();
         if (cause == null) {
-            logger.error("{} is unavailable. Disconnecting players and shutting down proxy.", dependency);
+            logger.error("{} is unavailable. Disconnecting players and restarting proxy.", dependency);
         } else {
-            logger.error("{} is unavailable. Disconnecting players and shutting down proxy.", dependency, cause);
+            logger.error("{} is unavailable. Disconnecting players and restarting proxy.", dependency, cause);
         }
         if (queueOrchestrator != null) {
             queueOrchestrator.stop();
@@ -1284,9 +1289,35 @@ public class HypixelProxyPlugin {
                 logger.warn("Failed to disconnect {} during infrastructure failover!", player.getUsername(), ex);
             }
         }
+        triggerInfrastructureRolloutRestart(dependency);
         proxy.getScheduler().buildTask(this, () -> proxy.shutdown())
                 .delay(FAILOVER_SHUTDOWN_DELAY_MILLIS, TimeUnit.MILLISECONDS)
                 .schedule();
+    }
+
+    private void triggerInfrastructureRolloutRestart(String dependency) {
+        UpdateCommand command = updateCommand;
+        if (command == null) {
+            logger.warn("Update command is unavailable; cannot trigger rollout restart for {} failover.", dependency);
+            return;
+        }
+        boolean triggered = false;
+        try {
+            logger.info("Triggering /update-style rollout restart due to {} infrastructure failover.", dependency);
+            triggered = command.triggerRolloutRestartNow(
+                    "infrastructure_health_failover",
+                    dependency + " health check reached failover threshold"
+            );
+        } catch (Exception ex) {
+            logger.warn("Failed to trigger rollout restart during {} infrastructure failover!", dependency, ex);
+            return;
+        }
+        if (!triggered) {
+            logger.warn(
+                    "Rollout restart was not acknowledged during {} infrastructure failover; continuing proxy shutdown.",
+                    dependency
+            );
+        }
     }
 
     private Component noServersAvailableMessage() {

@@ -230,6 +230,10 @@ public class UpdateCommand implements SimpleCommand {
     }
 
     private boolean triggerRolloutRestart() {
+        return triggerRolloutRestart(null, null);
+    }
+
+    private boolean triggerRolloutRestart(String source, String reason) {
         String webhookUrl = safeTrim(System.getenv(ROLLOUT_WEBHOOK_URL_ENV));
         if (webhookUrl == null || webhookUrl.isEmpty()) {
             logger.info("No rollout webhook URL configured; skipping rollout trigger.");
@@ -248,7 +252,7 @@ public class UpdateCommand implements SimpleCommand {
             HttpClient client = HttpClient.newBuilder()
                     .connectTimeout(Duration.ofSeconds(ROLLOUT_WEBHOOK_CONNECT_TIMEOUT_SECONDS))
                     .build();
-            String payload = buildRolloutPayload(mode, services);
+            String payload = buildRolloutPayload(mode, services, source, reason);
             HttpRequest.Builder builder = HttpRequest.newBuilder()
                     .uri(URI.create(webhookUrl))
                     .timeout(Duration.ofSeconds(ROLLOUT_WEBHOOK_REQUEST_TIMEOUT_SECONDS))
@@ -292,7 +296,7 @@ public class UpdateCommand implements SimpleCommand {
         return new ArrayList<String>(ordered);
     }
 
-    private String buildRolloutPayload(String mode, List<String> services) {
+    private String buildRolloutPayload(String mode, List<String> services, String source, String reason) {
         boolean rebuild = "rebuild".equals(mode);
         boolean recreate = "recreate".equals(mode);
         StringBuilder payload = new StringBuilder(128);
@@ -308,6 +312,14 @@ public class UpdateCommand implements SimpleCommand {
                 payload.append('"').append(escapeJson(services.get(i))).append('"');
             }
             payload.append(']');
+        }
+        String safeSource = safeTrim(source);
+        if (safeSource != null && !safeSource.isEmpty()) {
+            payload.append(",\"source\":\"").append(escapeJson(safeSource)).append('"');
+        }
+        String safeReason = safeTrim(reason);
+        if (safeReason != null && !safeReason.isEmpty()) {
+            payload.append(",\"reason\":\"").append(escapeJson(safeReason)).append('"');
         }
         payload.append('}');
         return payload.toString();
@@ -383,6 +395,10 @@ public class UpdateCommand implements SimpleCommand {
 
     public Component restartDisconnectReason() {
         return HypixelProxyPlugin.proxyRestartReconnectReason();
+    }
+
+    public boolean triggerRolloutRestartNow(String source, String reason) {
+        return triggerRolloutRestart(source, reason);
     }
 
     private void cancelScheduledTasks() {

@@ -40,6 +40,7 @@ public class LobbySelectorMenu extends Menu {
     private static final String CHANNEL = "BungeeCord";
     private static final long DEFAULT_MENU_REFRESH_TICKS = 2L;
     private static final long DEFAULT_DATA_REFRESH_TICKS = 2L;
+    private static final long RESTART_MARKER_MAX_AGE_MILLIS = 10L * 60L * 1000L;
 
     private final CorePlugin plugin;
     private final ServerType hubType;
@@ -659,12 +660,35 @@ public class LobbySelectorMenu extends Menu {
                 return false;
             }
         }
+        if (isRestarting(doc)) {
+            return false;
+        }
         String status = safeString(doc.getString("status"));
         if (!status.isEmpty() && !status.equalsIgnoreCase("online")) {
             return false;
         }
+        String state = safeString(doc.getString("state")).toUpperCase(Locale.ROOT);
+        if (state.equals("RESTARTING") || state.equals("WAITING_RESTART")) {
+            return false;
+        }
         Long heartbeat = doc.getLong("lastHeartbeat");
         return heartbeat == null || staleSeconds <= 0 || now - heartbeat <= staleSeconds * 1000L;
+    }
+
+    private boolean isRestarting(Document doc) {
+        if (doc == null) {
+            return false;
+        }
+        Object restartingValue = doc.get("restarting");
+        if (!(restartingValue instanceof Boolean) || !((Boolean) restartingValue)) {
+            return false;
+        }
+        Long requestedAt = doc.getLong("restartRequestedAt");
+        if (requestedAt == null || requestedAt <= 0L) {
+            return false;
+        }
+        long age = System.currentTimeMillis() - requestedAt;
+        return age >= 0L && age <= RESTART_MARKER_MAX_AGE_MILLIS;
     }
 
     private boolean isCurrent(String name) {

@@ -31,6 +31,7 @@ public class ServerRegistryService {
     private static final long LOOKUP_REFRESH_MAX_AGE_MILLIS = 250L;
     private static final long CLEANUP_INTERVAL_MILLIS = 10_000L;
     private static final long REFRESH_FAILURE_LOG_INTERVAL_MILLIS = 10_000L;
+    private static final long RESTART_MARKER_MAX_AGE_MILLIS = 10L * 60L * 1000L;
     private static final Logger LOGGER = LoggerFactory.getLogger(ServerRegistryService.class);
     private final ProxyServer proxy;
     private final ProxyConfig config;
@@ -170,6 +171,9 @@ public class ServerRegistryService {
             if (type == ServerType.UNKNOWN) {
                 continue;
             }
+            if (isRestarting(doc)) {
+                continue;
+            }
             if (status != null && !status.equalsIgnoreCase("online")) {
                 continue;
             }
@@ -197,6 +201,22 @@ public class ServerRegistryService {
             next.put(entry.id, entry);
         }
         updateRegistered(next);
+    }
+
+    private boolean isRestarting(Document doc) {
+        if (doc == null) {
+            return false;
+        }
+        Object restartingValue = doc.get("restarting");
+        if (!(restartingValue instanceof Boolean) || !((Boolean) restartingValue)) {
+            return false;
+        }
+        Long requestedAt = doc.getLong("restartRequestedAt");
+        if (requestedAt == null || requestedAt <= 0L) {
+            return false;
+        }
+        long age = System.currentTimeMillis() - requestedAt;
+        return age >= 0L && age <= RESTART_MARKER_MAX_AGE_MILLIS;
     }
 
     private String normalizeLookupKey(String raw) {
@@ -342,6 +362,34 @@ public class ServerRegistryService {
         return findServerDetailsInSnapshot(serverId);
     }
 
+    public void markServerRestarting(String serverId) {
+        String targetServerId = serverId == null ? "" : serverId.trim();
+        if (targetServerId.isEmpty()) {
+            return;
+        }
+        markServerRestartingInSnapshot(targetServerId);
+        if (database == null || config == null) {
+            return;
+        }
+        try {
+            MongoCollection<Document> collection = database.getCollection(config.getRegistryCollection());
+            org.bson.conversions.Bson filter = Filters.eq("_id", targetServerId);
+            String group = config.getRegistryGroup() == null ? "" : config.getRegistryGroup().trim();
+            if (!group.isEmpty()) {
+                filter = Filters.and(filter, Filters.eq("group", group));
+            }
+            long now = System.currentTimeMillis();
+            Document update = new Document("$set", new Document("status", "restarting")
+                    .append("state", "WAITING_RESTART")
+                    .append("restarting", true)
+                    .append("restartRequestedAt", now)
+                    .append("lastHeartbeat", now));
+            collection.updateOne(filter, update);
+        } catch (RuntimeException ex) {
+            LOGGER.warn("Failed to mark server {} as restarting in registry.", targetServerId, ex);
+        }
+    }
+
     private Optional<ServerType> findServerTypeInSnapshot(String serverId) {
         return findServerDetailsInSnapshot(serverId).map(ServerDetails::getType);
     }
@@ -360,6 +408,36 @@ public class ServerRegistryService {
             }
         }
         return Optional.empty();
+    }
+
+    private void markServerRestartingInSnapshot(String serverId) {
+        Map<UUID, RegistryEntry> snapshot = entries;
+        if (snapshot.isEmpty()) {
+            return;
+        }
+        Map<UUID, RegistryEntry> next = new HashMap<>(snapshot);
+        boolean changed = false;
+        for (Map.Entry<UUID, RegistryEntry> item : snapshot.entrySet()) {
+            RegistryEntry current = item.getValue();
+            if (current == null || !current.name.equalsIgnoreCase(serverId)) {
+                continue;
+            }
+            next.put(item.getKey(), new RegistryEntry(
+                    current.registryId,
+                    current.id,
+                    current.name,
+                    current.address,
+                    current.port,
+                    current.type,
+                    current.players,
+                    current.maxPlayers,
+                    "WAITING_RESTART"
+            ));
+            changed = true;
+        }
+        if (changed) {
+            entries = Collections.unmodifiableMap(next);
+        }
     }
 
     private void updateRegistered(Map<UUID, RegistryEntry> next) {
