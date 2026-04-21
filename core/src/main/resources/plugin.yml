@@ -50,6 +50,8 @@ commands:
     aliases: [fw]
   parkour:
     usage: /parkour [start|reset|checkpoint|cancel]
+  news:
+    usage: /news
   help:
     usage: /help [report|general|linking]
   whereami:

@@ -59,7 +59,7 @@ public class UnbanCommand implements CommandExecutor {
             sender.sendMessage(ChatColor.RED + "That player is not banned!");
             return true;
         }
-        sender.sendMessage(ChatColor.GREEN + "Done!");
+        sender.sendMessage(ChatColor.GREEN + CommonMessages.DONE);
         return true;
     }
 }

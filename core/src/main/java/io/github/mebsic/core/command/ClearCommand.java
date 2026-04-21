@@ -48,7 +48,7 @@ public class ClearCommand implements CommandExecutor {
         }
 
         clearInventory(target);
-        sender.sendMessage(ChatColor.GREEN + "Done!");
+        sender.sendMessage(ChatColor.GREEN + CommonMessages.DONE);
         return true;
     }
 

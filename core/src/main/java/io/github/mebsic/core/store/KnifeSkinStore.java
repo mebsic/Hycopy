@@ -531,7 +531,7 @@ public class KnifeSkinStore {
                                 new Document("$regex", "^(common|rare|epic|legendary)$").append("$options", "i"))),
                 new Document("$set", new Document(MongoManager.MURDER_MYSTERY_RARITY_FIELD, KnifeSkinDefinition.DEFAULT_RARITY))
         );
-        updatePurchasableCostsByProgression();
+        updatePurchasableCostsByRarity();
     }
 
     private KnifeSkinDefinition fromDocument(Document doc) {
@@ -636,139 +636,23 @@ public class KnifeSkinStore {
         return new SeedSkin(id, material, displayName, rarity);
     }
 
-    private void updatePurchasableCostsByProgression() {
-        // Common: skins 04..11
-        updateSequentialCosts(4, 11, 250000, 100000);
-        // Rare: skins 12..30 (starts at Blaze Rod)
-        updateSequentialCosts(12, 30, 1500000, 175000);
-        // Epic: skins 31..37
-        updateSequentialCosts(31, 37, 5750000, 500000);
-        // Legendary: skins 38..47 (starts at 9.5M)
-        updateSequentialCosts(38, 47, 9500000, 500000);
-    }
-
-    private void updateSequentialCosts(int startInclusive, int endInclusive, int baseCost, int step) {
-        int from = Math.max(0, startInclusive);
-        int to = Math.max(from, endInclusive);
-        int safeBase = Math.max(0, baseCost);
-        int safeStep = Math.max(0, step);
-        for (int number = from; number <= to; number++) {
-            String id = idFor(number);
-            if (id.isEmpty()) {
+    private void updatePurchasableCostsByRarity() {
+        for (SeedSkin seed : MURDER_MYSTERY_DEFAULT_SKINS) {
+            if (seed == null || NON_PURCHASABLE_IDS.contains(seed.id)) {
                 continue;
             }
-            int offset = number - from;
-            int cost = safeBase + (offset * safeStep);
+            String rarity = normalizeRarity(seed.rarity);
             collection.updateOne(
-                    skinFilter(id),
-                    new Document("$set", new Document("cost", cost).append(MongoManager.MURDER_MYSTERY_GAME_TYPE_FIELD, MongoManager.MURDER_MYSTERY_GAME_TYPE))
+                    skinFilter(seed.id),
+                    new Document("$set", new Document("cost", defaultCostForRarity(rarity))
+                            .append(MongoManager.MURDER_MYSTERY_RARITY_FIELD, rarity)
+                            .append(MongoManager.MURDER_MYSTERY_GAME_TYPE_FIELD, MongoManager.MURDER_MYSTERY_GAME_TYPE))
             );
         }
     }
 
     private Document skinFilter(String id) {
         return new Document("id", id).append(MongoManager.MURDER_MYSTERY_RECORD_TYPE_FIELD, MongoManager.MURDER_MYSTERY_KNIFE_SKIN_RECORD_TYPE);
-    }
-
-    private String idFor(int number) {
-        switch (number) {
-            case 1:
-                return DEFAULT_KNIFE_ID;
-            case 2:
-                return SKIN_02_CHEST_ID;
-            case 3:
-                return SKIN_03_ENDER_CHEST_ID;
-            case 4:
-                return SKIN_04_IRON_BLADE_ID;
-            case 5:
-                return SKIN_05_STICK_ID;
-            case 6:
-                return SKIN_06_WOOD_SPADE_ID;
-            case 7:
-                return SKIN_07_WOOD_AXE_ID;
-            case 8:
-                return SKIN_08_GOLD_SWORD_ID;
-            case 9:
-                return SKIN_09_DEAD_BUSH_ID;
-            case 10:
-                return SKIN_10_SUGAR_CANE_ID;
-            case 11:
-                return SKIN_11_WOOD_SPADE_ID;
-            case 12:
-                return SKIN_12_BLAZE_ROD_ID;
-            case 13:
-                return SKIN_13_DIAMOND_SPADE_ID;
-            case 14:
-                return SKIN_14_QUARTZ_ID;
-            case 15:
-                return SKIN_15_RABBIT_FOOT_ID;
-            case 16:
-                return SKIN_16_GOLD_PICKAXE_ID;
-            case 17:
-                return SKIN_17_LEATHER_ID;
-            case 18:
-                return SKIN_18_GOLD_SPADE_ID;
-            case 19:
-                return SKIN_19_COAL_ID;
-            case 20:
-                return SKIN_20_FLINT_ID;
-            case 21:
-                return SKIN_21_BONE_ID;
-            case 22:
-                return SKIN_22_CARROT_ID;
-            case 23:
-                return SKIN_23_GOLDEN_CARROT_ID;
-            case 24:
-                return SKIN_24_COOKIE_ID;
-            case 25:
-                return SKIN_25_DIAMOND_AXE_ID;
-            case 26:
-                return SKIN_26_ROSE_ID;
-            case 27:
-                return SKIN_27_PRISMARINE_CRYSTALS_ID;
-            case 28:
-                return SKIN_28_STEAK_ID;
-            case 29:
-                return SKIN_29_NETHER_BRICK_ID;
-            case 30:
-                return SKIN_30_RAW_CHICKEN_ID;
-            case 31:
-                return SKIN_31_RECORD_ID;
-            case 32:
-                return SKIN_32_GOLD_PICKAXE_ID;
-            case 33:
-                return SKIN_33_PRISMARINE_SHARD_ID;
-            case 34:
-                return SKIN_34_GOLD_SWORD_ID;
-            case 35:
-                return SKIN_35_DIAMOND_SWORD_ID;
-            case 36:
-                return SKIN_36_DIAMOND_HOE_ID;
-            case 37:
-                return SKIN_37_SHEARS_ID;
-            case 38:
-                return SKIN_38_RAW_FISH_ID;
-            case 39:
-                return SKIN_39_NETHER_WART_ID;
-            case 40:
-                return SKIN_40_BREAD_ID;
-            case 41:
-                return SKIN_41_BOAT_ID;
-            case 42:
-                return SKIN_42_MELON_ID;
-            case 43:
-                return SKIN_43_BOOK_ID;
-            case 44:
-                return SKIN_44_SAPLING_ID;
-            case 45:
-                return SKIN_45_GOLD_AXE_ID;
-            case 46:
-                return SKIN_46_DIAMOND_PICKAXE_ID;
-            case 47:
-                return SKIN_47_GOLD_SPADE_ID;
-            default:
-                return "";
-        }
     }
 
     private String normalizeRarity(String rarity) {
@@ -788,15 +672,15 @@ public class KnifeSkinStore {
     private int defaultCostForRarity(String rarity) {
         String normalized = normalizeRarity(rarity);
         if (normalized.equals("legendary")) {
-            return 9500000;
+            return 100000;
         }
         if (normalized.equals("epic")) {
-            return 5750000;
+            return 25000;
         }
         if (normalized.equals("rare")) {
-            return 1500000;
+            return 10000;
         }
-        return 250000;
+        return 5000;
     }
 
     private static final class SeedSkin {

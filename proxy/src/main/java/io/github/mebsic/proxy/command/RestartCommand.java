@@ -101,7 +101,7 @@ public class RestartCommand implements SimpleCommand {
         }
 
         cancelScheduledTasks();
-        player.sendMessage(Component.text("Done! ", NamedTextColor.GREEN)
+        player.sendMessage(Component.text(CommonMessages.DONE + " ", NamedTextColor.GREEN)
                 .append(Component.text("(" + duration.display + ", " + reason.name() + ")", NamedTextColor.DARK_GRAY)));
         scheduleBroadcasts(duration.totalSeconds, reason, targetServer);
         scheduleFinalRestart(duration.totalSeconds, targetServer, targetService);

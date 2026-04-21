@@ -63,7 +63,7 @@ public class KickCommand implements CommandExecutor {
         );
         String targetKickMessage = punishments.formatKickMessage(punishment);
         punishments.dispatchPunishment(PunishmentType.KICK, targetUuid, targetKickMessage, false);
-        sender.sendMessage(ChatColor.GREEN + "Done!");
+        sender.sendMessage(ChatColor.GREEN + CommonMessages.DONE);
         return true;
     }
 

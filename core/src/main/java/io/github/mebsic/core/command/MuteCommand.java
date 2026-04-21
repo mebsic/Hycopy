@@ -95,7 +95,7 @@ public class MuteCommand implements CommandExecutor {
         );
         String targetMuteMessage = punishments.formatMuteMessage(punishment);
         punishments.dispatchPunishment(PunishmentType.MUTE, targetUuid, targetMuteMessage, false);
-        sender.sendMessage(ChatColor.GREEN + "Done!");
+        sender.sendMessage(ChatColor.GREEN + CommonMessages.DONE);
         return true;
     }
 

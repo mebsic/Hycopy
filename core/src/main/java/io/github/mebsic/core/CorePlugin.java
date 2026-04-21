@@ -14,6 +14,7 @@ import io.github.mebsic.core.command.KickCommand;
 import io.github.mebsic.core.command.MapCommand;
 import io.github.mebsic.core.command.MuteCommand;
 import io.github.mebsic.core.command.NetworkLevelCommand;
+import io.github.mebsic.core.command.NewsCommand;
 import io.github.mebsic.core.command.ParkourCommand;
 import io.github.mebsic.core.command.PunishmentHistoryCommand;
 import io.github.mebsic.core.command.RankCommand;
@@ -48,6 +49,7 @@ import io.github.mebsic.core.service.PunishmentService;
 import io.github.mebsic.core.service.QueueClient;
 import io.github.mebsic.core.service.ServerRegistrySnapshot;
 import io.github.mebsic.core.service.HubParkourCommandHandler;
+import io.github.mebsic.core.service.NewsEditService;
 import io.github.mebsic.core.store.ProfileStore;
 import io.github.mebsic.core.store.PunishmentStore;
 import io.github.mebsic.core.store.RoleChanceStore;
@@ -137,6 +139,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
     private ProfileCommandSyncService profileCommandSync;
     private GiftRequestService giftRequestService;
     private BookPromptService bookPromptService;
+    private NewsEditService newsEditService;
     private ServerType serverType;
     private QueueClient queueClient;
     private ServerRegistrySnapshot registrySnapshot;
@@ -177,6 +180,8 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
         if (bookPromptService != null) {
             getServer().getPluginManager().registerEvents(bookPromptService, this);
         }
+        this.newsEditService = new NewsEditService(this);
+        getServer().getPluginManager().registerEvents(newsEditService, this);
         if (serverType != null && serverType.isGame()) {
             getServer().getPluginManager().registerEvents(
                     new GameJoinListener(this, this, serverType, new DefaultGameTypePlayerCountProvider()),
@@ -249,6 +254,9 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
         }
         if (getCommand("parkour") != null) {
             getCommand("parkour").setExecutor(new ParkourCommand(this));
+        }
+        if (getCommand("news") != null) {
+            getCommand("news").setExecutor(new NewsCommand(this, newsEditService));
         }
         if (getCommand("help") != null) {
             getCommand("help").setExecutor(new HelpCommand());
@@ -511,6 +519,10 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
         if (bookPromptService != null) {
             bookPromptService.shutdown();
             bookPromptService = null;
+        }
+        if (newsEditService != null) {
+            newsEditService.shutdown();
+            newsEditService = null;
         }
         if (hubItemListener != null) {
             hubItemListener.shutdown();

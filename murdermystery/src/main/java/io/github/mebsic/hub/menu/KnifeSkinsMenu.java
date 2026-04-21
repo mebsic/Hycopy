@@ -272,18 +272,14 @@ public class KnifeSkinsMenu extends Menu {
         if (isSpecialOption(key)) {
             return 0;
         }
-        int cost = 0;
         if (costs.containsKey(key)) {
-            cost = Math.max(0, costs.get(key));
+            return Math.max(0, costs.get(key));
         }
         KnifeSkinDefinition skin = coreApi == null ? null : coreApi.getKnifeSkins().get(key);
-        if (cost <= 0 && skin != null) {
-            cost = Math.max(0, skin.getCost());
+        if (skin != null) {
+            return Math.max(0, skin.getCost());
         }
-        if (cost <= 0) {
-            cost = defaultCostForRarity(skin == null ? null : skin.getRarity());
-        }
-        return Math.max(0, cost);
+        return 0;
     }
 
     private String formatTokens(Profile profile) {
@@ -735,20 +731,6 @@ public class KnifeSkinsMenu extends Menu {
             return "rare";
         }
         return "common";
-    }
-
-    private int defaultCostForRarity(String rarity) {
-        String normalized = normalizeRarity(rarity);
-        if (normalized.equals("legendary")) {
-            return 9500000;
-        }
-        if (normalized.equals("epic")) {
-            return 5750000;
-        }
-        if (normalized.equals("rare")) {
-            return 1500000;
-        }
-        return 250000;
     }
 
     private boolean hasUnlockedPurchasable(Set<String> unlockedOptions) {

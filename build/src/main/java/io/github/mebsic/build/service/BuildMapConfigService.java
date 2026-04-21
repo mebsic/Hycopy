@@ -12,6 +12,7 @@ import io.github.mebsic.core.model.Rank;
 import io.github.mebsic.core.server.ServerType;
 import io.github.mebsic.core.service.PubSubService;
 import io.github.mebsic.core.store.MapConfigStore;
+import io.github.mebsic.core.util.CommonMessages;
 import io.github.mebsic.core.util.RankFormatUtil;
 import org.bson.Document;
 import org.bukkit.Bukkit;
@@ -348,9 +349,9 @@ public class BuildMapConfigService {
                         online.teleport(remapLocationToWorld(returnLocation, reloadedWorld));
                         if (finalExportError.isEmpty() && finalMetadataError.isEmpty()) {
                             if (finalExportedPaths.isEmpty()) {
-                                online.sendMessage(ChatColor.GREEN + "Done!");
+                                online.sendMessage(ChatColor.GREEN + CommonMessages.DONE);
                             } else {
-                                online.sendMessage(ChatColor.GREEN + "Done! Exported map to " + formatDisplayList(finalExportedPaths) + ".");
+                                online.sendMessage(ChatColor.GREEN + CommonMessages.DONE + " Exported map to " + formatDisplayList(finalExportedPaths) + ".");
                             }
                         } else if (finalExportError.isEmpty()) {
                             if (finalExportedPaths.isEmpty()) {
@@ -518,7 +519,7 @@ public class BuildMapConfigService {
                 saveMapConfigRoot(store, gameKey, root);
             }
             if (reset) {
-                player.sendMessage(ChatColor.GREEN + "Done!");
+                player.sendMessage(ChatColor.GREEN + CommonMessages.DONE);
             } else {
                 sendDone(player, location, null);
             }
@@ -597,7 +598,7 @@ public class BuildMapConfigService {
                 }
             }
             if (reset) {
-                player.sendMessage(ChatColor.GREEN + "Done!");
+                player.sendMessage(ChatColor.GREEN + CommonMessages.DONE);
             } else {
                 sendDone(player, null, null);
             }
@@ -688,7 +689,7 @@ public class BuildMapConfigService {
                     gameType,
                     mapWorld
             );
-            player.sendMessage(ChatColor.GREEN + "Done!");
+            player.sendMessage(ChatColor.GREEN + CommonMessages.DONE);
         } catch (Exception ex) {
             player.sendMessage(ChatColor.RED + "Failed to update map config in MongoDB!\n" + ex.getMessage());
         }
@@ -751,7 +752,7 @@ public class BuildMapConfigService {
             }
             despawnRuntimeNpcsForWorld(gameType, mapWorld, true, false);
             spawnNpcRuntime(entityId, location, ownerName, DEFAULT_PROFILE_NPC_COLOR, true, false, ownerUuid, gameType, mapWorld);
-            player.sendMessage(ChatColor.GREEN + "Done!");
+            player.sendMessage(ChatColor.GREEN + CommonMessages.DONE);
         } catch (Exception ex) {
             player.sendMessage(ChatColor.RED + "Failed to update map config in MongoDB!\n" + ex.getMessage());
         }
@@ -872,7 +873,7 @@ public class BuildMapConfigService {
                 if (resetProfileNpc) {
                     despawnRuntimeNpcsForWorld(gameType, mapWorld, true, false);
                 }
-                player.sendMessage(ChatColor.GREEN + "Done!");
+                player.sendMessage(ChatColor.GREEN + CommonMessages.DONE);
             }
         } catch (Exception ex) {
             player.sendMessage(ChatColor.RED + "Failed to update map config in MongoDB!\n" + ex.getMessage());
@@ -963,7 +964,7 @@ public class BuildMapConfigService {
             }
             despawnRuntimeLeaderboardsForMetric(gameType, mapWorld, selectedMetric);
             if (reset) {
-                player.sendMessage(ChatColor.GREEN + "Done!");
+                player.sendMessage(ChatColor.GREEN + CommonMessages.DONE);
             } else {
                 spawnLeaderboardRuntime(entityId, location, gameType, mapWorld, selectedMetric, player.getUniqueId(), player.getName());
                 sendDone(player, location, null);
@@ -1586,7 +1587,7 @@ public class BuildMapConfigService {
         }
         despawnAllRuntimeArtifacts();
         removeParkourWorldMarkers(parkourMarkers, player.getWorld());
-        player.sendMessage(ChatColor.GREEN + "Done!");
+        player.sendMessage(ChatColor.GREEN + CommonMessages.DONE);
         return true;
     }
 
@@ -2686,7 +2687,7 @@ public class BuildMapConfigService {
                 + COORD_FORMAT.format(loc.getY()) + ", "
                 + COORD_FORMAT.format(loc.getZ()) + ")";
         StringBuilder message = new StringBuilder();
-        message.append(ChatColor.GREEN).append("Done! ");
+        message.append(ChatColor.GREEN).append(CommonMessages.DONE + " ");
         message.append(ChatColor.DARK_GRAY).append(coords);
         if (itemName != null && !itemName.trim().isEmpty()) {
             message.append(" ").append(ChatColor.GOLD).append("(")

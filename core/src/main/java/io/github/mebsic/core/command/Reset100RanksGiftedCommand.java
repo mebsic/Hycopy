@@ -51,7 +51,7 @@ public class Reset100RanksGiftedCommand implements CommandExecutor {
             }
         }
 
-        player.sendMessage(ChatColor.GREEN + "Done!");
+        player.sendMessage(ChatColor.GREEN + CommonMessages.DONE);
         return true;
     }
 }

@@ -33,6 +33,6 @@ public class CancelRestartCommand implements SimpleCommand {
             player.sendMessage(Component.text("A restart has not started yet!", NamedTextColor.RED));
             return;
         }
-        player.sendMessage(Component.text("Done!", NamedTextColor.GREEN));
+        player.sendMessage(Component.text(CommonMessages.DONE, NamedTextColor.GREEN));
     }
 }

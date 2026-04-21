@@ -95,7 +95,7 @@ public class BanCommand implements CommandExecutor {
         );
         String targetKickMessage = punishments.formatBanMessage(punishment);
         punishments.dispatchPunishment(PunishmentType.BAN, targetUuid, targetKickMessage, true);
-        sender.sendMessage(ChatColor.GREEN + "Done!");
+        sender.sendMessage(ChatColor.GREEN + CommonMessages.DONE);
         return true;
     }
 

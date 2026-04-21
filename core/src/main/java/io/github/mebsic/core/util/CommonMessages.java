@@ -1,6 +1,7 @@
 package io.github.mebsic.core.util;
 
 public final class CommonMessages {
+    public static final String DONE = "Done!";
     public static final String NO_PERMISSION_COMMAND = "You don't have permission to run that command!";
     public static final String ONLY_PLAYERS_COMMAND = "That command is only available for players!";
     public static final String PLAYER_NOT_FOUND_COMMAND = "That player was not found!";

@@ -82,7 +82,7 @@ public class UpdateCommand implements SimpleCommand {
         joinLockActive.set(false);
 
         cancelScheduledTasks();
-        player.sendMessage(Component.text("Done! ", NamedTextColor.GREEN)
+        player.sendMessage(Component.text(CommonMessages.DONE + " ", NamedTextColor.GREEN)
                 .append(Component.text("(" + duration.display + ")", NamedTextColor.DARK_GRAY)));
         scheduleMinuteBroadcasts(duration.minutes);
         scheduleSecondCountdown(duration.minutes);
