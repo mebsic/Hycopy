@@ -155,7 +155,7 @@ public class RankColorMenu extends Menu {
     private List<String> buildLore(RankColorUtil.PlusColor color, boolean unlocked, boolean active) {
         List<String> lore = new ArrayList<>();
         if (isDefaultRed(color)) {
-            lore.add(ChatColor.GRAY + "The default color for " + formatMvpPlus(ChatColor.RED) + ChatColor.GRAY + ".");
+            lore.add(ChatColor.GRAY + "The default color for " + formatMvpPlus(ChatColor.RED));
             lore.add("");
         } else {
             lore.add(ChatColor.GRAY + "Changes the color of the plus in " + formatMvpPlus(ChatColor.RED));

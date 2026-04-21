@@ -30,27 +30,27 @@ import java.util.logging.Level;
 
 public class NewsEditService implements Listener {
     private static final String ENTER_TEXT_MESSAGE = ChatColor.GREEN + "Enter the text you want to display!";
-    private static final String UNAVAILABLE_MESSAGE = ChatColor.RED + "News storage is unavailable right now!";
+    private static final String UNAVAILABLE_MESSAGE = ChatColor.RED + "News items are unavailable! Please try again later.";
     private static final String EMPTY_TEXT_MESSAGE = ChatColor.RED + "News text cannot be empty!";
     private static final String DONE_MESSAGE = ChatColor.GREEN + CommonMessages.DONE;
     private static final String SAVE_FAILED_MESSAGE = ChatColor.RED + "Failed to save the news item!";
     private static final List<ChatColor> COLOR_CYCLE = Arrays.asList(
+            ChatColor.AQUA,
             ChatColor.BLACK,
-            ChatColor.DARK_BLUE,
-            ChatColor.DARK_GREEN,
-            ChatColor.DARK_AQUA,
-            ChatColor.DARK_RED,
-            ChatColor.DARK_PURPLE,
+            ChatColor.BLUE,
             ChatColor.GOLD,
             ChatColor.GRAY,
-            ChatColor.DARK_GRAY,
-            ChatColor.BLUE,
             ChatColor.GREEN,
-            ChatColor.AQUA,
-            ChatColor.RED,
             ChatColor.LIGHT_PURPLE,
+            ChatColor.RED,
+            ChatColor.WHITE,
             ChatColor.YELLOW,
-            ChatColor.WHITE
+            ChatColor.DARK_AQUA,
+            ChatColor.DARK_BLUE,
+            ChatColor.DARK_GRAY,
+            ChatColor.DARK_GREEN,
+            ChatColor.DARK_PURPLE,
+            ChatColor.DARK_RED
     );
 
     private final CorePlugin plugin;
@@ -89,10 +89,6 @@ public class NewsEditService implements Listener {
 
     public void openEditNewsFromManage(Player player, BossBarMessage news, int page) {
         beginEditing(player, news, EditOrigin.MANAGE, page);
-    }
-
-    public void openEditNewsFromAdd(Player player, BossBarMessage news) {
-        beginEditing(player, news, EditOrigin.ADD, 1);
     }
 
     public void startAddNewsInput(Player player) {
@@ -215,7 +211,6 @@ public class NewsEditService implements Listener {
             player.sendMessage(DONE_MESSAGE);
             return;
         }
-        player.sendMessage(DONE_MESSAGE);
         if (session.origin == EditOrigin.MANAGE) {
             Bukkit.getScheduler().runTask(plugin, () -> {
                 Player online = Bukkit.getPlayer(uuid);
@@ -227,6 +222,7 @@ public class NewsEditService implements Listener {
             return;
         }
         player.closeInventory();
+        player.sendMessage(DONE_MESSAGE);
     }
 
     public List<BossBarMessage> loadAddedNews() {
@@ -349,44 +345,32 @@ public class NewsEditService implements Listener {
             new EditNewsMenu(this).open(player);
             return;
         }
-        pendingSaves.add(uuid);
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> saveNewNewsItem(uuid, uppercaseText));
-    }
-
-    private void saveNewNewsItem(UUID uuid, String uppercaseText) {
-        BossBarMessage saved = null;
-        Exception failure = null;
-        try {
-            messageStore.ensureDefaults();
-            saved = messageStore.addHubNewsItem(uppercaseText);
-        } catch (Exception ex) {
-            failure = ex;
-        }
-        final BossBarMessage savedMessage = saved;
-        final Exception thrown = failure;
-        Bukkit.getScheduler().runTask(plugin, () -> {
-            pendingSaves.remove(uuid);
-            if (thrown != null) {
-                plugin.getLogger().log(Level.WARNING, "Failed to create hub news item.", thrown);
-            }
-            Player player = Bukkit.getPlayer(uuid);
-            if (player == null || !player.isOnline()) {
-                return;
-            }
-            if (savedMessage == null) {
-                player.sendMessage(SAVE_FAILED_MESSAGE);
-                return;
-            }
-            openEditNewsFromAdd(player, savedMessage);
-        });
+        EditSession draft = new EditSession();
+        draft.messageId = "";
+        draft.text = uppercaseText;
+        draft.messageType = MessageType.FLASH;
+        draft.startColor = ChatColor.WHITE;
+        draft.sweepColor = ChatColor.WHITE;
+        draft.endColor = ChatColor.WHITE;
+        draft.origin = EditOrigin.ADD;
+        draft.managePage = 1;
+        activeEditSessions.put(uuid, draft);
+        new EditNewsMenu(this).open(player);
     }
 
     private void saveSession(UUID uuid, EditSession session) {
         boolean saved = false;
         Exception failure = null;
         try {
-            saved = messageStore.saveHubNewsProperties(
-                    session.messageId,
+            String messageId = safeText(session.messageId);
+            if (messageId.isEmpty()) {
+                BossBarMessage created = messageStore.addHubNewsItem(session.text);
+                if (created != null) {
+                    messageId = safeText(created.getId());
+                }
+            }
+            saved = !messageId.isEmpty() && messageStore.saveHubNewsProperties(
+                    messageId,
                     session.text,
                     session.messageType.name(),
                     session.startColor.name(),

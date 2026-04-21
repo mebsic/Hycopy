@@ -35,7 +35,7 @@ public class NewsMenu extends Menu {
         set(inventory, MANAGE_NEWS_SLOT, item(
                 resolveSignMaterial(),
                 ChatColor.GREEN + "Manage News",
-                ChatColor.GRAY + "View, edit, or delete saved news.",
+                ChatColor.GRAY + "View, edit, and delete saved news.",
                 "",
                 ChatColor.YELLOW + "Click to view!"
         ));

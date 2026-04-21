@@ -122,6 +122,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
     private static final long BLOCKED_CACHE_TTL_MILLIS = 5_000L;
     private static final int HOTBAR_SLOT_ONE_INDEX = 0;
     private static final int RANK_COLOR_GIFTED_RANKS_REQUIRED = 100;
+    private static final int WIN_REWARD_HYPIXEL_GOLD = 200;
     private static final long DAY_MILLIS = 24L * 60L * 60L * 1000L;
     private static final ZoneId EASTERN_TIME_ZONE = ZoneId.of("America/New_York");
     private static final long BUILD_MODE_DURATION_MILLIS = 10L * 60L * 1000L;
@@ -832,6 +833,9 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
 
     @Override
     public void recordGameResult(GameResult result) {
+        if (result == null) {
+            return;
+        }
         Profile profile = profileService.getProfile(result.getUuid());
         if (profile == null) {
             return;
@@ -840,6 +844,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
         profile.getStats().addGame();
         if (result.isWin()) {
             profile.getStats().addWin();
+            profile.setNetworkGold(profile.getNetworkGold() + WIN_REWARD_HYPIXEL_GOLD);
         }
         if (result.getKills() > 0) {
             profile.getStats().addKills(result.getKills());

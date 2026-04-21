@@ -78,7 +78,7 @@ public class EditNewsMenu extends Menu {
                 ? "FLASH"
                 : snapshot.getMessageType().name();
         List<String> lore = new ArrayList<String>();
-        lore.add(ChatColor.GRAY + "Set how this message animates.");
+        lore.add(ChatColor.GRAY + "Change how this message animates.");
         lore.add(ChatColor.GOLD + "Selected Type: " + typeLabel);
         lore.add("");
         lore.add(ChatColor.YELLOW + "Click to toggle!");
@@ -100,7 +100,7 @@ public class EditNewsMenu extends Menu {
             lore.add(ChatColor.GRAY + "Edit start, flash, and end colors.");
         }
         lore.add("");
-        lore.add(ChatColor.YELLOW + "Click to edit colors!");
+        lore.add(ChatColor.YELLOW + "Click to edit!");
         return item(
                 Material.SIGN,
                 ChatColor.GREEN + "Message Colors",
@@ -131,7 +131,7 @@ public class EditNewsMenu extends Menu {
 
     private org.bukkit.inventory.ItemStack saveItem() {
         List<String> lore = new ArrayList<String>();
-        lore.add(ChatColor.GRAY + "Save these edit settings.");
+        lore.add(ChatColor.GRAY + "Save this news item.");
         lore.add("");
         lore.add(ChatColor.YELLOW + "Click to save!");
         return item(Material.BOOK, ChatColor.GREEN + "Save", lore);

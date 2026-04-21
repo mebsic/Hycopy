@@ -11,13 +11,13 @@ import java.util.List;
 
 public class EditMessageColorMenu extends Menu {
     private static final ChatColor[] SUPPORTED_COLORS = new ChatColor[] {
-            ChatColor.LIGHT_PURPLE,
             ChatColor.AQUA,
             ChatColor.BLACK,
             ChatColor.BLUE,
             ChatColor.GOLD,
             ChatColor.GRAY,
             ChatColor.GREEN,
+            ChatColor.LIGHT_PURPLE,
             ChatColor.RED,
             ChatColor.WHITE,
             ChatColor.YELLOW,
@@ -143,8 +143,8 @@ public class EditMessageColorMenu extends Menu {
         String prefix = selected
                 ? ChatColor.GRAY + "➜ "
                 : ChatColor.DARK_GRAY + "   ";
-        ChatColor displayColor = resolved == ChatColor.BLACK ? ChatColor.GRAY : resolved;
-        return prefix + displayColor + "&" + resolved.getChar() + " " + colorName(resolved);
+        ChatColor loreColor = resolved == ChatColor.BLACK ? ChatColor.GRAY : resolved;
+        return prefix + loreColor + "&" + loreColor.getChar() + " " + colorName(resolved);
     }
 
     private String colorName(ChatColor color) {
