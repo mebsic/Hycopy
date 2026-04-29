@@ -1013,9 +1013,15 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
             return;
         }
         Location current = player.getLocation();
-        float yaw = current == null ? 0.0f : current.getYaw();
-        float pitch = current == null ? 0.0f : current.getPitch();
-        Location target = new Location(world, point.blockX + 0.5d, point.blockY + 1.0d, point.blockZ + 0.5d, yaw, pitch);
+        float yaw = point.hasRotation || current == null ? point.yaw : current.getYaw();
+        float pitch = point.hasRotation || current == null ? point.pitch : current.getPitch();
+        Location target = new Location(
+                world,
+                point.blockX + 0.5d,
+                point.blockY + 1.0d,
+                point.blockZ + 0.5d,
+                yaw,
+                pitch);
         player.teleport(target);
     }
 
@@ -1038,7 +1044,7 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
         if (world == null) {
             return null;
         }
-        return new Location(world, point.x, point.y, point.z, 0.0f, 0.0f);
+        return new Location(world, point.x, point.y, point.z, point.yaw, point.pitch);
     }
 
     private ParkourPoint voidRecoveryPoint(ActiveRun active, ParkourRoute route) {
@@ -1573,7 +1579,15 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
             if (x == null || y == null || z == null) {
                 return null;
             }
-            return new ParkourPoint(safeText(doc.get("world")), x, y, z);
+            boolean hasRotation = doc.containsKey("yaw") || doc.containsKey("pitch");
+            return new ParkourPoint(
+                    safeText(doc.get("world")),
+                    x,
+                    y,
+                    z,
+                    readFloat(doc.get("yaw"), 0.0f),
+                    readFloat(doc.get("pitch"), 0.0f),
+                    hasRotation);
         }
         String serialized = safeText(raw);
         if (serialized.isEmpty()) {
@@ -1589,7 +1603,15 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
         if (x == null || y == null || z == null) {
             return null;
         }
-        return new ParkourPoint(safeText(parts[0]), x, y, z);
+        boolean hasRotation = parts.length > 4;
+        float yaw = hasRotation ? readFloat(parts[4], 0.0f) : 0.0f;
+        float pitch = parts.length > 5 ? readFloat(parts[5], 0.0f) : 0.0f;
+        return new ParkourPoint(safeText(parts[0]), x, y, z, yaw, pitch, hasRotation);
+    }
+
+    private float readFloat(Object raw, float fallback) {
+        Double value = readDouble(raw);
+        return value == null ? fallback : value.floatValue();
     }
 
     private Double readDouble(Object raw) {
@@ -1685,15 +1707,27 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
         private final double x;
         private final double y;
         private final double z;
+        private final float yaw;
+        private final float pitch;
+        private final boolean hasRotation;
         private final int blockX;
         private final int blockY;
         private final int blockZ;
 
-        private ParkourPoint(String world, double x, double y, double z) {
+        private ParkourPoint(String world,
+                             double x,
+                             double y,
+                             double z,
+                             float yaw,
+                             float pitch,
+                             boolean hasRotation) {
             this.world = world == null ? "" : world;
             this.x = x;
             this.y = y;
             this.z = z;
+            this.yaw = yaw;
+            this.pitch = pitch;
+            this.hasRotation = hasRotation;
             this.blockX = (int) Math.floor(x);
             this.blockY = (int) Math.floor(y);
             this.blockZ = (int) Math.floor(z);

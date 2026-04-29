@@ -94,6 +94,7 @@ public class MurderMysteryGameManager extends GameManager {
     private static final int DEFAULT_GOLD_PICKUP_TOKEN_REWARD = 10;
     private static final int DEFAULT_SURVIVE_30_SECONDS_TOKEN_REWARD = 50;
     private static final int DEFAULT_MURDERER_KILL_TOKEN_REWARD = 100;
+    private static final int HOTBAR_SLOT_ONE_INDEX = 0; // Slot 1 in the player's hotbar.
     private static final int KNIFE_HOTBAR_SLOT = 1; // Slot 2 in the player's hotbar.
     private static final int BOW_HOTBAR_SLOT = 1;
     private static final int ARROW_HOTBAR_SLOT = 2;
@@ -259,6 +260,9 @@ public class MurderMysteryGameManager extends GameManager {
             return;
         }
         if (mmPlayer.getRole() == MurderMysteryRole.DETECTIVE || mmPlayer.getRole() == MurderMysteryRole.HERO) {
+            if (originalDetectiveUuid != null && originalDetectiveUuid.equals(mmPlayer.getUuid())) {
+                originalDetectiveEliminated = true;
+            }
             if (mmPlayer.hasDetectiveBow() && player.getInventory().contains(Material.BOW)) {
                 dropBowAt(player.getLocation());
                 if (mmPlayer.getRole() == MurderMysteryRole.DETECTIVE
@@ -423,7 +427,10 @@ public class MurderMysteryGameManager extends GameManager {
 
     @Override
     protected void appendPostGameSummaryLines(Player player, GamePlayer gamePlayer, List<String> lines) {
-        MurderMysteryGamePlayer detective = findPlayerByRole(MurderMysteryRole.DETECTIVE);
+        MurderMysteryGamePlayer detective = findPlayerByUuid(originalDetectiveUuid);
+        if (detective == null && originalDetectiveUuid == null) {
+            detective = findPlayerByRole(MurderMysteryRole.DETECTIVE);
+        }
         MurderMysteryGamePlayer murderer = findPlayerByRole(MurderMysteryRole.MURDERER);
         MurderMysteryGamePlayer hero = findHeroSummaryPlayer();
 
@@ -431,14 +438,26 @@ public class MurderMysteryGameManager extends GameManager {
             lines.add(lines.size() - 1, "");
         }
         lines.add("");
-        String detectiveName = detective != null
-                ? formatParticipantName(detective, true)
-                : formatParticipantName(originalDetectiveUuid, originalDetectiveEliminated, true);
+        UUID detectiveUuid = originalDetectiveUuid == null && detective != null
+                ? detective.getUuid()
+                : originalDetectiveUuid;
+        boolean detectiveEliminated = detective != null && !detective.isAlive();
+        if (originalDetectiveEliminated
+                && originalDetectiveUuid != null
+                && originalDetectiveUuid.equals(detectiveUuid)) {
+            detectiveEliminated = true;
+        }
+        String detectiveName = formatParticipantName(detectiveUuid, detectiveEliminated, true);
         lines.add(centerPostGameLine(ChatColor.GRAY + "Detective: " + detectiveName, POST_GAME_RESULT_TEXT_WIDTH));
         int murdererKills = getMurdererKillCount(murderer);
-        String murdererName = murderer != null
-                ? formatParticipantName(murderer, true)
-                : formatParticipantName(summaryMurdererUuid, summaryMurdererEliminated, true);
+        UUID murdererUuid = murderer == null ? summaryMurdererUuid : murderer.getUuid();
+        boolean murdererEliminated = murderer != null && !murderer.isAlive();
+        if (summaryMurdererEliminated
+                && summaryMurdererUuid != null
+                && summaryMurdererUuid.equals(murdererUuid)) {
+            murdererEliminated = true;
+        }
+        String murdererName = formatParticipantName(murdererUuid, murdererEliminated, true);
         lines.add(centerPostGameLine(ChatColor.GRAY + "Murderer: " + murdererName
                 + ChatColor.GRAY + " (" + ChatColor.GOLD + murdererKills + ChatColor.GRAY + " "
                 + murdererKillLabel(murdererKills) + ")", POST_GAME_RESULT_TEXT_WIDTH));
@@ -854,7 +873,10 @@ public class MurderMysteryGameManager extends GameManager {
         awardTokens(player, getGoldPickupTokenReward(), TOKEN_REASON_PICKED_UP_GOLD);
         mmPlayer.addGold(amount);
         if (mmPlayer.getRole() == MurderMysteryRole.INNOCENT && mmPlayer.getGold() >= GOLD_FOR_BOW) {
-            grantArrowsFromGold(player, mmPlayer, BOW_HOTBAR_SLOT, ARROW_HOTBAR_SLOT);
+            int arrowsAdded = grantArrowsFromGold(player, mmPlayer, BOW_HOTBAR_SLOT, ARROW_HOTBAR_SLOT);
+            if (arrowsAdded > 0) {
+                player.getInventory().setHeldItemSlot(BOW_HOTBAR_SLOT);
+            }
         } else if (mmPlayer.getRole() == MurderMysteryRole.MURDERER && mmPlayer.getGold() >= GOLD_FOR_BOW) {
             grantArrowsFromGold(player, mmPlayer, MURDERER_BOW_HOTBAR_SLOT, MURDERER_ARROW_HOTBAR_SLOT);
         }
@@ -1039,6 +1061,7 @@ public class MurderMysteryGameManager extends GameManager {
             player.getInventory().setItem(ARROW_HOTBAR_SLOT, new ItemStack(Material.ARROW, 1));
         }
         syncGoldHotbarItem(player, mmPlayer);
+        player.getInventory().setHeldItemSlot(BOW_HOTBAR_SLOT);
         player.sendMessage(ChatColor.GREEN + "You picked up the bow! "
                 + ChatColor.GOLD + "You are now the Detective!");
         broadcast(ChatColor.YELLOW + "A player has picked up the Bow!");
@@ -1066,6 +1089,7 @@ public class MurderMysteryGameManager extends GameManager {
         }
         syncGoldHotbarItem(player, mmPlayer);
         if (!fromGold) {
+            player.getInventory().setHeldItemSlot(BOW_HOTBAR_SLOT);
             player.sendMessage(ChatColor.GREEN + "You picked up the bow! "
                     + ChatColor.GOLD + "GOAL: Find and kill the murderer!");
             broadcast(ChatColor.YELLOW + "A player has picked up the Bow!");
@@ -1295,6 +1319,7 @@ public class MurderMysteryGameManager extends GameManager {
             murdererSwordUnlocked = true;
             giveMurdererSwordNow();
             giveDetectiveBowNow();
+            forceGamePlayersToHotbarSlotOne();
             broadcastMurdererSwordReceivedMessageToOthers();
             updateScoreboardAll();
             return;
@@ -1382,7 +1407,7 @@ public class MurderMysteryGameManager extends GameManager {
             }
             ItemStack knife = createMurdererKnife(coreApi, player);
             player.getInventory().setItem(KNIFE_HOTBAR_SLOT, knife);
-            player.getInventory().setHeldItemSlot(KNIFE_HOTBAR_SLOT);
+            player.getInventory().setHeldItemSlot(HOTBAR_SLOT_ONE_INDEX);
             mmPlayer.markMurdererWeaponGrantedNow();
             player.sendMessage(ChatColor.YELLOW + "You have received your sword!");
             getTitleService().send(
@@ -1546,7 +1571,7 @@ public class MurderMysteryGameManager extends GameManager {
                 CoreApi coreApi = getPlugin().getCoreApi();
                 ItemStack knife = createMurdererKnife(coreApi, player);
                 player.getInventory().setItem(KNIFE_HOTBAR_SLOT, knife);
-                player.getInventory().setHeldItemSlot(KNIFE_HOTBAR_SLOT);
+                player.getInventory().setHeldItemSlot(HOTBAR_SLOT_ONE_INDEX);
                 selected.markMurdererWeaponGrantedNow();
             }
             showRoleTitle(player, selected.getRole());
@@ -1554,6 +1579,16 @@ public class MurderMysteryGameManager extends GameManager {
             player.sendMessage(ChatColor.GREEN + "The previous Murderer left, you are now taking their position!");
         }
         refreshMurdererLastInnocentSpeed();
+    }
+
+    private void forceGamePlayersToHotbarSlotOne() {
+        for (MurderMysteryGamePlayer mmPlayer : getMmPlayers()) {
+            Player player = Bukkit.getPlayer(mmPlayer.getUuid());
+            if (player == null || !player.isOnline()) {
+                continue;
+            }
+            player.getInventory().setHeldItemSlot(HOTBAR_SLOT_ONE_INDEX);
+        }
     }
 
     private void sendTeamingWarning(Player player, MurderMysteryRole role) {
@@ -2018,6 +2053,18 @@ public class MurderMysteryGameManager extends GameManager {
         }
         for (MurderMysteryGamePlayer mmPlayer : getMmPlayers()) {
             if (mmPlayer.getRole() == role) {
+                return mmPlayer;
+            }
+        }
+        return null;
+    }
+
+    private MurderMysteryGamePlayer findPlayerByUuid(UUID uuid) {
+        if (uuid == null) {
+            return null;
+        }
+        for (MurderMysteryGamePlayer mmPlayer : getMmPlayers()) {
+            if (uuid.equals(mmPlayer.getUuid())) {
                 return mmPlayer;
             }
         }

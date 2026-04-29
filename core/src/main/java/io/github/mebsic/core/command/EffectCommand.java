@@ -95,6 +95,9 @@ public class EffectCommand implements CommandExecutor, TabCompleter {
         if (sender instanceof Player && !RankUtil.hasAtLeast(plugin, (Player) sender, Rank.STAFF)) {
             return Collections.emptyList();
         }
+        if (args.length == 1) {
+            return matching(playerSuggestions(), args[0]);
+        }
         if (args.length == 2) {
             return matching(EFFECT_TYPE_SUGGESTIONS, args[1]);
         }
@@ -177,6 +180,14 @@ public class EffectCommand implements CommandExecutor, TabCompleter {
     private void sendUsage(CommandSender sender, String label) {
         sender.sendMessage(ChatColor.RED + "Invalid usage! Correct usage:");
         sender.sendMessage(ChatColor.RED + "/" + label + " <player/all> <type> <duration/forever> [amount]");
+    }
+
+    private List<String> playerSuggestions() {
+        List<String> suggestions = new ArrayList<String>();
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            suggestions.add(player.getName());
+        }
+        return suggestions;
     }
 
     private List<String> matching(List<String> values, String prefix) {
