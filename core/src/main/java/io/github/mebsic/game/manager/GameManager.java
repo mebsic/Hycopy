@@ -102,6 +102,7 @@ public class GameManager {
     private BukkitTask mapConfigPollTask;
     private BukkitTask nonInGameCleanupTask;
     private volatile String mapConfigFingerprint;
+    private String endingScoreboardMapName;
 
     public GameManager(CorePlugin plugin, BossBarService bossBarService) {
         this.plugin = plugin;
@@ -117,6 +118,7 @@ public class GameManager {
         this.mapConfigReloadQueued = new AtomicBoolean(false);
         this.scoreboardTitleAnimators = new HashMap<>();
         this.state = GameState.WAITING;
+        this.endingScoreboardMapName = "";
         publishStateToCore();
         this.joinLockedForRestart = false;
         loadConfig();
@@ -550,6 +552,7 @@ public class GameManager {
             return;
         }
         state = GameState.IN_GAME;
+        endingScoreboardMapName = "";
         publishStateToCore();
         gameRemaining = gameSeconds;
         applyMapTime(activeMap);
@@ -930,6 +933,7 @@ public class GameManager {
         if (state == GameState.ENDING) {
             return;
         }
+        endingScoreboardMapName = getActiveMapName();
         final boolean transferAfterEnd = shouldTransferPlayersAfterGameEnd();
         final boolean showQueuedTransferSummaryLine = transferAfterEnd && hasAvailableTransferTargetForCurrentGameType();
         if (transferAfterEnd) {
@@ -961,6 +965,7 @@ public class GameManager {
                 }
                 joinLockedForRestart = false;
                 state = GameState.WAITING;
+                endingScoreboardMapName = "";
                 publishStateToCore();
                 rotateToNextMapAndPersistActiveSelection();
                 for (UUID uuid : players.keySet()) {
@@ -1559,7 +1564,7 @@ public class GameManager {
         List<String> lines = new ArrayList<>();
         if (state == GameState.WAITING || state == GameState.STARTING) {
             lines.add(ChatColor.WHITE + "Server: " + ChatColor.GREEN + serverName);
-            lines.add(ChatColor.WHITE + "Map: " + ChatColor.GREEN + getActiveMapName());
+            lines.add(ChatColor.WHITE + "Map: " + ChatColor.GREEN + getScoreboardMapName());
             lines.add(ChatColor.WHITE + "Players: " + ChatColor.GREEN + players.size() + "/" + maxPlayers);
             if (state == GameState.STARTING) {
                 lines.add(ChatColor.WHITE + "Starting in " + ChatColor.GREEN + formatTime(countdownRemaining) + "s");
@@ -1643,10 +1648,20 @@ public class GameManager {
     }
 
     protected void appendDefaultInGameScoreboardLines(List<String> lines) {
-        lines.add(ChatColor.WHITE + "Map: " + ChatColor.GREEN + getActiveMapName());
+        lines.add(ChatColor.WHITE + "Map: " + ChatColor.GREEN + getScoreboardMapName());
         lines.add(ChatColor.WHITE + "State: " + ChatColor.GREEN + state.name());
         lines.add(ChatColor.WHITE + "Alive: " + ChatColor.GREEN + getAlivePlayers());
         lines.add(ChatColor.WHITE + "Time: " + ChatColor.GREEN + formatTime(gameRemaining));
+    }
+
+    protected String getScoreboardMapName() {
+        if (state == GameState.ENDING) {
+            String endingMap = safeString(endingScoreboardMapName);
+            if (!endingMap.isEmpty()) {
+                return endingMap;
+            }
+        }
+        return getActiveMapName();
     }
 
     protected void appendPregameScoreboardLines(Player player, GamePlayer gp, List<String> lines) {

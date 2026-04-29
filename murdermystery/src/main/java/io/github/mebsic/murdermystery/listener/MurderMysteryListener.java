@@ -73,12 +73,14 @@ public class MurderMysteryListener implements Listener {
     private static final long GLASS_PANE_BREAK_RESET_SECONDS = 5L;
     private static final long MURDERER_KNIFE_DRIP_PARTICLE_INTERVAL_TICKS = 3L;
     private static final double MURDERER_KNIFE_DRIP_PARTICLE_CHANCE = 0.35D;
-    private static final double MURDERER_KNIFE_DRIP_HAND_HEIGHT = 1.2D;
+    private static final double MURDERER_KNIFE_DRIP_HAND_HEIGHT = 1.38D;
     private static final double MURDERER_KNIFE_DRIP_HAND_FORWARD_OFFSET = 0.34D;
     private static final double MURDERER_KNIFE_DRIP_HAND_SIDE_OFFSET = 0.22D;
-    private static final double MURDERER_KNIFE_DRIP_GROUND_SCAN_DEPTH = 1.6D;
-    private static final double MURDERER_KNIFE_DRIP_GROUND_SCAN_STEP = 0.2D;
-    private static final double MURDERER_KNIFE_DRIP_GROUND_JITTER = 0.07D;
+    private static final double MURDERER_KNIFE_DRIP_HAND_JITTER = 0.07D;
+    private static final float MURDERER_KNIFE_DRIP_RED = 1.0F;
+    private static final float MURDERER_KNIFE_DRIP_GREEN = 0.0F;
+    private static final float MURDERER_KNIFE_DRIP_BLUE = 0.0F;
+    private static final int MURDERER_KNIFE_DRIP_PARTICLE_RADIUS = 64;
     private static final Sound GLASS_SHATTER_SOUND = resolveCompatibleSound("GLASS", "BLOCK_GLASS_BREAK");
     private static final double ELIMINATED_PLAYER_HEALTH = 0.01D;
 
@@ -511,14 +513,33 @@ public class MurderMysteryListener implements Listener {
         if (handLocation == null || handLocation.getWorld() == null) {
             return;
         }
-        Location groundLocation = findKnifeDripGroundLocation(handLocation);
-        if (groundLocation.getWorld() == null) {
+        double jitterX = (Math.random() - 0.5D) * MURDERER_KNIFE_DRIP_HAND_JITTER;
+        double jitterY = (Math.random() - 0.5D) * MURDERER_KNIFE_DRIP_HAND_JITTER;
+        double jitterZ = (Math.random() - 0.5D) * MURDERER_KNIFE_DRIP_HAND_JITTER;
+        handLocation.add(jitterX, jitterY, jitterZ);
+        playRedKnifeDust(handLocation);
+    }
+
+    private void playRedKnifeDust(Location location) {
+        if (location == null || location.getWorld() == null) {
             return;
         }
-        double jitterX = (Math.random() - 0.5D) * MURDERER_KNIFE_DRIP_GROUND_JITTER;
-        double jitterZ = (Math.random() - 0.5D) * MURDERER_KNIFE_DRIP_GROUND_JITTER;
-        groundLocation.add(jitterX, 0.0D, jitterZ);
-        groundLocation.getWorld().playEffect(groundLocation, Effect.COLOURED_DUST, 0);
+        try {
+            location.getWorld().spigot().playEffect(
+                    location,
+                    Effect.COLOURED_DUST,
+                    0,
+                    0,
+                    MURDERER_KNIFE_DRIP_RED,
+                    MURDERER_KNIFE_DRIP_GREEN,
+                    MURDERER_KNIFE_DRIP_BLUE,
+                    1.0F,
+                    0,
+                    MURDERER_KNIFE_DRIP_PARTICLE_RADIUS
+            );
+        } catch (Throwable ignored) {
+            location.getWorld().playEffect(location, Effect.COLOURED_DUST, 0);
+        }
     }
 
     private Location murdererKnifeHandLocation(Player player) {
@@ -534,20 +555,6 @@ public class MurderMysteryListener implements Listener {
                 (forwardZ * MURDERER_KNIFE_DRIP_HAND_FORWARD_OFFSET) + (rightZ * MURDERER_KNIFE_DRIP_HAND_SIDE_OFFSET)
         );
         return base;
-    }
-
-    private Location findKnifeDripGroundLocation(Location handLocation) {
-        Location cursor = handLocation.clone();
-        double scannedDepth = 0.0D;
-        while (scannedDepth < MURDERER_KNIFE_DRIP_GROUND_SCAN_DEPTH) {
-            cursor.subtract(0.0D, MURDERER_KNIFE_DRIP_GROUND_SCAN_STEP, 0.0D);
-            scannedDepth += MURDERER_KNIFE_DRIP_GROUND_SCAN_STEP;
-            Block block = cursor.getBlock();
-            if (block != null && block.getType().isSolid()) {
-                return block.getLocation().add(0.5D, 1.0D / 16.0D, 0.5D);
-            }
-        }
-        return cursor;
     }
 
     private void setEliminatedHealth(Player victim) {

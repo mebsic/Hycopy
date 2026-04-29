@@ -352,7 +352,7 @@ public class MurderMysteryGameManager extends GameManager {
             }
             lines.add("   ");
         }
-        lines.add(ChatColor.WHITE + "Map: " + ChatColor.GREEN + getActiveMapName());
+        lines.add(ChatColor.WHITE + "Map: " + ChatColor.GREEN + getScoreboardMapName());
         lines.add("     ");
         lines.add(ChatColor.YELLOW + NetworkConstants.website());
     }
@@ -362,7 +362,7 @@ public class MurderMysteryGameManager extends GameManager {
         lines.clear();
         lines.add(buildDateAndServerLine());
         lines.add("");
-        lines.add(ChatColor.WHITE + "Map: " + ChatColor.GREEN + getActiveMapName());
+        lines.add(ChatColor.WHITE + "Map: " + ChatColor.GREEN + getScoreboardMapName());
         lines.add(ChatColor.WHITE + "Players: " + ChatColor.GREEN + getPlayerCount() + "/" + getMaxPlayers());
         lines.add(" ");
         if (getState() == GameState.STARTING) {
