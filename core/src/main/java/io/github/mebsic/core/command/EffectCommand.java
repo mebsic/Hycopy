@@ -9,20 +9,23 @@ import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-public class EffectCommand implements CommandExecutor {
+public class EffectCommand implements CommandExecutor, TabCompleter {
     private static final int TICKS_PER_SECOND = 20;
     private static final int FOREVER_TICKS = Integer.MAX_VALUE;
     private static final Map<String, PotionEffectType> EFFECT_TYPES = createEffectTypes();
+    private static final List<String> EFFECT_TYPE_SUGGESTIONS = createEffectTypeSuggestions();
 
     private final CorePlugin plugin;
 
@@ -64,16 +67,16 @@ public class EffectCommand implements CommandExecutor {
             return true;
         }
 
-        int amount = 0;
+        int amount = 1;
         if (args.length == 4) {
             amount = parseAmount(args[3]);
-            if (amount < 0) {
-                sender.sendMessage(ChatColor.RED + "Amount cannot be a negative number!");
+            if (amount < 1) {
+                sender.sendMessage(ChatColor.RED + "Amount cannot be less than 1!");
                 return true;
             }
         }
 
-        PotionEffect effect = new PotionEffect(effectType, durationTicks, amount);
+        PotionEffect effect = new PotionEffect(effectType, durationTicks, amount - 1);
         boolean failed = false;
         for (Player target : targets) {
             try {
@@ -85,6 +88,17 @@ public class EffectCommand implements CommandExecutor {
 
         sender.sendMessage(failed ? ChatColor.RED + "Failed!" : ChatColor.GREEN + CommonMessages.DONE);
         return true;
+    }
+
+    @Override
+    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+        if (sender instanceof Player && !RankUtil.hasAtLeast(plugin, (Player) sender, Rank.STAFF)) {
+            return Collections.emptyList();
+        }
+        if (args.length == 2) {
+            return matching(EFFECT_TYPE_SUGGESTIONS, args[1]);
+        }
+        return Collections.emptyList();
     }
 
     private List<Player> resolveTargets(CommandSender sender, String rawTarget) {
@@ -146,7 +160,7 @@ public class EffectCommand implements CommandExecutor {
         }
         try {
             int amount = Integer.parseInt(rawAmount);
-            return amount < 0 ? -1 : amount;
+            return amount < 1 ? -1 : amount;
         } catch (NumberFormatException ex) {
             return -1;
         }
@@ -165,8 +179,22 @@ public class EffectCommand implements CommandExecutor {
         sender.sendMessage(ChatColor.RED + "/" + label + " <player/all> <type> <duration/forever> [amount]");
     }
 
+    private List<String> matching(List<String> values, String prefix) {
+        if (values == null || values.isEmpty()) {
+            return Collections.emptyList();
+        }
+        String normalizedPrefix = prefix == null ? "" : prefix.toLowerCase(Locale.ROOT);
+        List<String> matches = new ArrayList<String>();
+        for (String value : values) {
+            if (value != null && value.toLowerCase(Locale.ROOT).startsWith(normalizedPrefix)) {
+                matches.add(value);
+            }
+        }
+        return matches;
+    }
+
     private static Map<String, PotionEffectType> createEffectTypes() {
-        Map<String, PotionEffectType> types = new HashMap<>();
+        Map<String, PotionEffectType> types = new LinkedHashMap<>();
         types.put("speed", PotionEffectType.SPEED);
         types.put("slow", PotionEffectType.SLOW);
         types.put("fast_digging", PotionEffectType.FAST_DIGGING);
@@ -191,5 +219,13 @@ public class EffectCommand implements CommandExecutor {
         types.put("absorption", PotionEffectType.ABSORPTION);
         types.put("saturation", PotionEffectType.SATURATION);
         return types;
+    }
+
+    private static List<String> createEffectTypeSuggestions() {
+        List<String> suggestions = new ArrayList<String>();
+        for (String type : EFFECT_TYPES.keySet()) {
+            suggestions.add(type.toUpperCase(Locale.ROOT));
+        }
+        return suggestions;
     }
 }

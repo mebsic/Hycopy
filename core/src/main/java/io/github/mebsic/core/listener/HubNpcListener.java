@@ -2,6 +2,7 @@ package io.github.mebsic.core.listener;
 
 import com.mongodb.client.MongoCollection;
 import net.citizensnpcs.api.CitizensAPI;
+import net.citizensnpcs.api.npc.MemoryNPCDataStore;
 import net.citizensnpcs.api.npc.NPC;
 import net.citizensnpcs.api.npc.NPCRegistry;
 import io.github.mebsic.core.CorePlugin;
@@ -71,6 +72,12 @@ public class HubNpcListener implements Listener {
     private static final String CITIZENS_PLUGIN_NAME = "Citizens";
     private static final String CITIZENS_NAMEPLATE_VISIBLE_KEY = "nameplate-visible";
     private static final String CITIZENS_DEFAULT_NAME = "NPC";
+    private static final String RUNTIME_NPC_REGISTRY_NAME = "hypixel-runtime-hub-npcs";
+    private static final String RUNTIME_NPC_MARKER_KEY = "hypixel-runtime-npc";
+    private static final String RUNTIME_NPC_KIND_KEY = "hypixel-runtime-kind";
+    private static final String RUNTIME_NPC_VIEWER_KEY = "hypixel-profile-viewer";
+    private static final String RUNTIME_PROFILE_NPC_KIND = "PROFILE";
+    private static final String RUNTIME_PROFILE_HOLOGRAM_KIND = "PROFILE_HOLOGRAM";
 
     private final JavaPlugin plugin;
     private final CorePlugin corePlugin;
@@ -123,6 +130,7 @@ public class HubNpcListener implements Listener {
 
     public void shutdown() {
         despawnAll();
+        removeRuntimeNpcRegistry();
         if (clickToPlayRefreshTask != null) {
             clickToPlayRefreshTask.cancel();
         }
@@ -176,6 +184,7 @@ public class HubNpcListener implements Listener {
             if (online == null || !online.isOnline()) {
                 return;
             }
+            hideOtherProfileNpcsFromViewer(online);
             spawnProfileNpcsForPlayer(online);
         });
         plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
@@ -238,6 +247,46 @@ public class HubNpcListener implements Listener {
         }
         clickToPlayMenu.open(player);
         return true;
+    }
+
+    private void hideOtherProfileNpcsFromViewer(Player viewer) {
+        if (viewer == null || !viewer.isOnline() || viewer.getUniqueId() == null) {
+            return;
+        }
+        UUID viewerUuid = viewer.getUniqueId();
+        for (Map.Entry<UUID, List<RuntimeNpc>> entry : profileNpcsByViewer.entrySet()) {
+            if (entry == null || entry.getKey() == null || viewerUuid.equals(entry.getKey())) {
+                continue;
+            }
+            List<RuntimeNpc> runtimes = entry.getValue();
+            if (runtimes == null || runtimes.isEmpty()) {
+                continue;
+            }
+            for (RuntimeNpc runtime : new ArrayList<RuntimeNpc>(runtimes)) {
+                hideProfileRuntimeFromViewer(viewer, runtime);
+            }
+        }
+    }
+
+    private void hideProfileRuntimeFromViewer(Player viewer, RuntimeNpc runtime) {
+        if (viewer == null || runtime == null || runtime.kind != NpcKind.PROFILE) {
+            return;
+        }
+        Entity anchor = resolveEntity(runtime.anchorUuid);
+        if (anchor instanceof Player) {
+            setPlayerEntityVisible(viewer, (Player) anchor, false);
+        } else if (anchor != null) {
+            hideEntityFromViewer(viewer, anchor);
+        }
+        if (runtime.hologramLineUuids == null || runtime.hologramLineUuids.isEmpty()) {
+            return;
+        }
+        for (UUID lineUuid : runtime.hologramLineUuids) {
+            Entity line = resolveEntity(lineUuid);
+            if (line != null) {
+                hideEntityFromViewer(viewer, line);
+            }
+        }
     }
 
     private RuntimeNpc resolveRuntime(UUID entityUuid) {
@@ -311,6 +360,7 @@ public class HubNpcListener implements Listener {
                 profileTemplateCount++;
             }
         }
+        cleanupStaleProfileNpcArtifacts();
         spawned += spawnProfileNpcsForOnlinePlayers();
         plugin.getLogger().info("Loaded " + spawned + " hub NPC(s) for " + serverType.name()
                 + " with " + profileTemplateCount + " profile template(s).");
@@ -399,6 +449,212 @@ public class HubNpcListener implements Listener {
         return true;
     }
 
+    private void cleanupStaleProfileNpcArtifacts() {
+        if (profileNpcTemplates.isEmpty()) {
+            return;
+        }
+        int removedNpcs = cleanupStaleProfileNpcRegistryArtifacts();
+        int removedArmorStands = cleanupStaleProfileArmorStandEntities();
+        int removed = removedNpcs + removedArmorStands;
+        if (removed > 0 && plugin != null) {
+            plugin.getLogger().info("Removed " + removed + " stale Profile NPC hologram artifact(s).");
+        }
+    }
+
+    private int cleanupStaleProfileNpcRegistryArtifacts() {
+        int removed = 0;
+        Iterable<NPCRegistry> registries;
+        try {
+            registries = CitizensAPI.getNPCRegistries();
+        } catch (Throwable ignored) {
+            registries = null;
+        }
+        if (registries == null) {
+            return 0;
+        }
+        for (NPCRegistry registry : registries) {
+            if (registry == null) {
+                continue;
+            }
+            List<NPC> snapshot = new ArrayList<NPC>();
+            try {
+                for (NPC npc : registry) {
+                    if (npc != null) {
+                        snapshot.add(npc);
+                    }
+                }
+            } catch (Exception ignored) {
+                continue;
+            }
+            for (NPC npc : snapshot) {
+                if (!isStaleProfileNpcArtifact(npc)) {
+                    continue;
+                }
+                removeCitizensNpc(npc);
+                removed++;
+            }
+        }
+        return removed;
+    }
+
+    private int cleanupStaleProfileArmorStandEntities() {
+        int removed = 0;
+        for (World world : Bukkit.getWorlds()) {
+            if (world == null) {
+                continue;
+            }
+            List<Entity> entities = new ArrayList<Entity>(world.getEntities());
+            for (Entity entity : entities) {
+                if (!(entity instanceof ArmorStand)) {
+                    continue;
+                }
+                if (!isNearProfileTemplate(entity.getLocation(), 6.25d)) {
+                    continue;
+                }
+                if (!isProfileHologramText(entity.getCustomName())) {
+                    continue;
+                }
+                entity.remove();
+                removed++;
+            }
+        }
+        return removed;
+    }
+
+    private boolean isStaleProfileNpcArtifact(NPC npc) {
+        if (npc == null) {
+            return false;
+        }
+        String marker = readNpcDataText(npc, RUNTIME_NPC_MARKER_KEY);
+        String kind = readNpcDataText(npc, RUNTIME_NPC_KIND_KEY);
+        if ("true".equalsIgnoreCase(marker)
+                && !RUNTIME_PROFILE_NPC_KIND.equalsIgnoreCase(kind)
+                && !RUNTIME_PROFILE_HOLOGRAM_KIND.equalsIgnoreCase(kind)) {
+            return false;
+        }
+        Location location = resolveNpcLocation(npc);
+        if (!isNearProfileTemplate(location, 6.25d)) {
+            return false;
+        }
+        if (RUNTIME_PROFILE_NPC_KIND.equalsIgnoreCase(kind)
+                || RUNTIME_PROFILE_HOLOGRAM_KIND.equalsIgnoreCase(kind)) {
+            return true;
+        }
+        Entity entity = null;
+        try {
+            entity = npc.getEntity();
+        } catch (Exception ignored) {
+            entity = null;
+        }
+        if (isProfileHologramText(readNpcName(npc))
+                || isProfileHologramText(entity == null ? "" : entity.getCustomName())) {
+            return true;
+        }
+        return entity instanceof Player
+                && isGeneratedRuntimeNpcName(readNpcName(npc))
+                && isProfileNpcEntity(entity);
+    }
+
+    private boolean isProfileNpcEntity(Entity entity) {
+        if (!(entity instanceof LivingEntity)) {
+            return false;
+        }
+        LivingEntity living = (LivingEntity) entity;
+        if (living.getEquipment() == null) {
+            return false;
+        }
+        ItemStack item = living.getEquipment().getItemInHand();
+        return item != null && item.getType() == Material.PAPER;
+    }
+
+    private Location resolveNpcLocation(NPC npc) {
+        if (npc == null) {
+            return null;
+        }
+        try {
+            Entity entity = npc.getEntity();
+            if (entity != null && entity.getLocation() != null && entity.getLocation().getWorld() != null) {
+                return entity.getLocation();
+            }
+        } catch (Exception ignored) {
+            // Fall through to stored location.
+        }
+        try {
+            Location stored = npc.getStoredLocation();
+            if (stored != null && stored.getWorld() != null) {
+                return stored;
+            }
+        } catch (Exception ignored) {
+            return null;
+        }
+        return null;
+    }
+
+    private boolean isNearProfileTemplate(Location location, double maxDistanceSquared) {
+        if (location == null || location.getWorld() == null) {
+            return false;
+        }
+        for (ProfileNpcTemplate template : profileNpcTemplates) {
+            if (template == null || template.location == null || template.location.getWorld() == null) {
+                continue;
+            }
+            if (!template.location.getWorld().equals(location.getWorld())) {
+                continue;
+            }
+            if (template.location.distanceSquared(location) <= maxDistanceSquared) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isProfileHologramText(String text) {
+        String normalized = ChatColor.stripColor(safeText(text)).toLowerCase(Locale.ROOT);
+        if (normalized.isEmpty()) {
+            return false;
+        }
+        return (normalized.startsWith("your ") && normalized.endsWith(" profile"))
+                || normalized.startsWith("wins as murderer:")
+                || normalized.startsWith("total wins:")
+                || PROFILE_CLICK_LABEL.equalsIgnoreCase(normalized);
+    }
+
+    private boolean isGeneratedRuntimeNpcName(String text) {
+        String normalized = ChatColor.stripColor(safeText(text)).toLowerCase(Locale.ROOT);
+        return normalized.startsWith("[npc]");
+    }
+
+    private String readNpcName(NPC npc) {
+        if (npc == null) {
+            return "";
+        }
+        try {
+            String raw = safeText(npc.getRawName());
+            if (!raw.isEmpty()) {
+                return raw;
+            }
+        } catch (Exception ignored) {
+            // Fall through to display name.
+        }
+        try {
+            return safeText(npc.getName());
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    private String readNpcDataText(NPC npc, String key) {
+        if (npc == null || key == null || key.isEmpty()) {
+            return "";
+        }
+        try {
+            Object value = npc.data().get(key);
+            return safeText(value);
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
     private int spawnProfileNpcsForOnlinePlayers() {
         if (profileNpcTemplates.isEmpty()) {
             return 0;
@@ -472,7 +728,6 @@ public class HubNpcListener implements Listener {
                 hideNpcIdentity(npc, npc.getEntity());
             }
             ensureRuntimeAnchor(runtime);
-            syncProfileNpcViewerVisibility(runtime);
             applyProfileNpcViewerHologram(runtime, viewer);
         }
     }
@@ -525,10 +780,12 @@ public class HubNpcListener implements Listener {
         runtime.npc = npc;
         runtime.anchorUuid = anchor.getUniqueId();
         runtime.profileViewerUuid = profileViewerUuid;
+        markRuntimeNpc(npc, kind == NpcKind.PROFILE ? RUNTIME_PROFILE_NPC_KIND : "CLICK_TO_PLAY", profileViewerUuid);
         npcsById.put(runtime.npcId, runtime);
         npcsByEntityUuid.put(runtime.anchorUuid, runtime);
         if (kind == NpcKind.PROFILE) {
             Player viewer = profileViewerUuid == null ? null : Bukkit.getPlayer(profileViewerUuid);
+            syncProfileNpcViewerVisibility(runtime);
             applyNpcHologramLines(runtime, profileHologramLines(viewer));
             syncProfileNpcViewerVisibility(runtime);
             return runtime;
@@ -548,6 +805,7 @@ public class HubNpcListener implements Listener {
             return;
         }
         applyNpcHologramLines(runtime, profileHologramLines(viewer));
+        syncProfileNpcViewerVisibility(runtime);
     }
 
     private String resolveProfileSkinOwner(Player viewer, String fallback) {
@@ -877,7 +1135,6 @@ public class HubNpcListener implements Listener {
                     continue;
                 }
                 ensureRuntimeAnchor(runtime);
-                syncProfileNpcViewerVisibility(runtime);
                 applyProfileNpcViewerHologram(runtime, viewer);
             }
         }
@@ -938,6 +1195,21 @@ public class HubNpcListener implements Listener {
             for (Entity line : lineEntities) {
                 hideEntityFromViewer(online, line);
             }
+        }
+    }
+
+    private void hideEntityFromNonViewer(UUID viewerUuid, Entity entity) {
+        if (viewerUuid == null || entity == null) {
+            return;
+        }
+        for (Player online : Bukkit.getOnlinePlayers()) {
+            if (online == null || !online.isOnline() || online.getUniqueId() == null) {
+                continue;
+            }
+            if (viewerUuid.equals(online.getUniqueId())) {
+                continue;
+            }
+            hideEntityFromViewer(online, entity);
         }
     }
 
@@ -1069,6 +1341,35 @@ public class HubNpcListener implements Listener {
     }
 
     private NPCRegistry resolveNpcRegistry() {
+        NPCRegistry defaultRegistry = resolveDefaultNpcRegistry();
+        if (defaultRegistry == null) {
+            return null;
+        }
+        try {
+            CitizensAPI.removeNamedNPCRegistry(RUNTIME_NPC_REGISTRY_NAME);
+        } catch (Throwable ignored) {
+            // The registry may not exist yet.
+        }
+        try {
+            NPCRegistry runtimeRegistry = CitizensAPI.createNamedNPCRegistry(RUNTIME_NPC_REGISTRY_NAME, new MemoryNPCDataStore());
+            if (runtimeRegistry != null) {
+                return runtimeRegistry;
+            }
+        } catch (Throwable ignored) {
+            // Fall back to the default Citizens registry on older or restricted builds.
+        }
+        return defaultRegistry;
+    }
+
+    private void removeRuntimeNpcRegistry() {
+        try {
+            CitizensAPI.removeNamedNPCRegistry(RUNTIME_NPC_REGISTRY_NAME);
+        } catch (Throwable ignored) {
+            // Citizens may already be shutting down.
+        }
+    }
+
+    private NPCRegistry resolveDefaultNpcRegistry() {
         if (plugin == null || plugin.getServer() == null || plugin.getServer().getPluginManager() == null) {
             return null;
         }
@@ -1391,6 +1692,17 @@ public class HubNpcListener implements Listener {
         setNpcDataPersistent(npc, metadata.getKey(), value);
     }
 
+    private void markRuntimeNpc(NPC npc, String kind, UUID viewerUuid) {
+        if (npc == null) {
+            return;
+        }
+        setNpcDataPersistent(npc, RUNTIME_NPC_MARKER_KEY, Boolean.TRUE);
+        setNpcDataPersistent(npc, RUNTIME_NPC_KIND_KEY, safeText(kind));
+        if (viewerUuid != null) {
+            setNpcDataPersistent(npc, RUNTIME_NPC_VIEWER_KEY, viewerUuid.toString());
+        }
+    }
+
     private Method findDataSetter(Class<?> dataClass, Object value) {
         if (dataClass == null) {
             return null;
@@ -1462,10 +1774,26 @@ public class HubNpcListener implements Listener {
     }
 
     private void deregisterNpc(NPC npc) {
-        if (npcRegistry == null || npc == null) {
+        if (npc == null) {
             return;
         }
-        Method[] methods = npcRegistry.getClass().getMethods();
+        NPCRegistry owningRegistry = null;
+        try {
+            owningRegistry = npc.getOwningRegistry();
+        } catch (Exception ignored) {
+            owningRegistry = null;
+        }
+        if (owningRegistry == null) {
+            owningRegistry = npcRegistry;
+        }
+        deregisterNpc(owningRegistry, npc);
+    }
+
+    private void deregisterNpc(NPCRegistry registry, NPC npc) {
+        if (registry == null || npc == null) {
+            return;
+        }
+        Method[] methods = registry.getClass().getMethods();
         for (Method method : methods) {
             if (method == null || !"deregister".equals(method.getName())) {
                 continue;
@@ -1475,7 +1803,7 @@ public class HubNpcListener implements Listener {
                 continue;
             }
             try {
-                method.invoke(npcRegistry, npc);
+                method.invoke(registry, npc);
             } catch (Exception ignored) {
                 // Ignore and let entity-removal cleanup happen.
             }
@@ -1658,6 +1986,7 @@ public class HubNpcListener implements Listener {
             // Citizens versions differ; best-effort only.
         }
         configureViewerScopedHologramNpc(hologramNpc);
+        markRuntimeNpc(hologramNpc, RUNTIME_PROFILE_HOLOGRAM_KIND, viewerUuid);
         updateViewerScopedHologramNpcName(hologramNpc, line);
         applyProfileViewerFilter(hologramNpc, viewerUuid);
         try {
@@ -1679,6 +2008,7 @@ public class HubNpcListener implements Listener {
         }
         ArmorStand stand = (ArmorStand) entity;
         configureHologramStand(stand, line == null ? "" : line);
+        hideEntityFromNonViewer(viewerUuid, stand);
         return new HologramLineSpawn(stand.getUniqueId(), hologramNpc.getId());
     }
 
@@ -1914,6 +2244,21 @@ public class HubNpcListener implements Listener {
             deregisterNpc(npc);
         }
         removeEntity(runtime.anchorUuid);
+    }
+
+    private void removeCitizensNpc(NPC npc) {
+        if (npc == null) {
+            return;
+        }
+        try {
+            Entity entity = npc.getEntity();
+            if (entity != null) {
+                entity.remove();
+            }
+        } catch (Exception ignored) {
+            // Continue to registry cleanup.
+        }
+        deregisterNpc(npc);
     }
 
     private void removeEntity(UUID uuid) {

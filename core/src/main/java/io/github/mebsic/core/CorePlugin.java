@@ -37,6 +37,7 @@ import io.github.mebsic.core.listener.HubItemListener;
 import io.github.mebsic.core.listener.InventoryLockListener;
 import io.github.mebsic.core.listener.MenuListener;
 import io.github.mebsic.core.listener.PunishmentListener;
+import io.github.mebsic.core.menu.FindMenu;
 import io.github.mebsic.core.model.CosmeticType;
 import io.github.mebsic.core.model.GameResult;
 import io.github.mebsic.core.model.Profile;
@@ -246,7 +247,9 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
             getCommand("clear").setExecutor(new ClearCommand(this));
         }
         if (getCommand("effect") != null) {
-            getCommand("effect").setExecutor(new EffectCommand(this));
+            EffectCommand effectCommand = new EffectCommand(this);
+            getCommand("effect").setExecutor(effectCommand);
+            getCommand("effect").setTabCompleter(effectCommand);
         }
         if (getCommand("cleareffect") != null) {
             getCommand("cleareffect").setExecutor(new ClearEffectCommand(this));
@@ -545,6 +548,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
             hubItemListener.shutdown();
             hubItemListener = null;
         }
+        FindMenu.shutdownLiveRefreshes();
         hubParkourCommandHandler = null;
         if (profileService != null) {
             profileService.saveAllSync();

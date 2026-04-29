@@ -5,6 +5,7 @@ import com.mongodb.client.model.Filters;
 import io.github.mebsic.core.CorePlugin;
 import io.github.mebsic.core.manager.MongoManager;
 import io.github.mebsic.core.model.Rank;
+import io.github.mebsic.core.util.HubMessageUtil;
 import io.github.mebsic.core.util.HypixelExperienceUtil;
 import io.github.mebsic.core.util.RankFormatUtil;
 import org.bson.Document;
@@ -17,6 +18,7 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -31,31 +33,33 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class FindMenu extends Menu {
     private static final int SIZE = 54;
-    private static final int PAGE_SIZE = 20;
+    private static final int PAGE_SIZE = 21;
     private static final int PREVIOUS_SLOT = 45;
     private static final int CLOSE_SLOT = 49;
     private static final int NEXT_SLOT = 53;
+    private static final long DEFAULT_REFRESH_TICKS = 20L;
     private static final String CHANNEL = "BungeeCord";
+    private static final Map<UUID, BukkitTask> LIVE_REFRESH_TASKS = new ConcurrentHashMap<UUID, BukkitTask>();
     private static final int[] PLAYER_SLOTS = new int[] {
-            10, 11, 12, 13, 14,
-            19, 20, 21, 22, 23,
-            28, 29, 30, 31, 32,
-            37, 38, 39, 40, 41
+            10, 11, 12, 13, 14, 15, 16,
+            19, 20, 21, 22, 23, 24, 25,
+            28, 29, 30, 31, 32, 33, 34
     };
     private static final DateTimeFormatter DISPLAY_DATE_FORMAT =
             DateTimeFormatter.ofPattern("MMM d, yyyy h:mm a z", Locale.US);
 
     private final CorePlugin plugin;
-    private final List<FindPlayer> players;
-    private final int page;
-    private final int totalPages;
     private final Map<Integer, FindPlayer> slots;
+    private List<FindPlayer> players;
+    private int page;
+    private int totalPages;
 
     private FindMenu(CorePlugin plugin, List<FindPlayer> players, int page, int totalPages) {
-        super("Players (Page " + page + "/" + totalPages + ")", SIZE);
+        super(formatTitle(page), SIZE);
         this.plugin = plugin;
         this.players = players == null ? Collections.emptyList() : players;
         this.page = Math.max(1, page);
@@ -68,9 +72,123 @@ public class FindMenu extends Menu {
             return;
         }
         List<FindPlayer> players = loadPlayers(plugin);
-        int totalPages = Math.max(1, (int) Math.ceil(players.size() / (double) PAGE_SIZE));
-        int page = Math.max(1, Math.min(Math.max(1, requestedPage), totalPages));
-        new FindMenu(plugin, players, page, totalPages).open(viewer);
+        openWithPlayers(plugin, viewer, players, requestedPage);
+    }
+
+    private static void openWithPlayers(CorePlugin plugin, Player viewer, List<FindPlayer> players, int requestedPage) {
+        int totalPages = totalPages(players);
+        int page = clampPage(requestedPage, totalPages);
+        openSnapshot(plugin, viewer, players, page, totalPages);
+    }
+
+    private static void openSnapshot(CorePlugin plugin,
+                                     Player viewer,
+                                     List<FindPlayer> players,
+                                     int page,
+                                     int totalPages) {
+        if (viewer == null) {
+            return;
+        }
+        FindMenu menu = new FindMenu(plugin, players, page, totalPages);
+        menu.open(viewer);
+        startLiveRefresh(plugin, viewer, menu);
+    }
+
+    private static void startLiveRefresh(CorePlugin plugin, Player viewer, FindMenu menu) {
+        if (plugin == null || viewer == null || menu == null) {
+            return;
+        }
+        final UUID viewerId = viewer.getUniqueId();
+        cancelLiveRefresh(viewerId);
+        long refreshTicks = Math.max(1L, plugin.getConfig().getLong("menus.findMenuRefreshTicks", DEFAULT_REFRESH_TICKS));
+        final BukkitTask[] taskRef = new BukkitTask[1];
+        taskRef[0] = Bukkit.getScheduler().runTaskTimer(plugin, new Runnable() {
+            @Override
+            public void run() {
+                BukkitTask task = taskRef[0];
+                Player online = Bukkit.getPlayer(viewerId);
+                if (online == null || !online.isOnline() || !isViewingMenu(online, menu)) {
+                    cancelLiveRefresh(viewerId, task);
+                    return;
+                }
+                Inventory top = online.getOpenInventory() == null ? null : online.getOpenInventory().getTopInventory();
+                menu.refresh(online, top);
+            }
+        }, refreshTicks, refreshTicks);
+        LIVE_REFRESH_TASKS.put(viewerId, taskRef[0]);
+    }
+
+    private static void cancelLiveRefresh(UUID viewerId) {
+        if (viewerId == null) {
+            return;
+        }
+        BukkitTask task = LIVE_REFRESH_TASKS.remove(viewerId);
+        if (task != null) {
+            task.cancel();
+        }
+    }
+
+    private static void cancelLiveRefresh(UUID viewerId, BukkitTask expectedTask) {
+        if (viewerId == null) {
+            return;
+        }
+        if (expectedTask == null) {
+            cancelLiveRefresh(viewerId);
+            return;
+        }
+        LIVE_REFRESH_TASKS.remove(viewerId, expectedTask);
+        expectedTask.cancel();
+    }
+
+    public static void shutdownLiveRefreshes() {
+        for (BukkitTask task : LIVE_REFRESH_TASKS.values()) {
+            if (task != null) {
+                task.cancel();
+            }
+        }
+        LIVE_REFRESH_TASKS.clear();
+    }
+
+    private static boolean isViewingMenu(Player player, FindMenu menu) {
+        if (player == null || menu == null || player.getOpenInventory() == null) {
+            return false;
+        }
+        Inventory top = player.getOpenInventory().getTopInventory();
+        if (top == null || !(top.getHolder() instanceof MenuHolder)) {
+            return false;
+        }
+        return ((MenuHolder) top.getHolder()).getMenu() == menu;
+    }
+
+    private void refresh(Player viewer, Inventory inventory) {
+        if (viewer == null || inventory == null) {
+            return;
+        }
+        List<FindPlayer> refreshedPlayers = loadPlayers(plugin);
+        int refreshedTotalPages = totalPages(refreshedPlayers);
+        int refreshedPage = clampPage(page, refreshedTotalPages);
+        if (!formatTitle(refreshedPage).equals(getTitle())) {
+            openSnapshot(plugin, viewer, refreshedPlayers, refreshedPage, refreshedTotalPages);
+            return;
+        }
+        this.players = refreshedPlayers == null ? Collections.<FindPlayer>emptyList() : refreshedPlayers;
+        this.page = refreshedPage;
+        this.totalPages = refreshedTotalPages;
+        populate(viewer, inventory);
+    }
+
+    private static int totalPages(List<FindPlayer> players) {
+        int size = players == null ? 0 : players.size();
+        return Math.max(1, (int) Math.ceil(size / (double) PAGE_SIZE));
+    }
+
+    private static int clampPage(int requestedPage, int totalPages) {
+        return Math.max(1, Math.min(Math.max(1, requestedPage), Math.max(1, totalPages)));
+    }
+
+    private static String formatTitle(int page) {
+        int safePage = Math.max(1, page);
+        return safePage <= 1 ? "Players" : "Players (Page " + safePage + ")";
     }
 
     @Override
@@ -124,8 +242,9 @@ public class FindMenu extends Menu {
             viewer.sendMessage(ChatColor.RED + "You are already connected to that server!");
             return;
         }
-        sendConnect(viewer, target.serverId);
         viewer.closeInventory();
+        viewer.sendMessage(ChatColor.GREEN + HubMessageUtil.transferToServerMessage(target.serverId));
+        sendConnect(viewer, target.serverId);
     }
 
     private ItemStack playerHead(FindPlayer target, boolean currentServer) {
@@ -144,6 +263,7 @@ public class FindMenu extends Menu {
         }
         meta.setDisplayName(displayName(target));
         List<String> lore = new ArrayList<String>();
+        lore.add("");
         lore.add(ChatColor.GRAY + "First Login: " + ChatColor.GREEN + formatTimestamp(target.firstLogin));
         lore.add(ChatColor.GRAY + "Last Login: " + ChatColor.GREEN + formatTimestamp(target.lastLogin));
         lore.add("");
