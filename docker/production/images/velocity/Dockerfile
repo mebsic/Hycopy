@@ -1,4 +1,4 @@
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:latest
 
 ARG VELOCITY_VERSION=latest
 ARG USER_AGENT="hycopy-docker/2.0 (https://example.net)"
