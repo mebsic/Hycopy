@@ -31,33 +31,35 @@ public class ImageCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (!(sender instanceof Player)) {
+            sender.sendMessage(ChatColor.RED + CommonMessages.ONLY_PLAYERS_COMMAND);
+            return true;
+        }
+        Player player = (Player) sender;
         if (corePlugin == null) {
             return true;
         }
-        if (!isMurderMysteryLobby()) {
-            sender.sendMessage(ChatColor.RED + CommonMessages.LOBBY_ONLY_COMMAND);
+        if (args == null || args.length != 1) {
+            player.sendMessage(ChatColor.RED + "Invalid usage! Correct usage:");
+            player.sendMessage(ChatColor.RED + "/image <URL>");
             return true;
         }
-        if (sender instanceof Player) {
-            Player player = (Player) sender;
-            if (!RankUtil.hasAtLeast(corePlugin, player, Rank.STAFF)) {
-                player.sendMessage(ChatColor.RED + CommonMessages.NO_PERMISSION_COMMAND);
-                return true;
-            }
+        if (!isLobby()) {
+            player.sendMessage(ChatColor.RED + CommonMessages.LOBBY_ONLY_COMMAND);
+            return true;
         }
-        if (args == null || args.length != 1) {
-            sender.sendMessage(ChatColor.RED + "Invalid usage! Correct usage:");
-            sender.sendMessage(ChatColor.RED + "/image <url>");
+        if (!RankUtil.hasAtLeast(corePlugin, player, Rank.STAFF)) {
+            player.sendMessage(ChatColor.RED + CommonMessages.NO_PERMISSION_COMMAND);
             return true;
         }
 
         String imageUrl = safe(args[0]);
         if (!isSupportedImageUrl(imageUrl)) {
-            sender.sendMessage(ChatColor.RED + "Invalid image URL!");
+            player.sendMessage(ChatColor.RED + "Invalid image URL!");
             return true;
         }
         if (!corePlugin.isMongoEnabled() || corePlugin.getMongoManager() == null) {
-            sender.sendMessage(ChatColor.RED + "MongoDB is not enabled!");
+            player.sendMessage(ChatColor.RED + "MongoDB is not enabled!");
             return true;
         }
 
@@ -66,7 +68,7 @@ public class ImageCommand implements CommandExecutor {
             MongoCollection<Document> collection = corePlugin.getMongoManager()
                     .getCollection(MongoManager.MURDER_MYSTERY_INFORMATION_COLLECTION);
             if (collection == null) {
-                sender.sendMessage(ChatColor.RED + "MongoDB image settings are unavailable!");
+                player.sendMessage(ChatColor.RED + "MongoDB image settings are unavailable!");
                 return true;
             }
 
@@ -80,16 +82,16 @@ public class ImageCommand implements CommandExecutor {
                             .append("$setOnInsert", new Document("createdAt", now)),
                     new UpdateOptions().upsert(true)
             );
-            sender.sendMessage(ChatColor.GREEN + CommonMessages.DONE);
+            player.sendMessage(ChatColor.GREEN + CommonMessages.DONE);
         } catch (Exception ex) {
-            sender.sendMessage(ChatColor.RED + "Failed to update lobby image!\n" + ex.getMessage());
+            player.sendMessage(ChatColor.RED + "Failed to update lobby image!\n" + ex.getMessage());
         }
         return true;
     }
 
-    private boolean isMurderMysteryLobby() {
+    private boolean isLobby() {
         ServerType serverType = corePlugin.getServerType();
-        return serverType == ServerType.MURDER_MYSTERY_HUB;
+        return serverType != null && serverType.isHub();
     }
 
     private boolean isSupportedImageUrl(String value) {

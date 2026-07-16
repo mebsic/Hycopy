@@ -9,7 +9,7 @@ commands:
   token:
     usage: /token <player> <amount>
   image:
-    usage: /image <url>
+    usage: /image <URL>
   togglehints:
     usage: /togglehints
   togglewins:

@@ -6,6 +6,10 @@ Open-source Hypixel recreation built using Paper and Velocity with core services
 
 This is an unofficial project. It is not affiliated with or endorsed by Hypixel Inc.
 
+## Preview
+
+To try out this project, connect to `mc.hycopy.net` using Minecraft Java Edition (version 1.8)
+
 ## Project Structure
 
 - `core`: Shared Paper plugin services (profiles, ranks, punishments, menus, Mongo/Redis integration, server registry, queue support).
