@@ -42,6 +42,7 @@ public class ChatFormatListener implements Listener {
     private static final MurderMysteryWinPrefixTier[] MURDER_MYSTERY_WIN_PREFIX_TIERS =
             new MurderMysteryWinPrefixTier[]{
                     new MurderMysteryWinPrefixTier(0, ChatColor.GRAY, "✪", false),
+                    new MurderMysteryWinPrefixTier(1, ChatColor.DARK_GRAY, "✪", false),
                     new MurderMysteryWinPrefixTier(100, ChatColor.GRAY, "Φ", false),
                     new MurderMysteryWinPrefixTier(250, ChatColor.WHITE, "∅", false),
                     new MurderMysteryWinPrefixTier(500, ChatColor.GOLD, "∅", false),
@@ -165,16 +166,16 @@ public class ChatFormatListener implements Listener {
         String visiblePrefix = profile.isMurderMysteryWinsChatEnabled()
                 ? actualPrefix
                 : ChatColor.GRAY + "✪";
-        String hoverText = buildMurderMysteryWinsHoverText(sender, style, actualPrefix, totalWins);
+        String hoverText = buildMurderMysteryWinsHoverText(sender, style, totalWins);
         return new MurderMysteryWinsPrefix(visiblePrefix + " ", buildHover(hoverText));
     }
 
-    private String buildMurderMysteryWinsHoverText(Player sender,
-                                                   ChatRenderStyle style,
-                                                   String actualPrefix,
-                                                   int totalWins) {
+    private String buildMurderMysteryWinsHoverText(Player sender, ChatRenderStyle style, int totalWins) {
         String safeName = sender == null ? "Unknown" : sender.getName();
-        return actualPrefix + " " + style.prefix + style.nameColor + safeName
+        ChatRenderStyle safeStyle = style == null
+                ? new ChatRenderStyle("", ChatColor.GRAY, ChatColor.GRAY, ChatColor.GRAY)
+                : style;
+        return safeStyle.prefix + safeStyle.nameColor + safeName
                 + "\n" + ChatColor.GRAY + "Classic Wins: " + ChatColor.GREEN + formatWholeNumber(totalWins);
     }
 
