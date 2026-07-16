@@ -8,6 +8,9 @@ import io.github.mebsic.core.server.ServerType;
 import io.github.mebsic.core.service.CoreApi;
 import io.github.mebsic.core.util.RankFormatUtil;
 import io.github.mebsic.game.model.GameState;
+import net.md_5.bungee.api.chat.BaseComponent;
+import net.md_5.bungee.api.chat.HoverEvent;
+import net.md_5.bungee.api.chat.TextComponent;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Sound;
@@ -19,6 +22,7 @@ import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -37,7 +41,7 @@ public class ChatFormatListener implements Listener {
     };
     private static final MurderMysteryWinPrefixTier[] MURDER_MYSTERY_WIN_PREFIX_TIERS =
             new MurderMysteryWinPrefixTier[]{
-                    new MurderMysteryWinPrefixTier(0, ChatColor.DARK_GRAY, "✪", false),
+                    new MurderMysteryWinPrefixTier(0, ChatColor.GRAY, "✪", false),
                     new MurderMysteryWinPrefixTier(100, ChatColor.GRAY, "Φ", false),
                     new MurderMysteryWinPrefixTier(250, ChatColor.WHITE, "∅", false),
                     new MurderMysteryWinPrefixTier(500, ChatColor.GOLD, "∅", false),
@@ -110,8 +114,12 @@ public class ChatFormatListener implements Listener {
             return;
         }
         String baseMessage = highlightGoodGame ? highlightGgPhrases(message, style.messageColor) : message;
-        String header = buildMurderMysteryWinsPrefix(sender.getUniqueId())
+        MurderMysteryWinsPrefix winsPrefix = buildMurderMysteryWinsPrefix(sender, style);
+        String prefixText = winsPrefix == null ? "" : winsPrefix.visibleText;
+        String header = prefixText
                 + style.prefix + style.nameColor + sender.getName() + style.separatorColor + ": " + style.messageColor;
+        String headerWithoutWinsPrefix = style.prefix + style.nameColor + sender.getName()
+                + style.separatorColor + ": " + style.messageColor;
         String normalLine = header + baseMessage;
         UUID senderId = sender.getUniqueId();
         boolean senderSent = false;
@@ -121,7 +129,7 @@ public class ChatFormatListener implements Listener {
             }
             UUID recipientId = recipient.getUniqueId();
             if (recipientId.equals(senderId)) {
-                recipient.sendMessage(normalLine);
+                sendChatLine(recipient, winsPrefix, headerWithoutWinsPrefix + baseMessage);
                 senderSent = true;
                 continue;
             }
@@ -129,32 +137,83 @@ public class ChatFormatListener implements Listener {
                 continue;
             }
             String highlighted = highlightExactIgnMentions(baseMessage, recipient.getName(), style.messageColor);
-            recipient.sendMessage(header + highlighted);
+            sendChatLine(recipient, winsPrefix, headerWithoutWinsPrefix + highlighted);
             if (!baseMessage.equals(highlighted)) {
                 recipient.playSound(recipient.getLocation(), MENTION_DING_SOUND, 1.0f, 1.0f);
             }
         }
         if (!senderSent && sender.isOnline()) {
-            sender.sendMessage(normalLine);
+            sendChatLine(sender, winsPrefix, headerWithoutWinsPrefix + baseMessage);
         }
         Bukkit.getConsoleSender().sendMessage(ChatColor.stripColor(normalLine));
     }
 
-    private String buildMurderMysteryWinsPrefix(UUID uuid) {
-        if (uuid == null || corePlugin == null || !isMurderMysteryServer(corePlugin.getServerType())) {
-            return "";
+    private MurderMysteryWinsPrefix buildMurderMysteryWinsPrefix(Player sender, ChatRenderStyle style) {
+        if (sender == null || corePlugin == null || !isMurderMysteryServer(corePlugin.getServerType())) {
+            return null;
         }
+        UUID uuid = sender.getUniqueId();
         Profile profile = coreApi.getProfile(uuid);
-        if (profile == null || !profile.isMurderMysteryWinsChatEnabled()) {
-            return "";
+        if (profile == null) {
+            return null;
         }
         int totalWins = Math.max(0, coreApi.getCounter(uuid, MongoManager.MURDER_MYSTERY_LIFETIME_WINS_KEY));
-        if (totalWins == 0) {
-            return ChatColor.DARK_GRAY + "✪ ";
-        }
         MurderMysteryWinPrefixTier tier = resolveMurderMysteryWinPrefixTier(totalWins);
-        String prefix = "[" + formatMurderMysteryWins(totalWins) + tier.symbol + "]";
-        return colorMurderMysteryWinsPrefix(tier, prefix) + " ";
+        String actualPrefix = totalWins == 0
+                ? ChatColor.GRAY + tier.symbol
+                : colorMurderMysteryWinsPrefix(tier, "[" + formatMurderMysteryWins(totalWins) + tier.symbol + "]");
+        String visiblePrefix = profile.isMurderMysteryWinsChatEnabled()
+                ? actualPrefix
+                : ChatColor.GRAY + "✪";
+        String hoverText = buildMurderMysteryWinsHoverText(sender, style, actualPrefix, totalWins);
+        return new MurderMysteryWinsPrefix(visiblePrefix + " ", buildHover(hoverText));
+    }
+
+    private String buildMurderMysteryWinsHoverText(Player sender,
+                                                   ChatRenderStyle style,
+                                                   String actualPrefix,
+                                                   int totalWins) {
+        String safeName = sender == null ? "Unknown" : sender.getName();
+        return actualPrefix + " " + style.prefix + style.nameColor + safeName
+                + "\n" + ChatColor.GRAY + "Classic Wins: " + ChatColor.GREEN + formatWholeNumber(totalWins);
+    }
+
+    private HoverEvent buildHover(String text) {
+        BaseComponent[] hover = TextComponent.fromLegacyText(text == null ? "" : text);
+        return new HoverEvent(HoverEvent.Action.SHOW_TEXT, hover);
+    }
+
+    private void sendChatLine(Player recipient, MurderMysteryWinsPrefix winsPrefix, String restOfLine) {
+        if (recipient == null) {
+            return;
+        }
+        if (winsPrefix == null) {
+            recipient.sendMessage(restOfLine == null ? "" : restOfLine);
+            return;
+        }
+        TextComponent root = new TextComponent("");
+        addColoredText(root, winsPrefix.visibleText, winsPrefix.hover);
+        addColoredText(root, restOfLine, null);
+        recipient.spigot().sendMessage(root);
+    }
+
+    private void addColoredText(TextComponent root, String text, HoverEvent hover) {
+        if (root == null || text == null || text.isEmpty()) {
+            return;
+        }
+        BaseComponent[] converted = TextComponent.fromLegacyText(text);
+        if (converted == null || converted.length == 0) {
+            return;
+        }
+        for (BaseComponent part : converted) {
+            if (part == null) {
+                continue;
+            }
+            if (hover != null) {
+                part.setHoverEvent(hover);
+            }
+            root.addExtra(part);
+        }
     }
 
     private String colorMurderMysteryWinsPrefix(MurderMysteryWinPrefixTier tier, String prefix) {
@@ -203,6 +262,10 @@ public class ChatFormatListener implements Listener {
             return whole + "." + decimal + "k";
         }
         return (safeWins / 1_000) + "k";
+    }
+
+    private String formatWholeNumber(int value) {
+        return String.format(Locale.US, "%,d", Math.max(0, value));
     }
 
     private boolean isMurderMysteryServer(ServerType type) {
@@ -304,6 +367,16 @@ public class ChatFormatListener implements Listener {
             this.nameColor = nameColor == null ? ChatColor.WHITE : nameColor;
             this.separatorColor = separatorColor == null ? ChatColor.WHITE : separatorColor;
             this.messageColor = messageColor == null ? ChatColor.WHITE : messageColor;
+        }
+    }
+
+    private static final class MurderMysteryWinsPrefix {
+        private final String visibleText;
+        private final HoverEvent hover;
+
+        private MurderMysteryWinsPrefix(String visibleText, HoverEvent hover) {
+            this.visibleText = visibleText == null ? "" : visibleText;
+            this.hover = hover;
         }
     }
 
