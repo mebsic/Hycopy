@@ -30,7 +30,7 @@ public class RankColorCommand implements CommandExecutor {
         Player player = (Player) sender;
         ServerType serverType = plugin.getServerType();
         if (serverType == null || !serverType.isHub()) {
-            player.sendMessage(ChatColor.RED + "This is only available in lobbies!");
+            player.sendMessage(ChatColor.RED + CommonMessages.LOBBY_ONLY_COMMAND);
             return true;
         }
         if (!RankUtil.hasAtLeast(plugin, player, Rank.MVP_PLUS)) {

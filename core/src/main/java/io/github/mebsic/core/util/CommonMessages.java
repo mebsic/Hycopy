@@ -4,6 +4,7 @@ public final class CommonMessages {
     public static final String DONE = "Done!";
     public static final String NO_PERMISSION_COMMAND = "You don't have permission to run that command!";
     public static final String ONLY_PLAYERS_COMMAND = "That command is only available for players!";
+    public static final String LOBBY_ONLY_COMMAND = "That command is only available in a lobby!";
     public static final String PLAYER_NOT_FOUND_COMMAND = "That player was not found!";
     public static final String NO_SERVERS_AVAILABLE = "No servers are available! Please try again later.";
     public static final String BUILD_SERVER_NOT_ONLINE = "The build server is not online! Please try again later.";

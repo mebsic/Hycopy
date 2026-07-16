@@ -79,6 +79,8 @@ public class BuildEditMenu extends Menu {
             set(inventory, BOTTOM_LEFT_SLOT, parkourItem(player));
             set(inventory, BOTTOM_MIDDLE_SLOT, hubImageDisplayItem(player));
             set(inventory, BOTTOM_RIGHT_SLOT, leaderboardItem(player));
+        } else if (isMurderMysteryGameMode()) {
+            set(inventory, BOTTOM_LEFT_SLOT, mysteryPotionItem());
         }
     }
 
@@ -155,6 +157,13 @@ public class BuildEditMenu extends Menu {
             player.closeInventory();
             return;
         }
+        if (!isHubMode() && isMurderMysteryGameMode() && slot == BOTTOM_LEFT_SLOT) {
+            if (mapConfigService != null) {
+                mapConfigService.addMysteryPotionFromMenu(player, gameType, worldDirectory);
+            }
+            player.closeInventory();
+            return;
+        }
         if (!isHubMode()) {
             return;
         }
@@ -201,6 +210,10 @@ public class BuildEditMenu extends Menu {
         return gameType != null && gameType.isHub();
     }
 
+    private boolean isMurderMysteryGameMode() {
+        return gameType == ServerType.MURDER_MYSTERY;
+    }
+
     private Material resolveArmorStandMaterial() {
         Material armorStand = Material.matchMaterial("ARMOR_STAND");
         return armorStand == null ? Material.PAPER : armorStand;
@@ -209,6 +222,15 @@ public class BuildEditMenu extends Menu {
     private Material resolveDropperMaterial() {
         Material dropper = Material.matchMaterial("DROPPER");
         return dropper == null ? Material.PAPER : dropper;
+    }
+
+    private Material resolveBrewingStandMaterial() {
+        Material brewingStand = Material.matchMaterial("BREWING_STAND_ITEM");
+        if (brewingStand != null) {
+            return brewingStand;
+        }
+        brewingStand = Material.matchMaterial("BREWING_STAND");
+        return brewingStand == null ? Material.PAPER : brewingStand;
     }
 
     private Material resolveHubSpawnMaterial() {
@@ -267,6 +289,17 @@ public class BuildEditMenu extends Menu {
                 ChatColor.GREEN + "Drop Item",
                 ChatColor.GRAY + "This will add an item to drop on the ground",
                 ChatColor.GRAY + "using the current item you are holding.",
+                "",
+                ChatColor.YELLOW + "Click to add!"
+        );
+    }
+
+    private ItemStack mysteryPotionItem() {
+        return item(
+                resolveBrewingStandMaterial(),
+                ChatColor.GREEN + "Mystery Potion",
+                ChatColor.GRAY + "This will save the brewing stand",
+                ChatColor.GRAY + "you are looking at as a Mystery Potion.",
                 "",
                 ChatColor.YELLOW + "Click to add!"
         );

@@ -33,6 +33,7 @@ public class ProfileStore {
         BASE_STATS_KEYS.add(MongoManager.MURDER_MYSTERY_LIFETIME_WINS_KEY);
         BASE_STATS_KEYS.add(MongoManager.MURDER_MYSTERY_LIFETIME_KILLS_KEY);
         BASE_STATS_KEYS.add(MongoManager.MURDER_MYSTERY_LIFETIME_GAMES_KEY);
+        BASE_STATS_KEYS.add(MongoManager.MURDER_MYSTERY_WINS_CHAT_ENABLED_KEY);
     }
     private static final String DEFAULT_KNIFE_ID = KnifeSkinStore.DEFAULT_KNIFE_ID;
     private static final KnifeSkinDefinition DEFAULT_KNIFE = new KnifeSkinDefinition(
@@ -184,6 +185,10 @@ public class ProfileStore {
             s.addKills(readStatValue(stats, MongoManager.MURDER_MYSTERY_LIFETIME_KILLS_KEY));
             s.addWins(readStatValue(stats, MongoManager.MURDER_MYSTERY_LIFETIME_WINS_KEY));
             s.addGames(readStatValue(stats, MongoManager.MURDER_MYSTERY_LIFETIME_GAMES_KEY));
+            Boolean winsChatEnabled = stats.getBoolean(MongoManager.MURDER_MYSTERY_WINS_CHAT_ENABLED_KEY);
+            if (winsChatEnabled != null) {
+                profile.setMurderMysteryWinsChatEnabled(winsChatEnabled);
+            }
             // Treat any extra numeric stats keys as custom counters for the Murder Mystery scope.
             for (Map.Entry<String, Object> entry : stats.entrySet()) {
                 if (entry == null || entry.getKey() == null) {
@@ -259,7 +264,8 @@ public class ProfileStore {
         MongoCollection<Document> collection = mongo.getProfiles();
         Document murderMysteryStats = new Document(MongoManager.MURDER_MYSTERY_LIFETIME_WINS_KEY, profile.getStats().getWins())
                 .append(MongoManager.MURDER_MYSTERY_LIFETIME_KILLS_KEY, profile.getStats().getKills())
-                .append(MongoManager.MURDER_MYSTERY_LIFETIME_GAMES_KEY, profile.getStats().getGames());
+                .append(MongoManager.MURDER_MYSTERY_LIFETIME_GAMES_KEY, profile.getStats().getGames())
+                .append(MongoManager.MURDER_MYSTERY_WINS_CHAT_ENABLED_KEY, profile.isMurderMysteryWinsChatEnabled());
         for (Map.Entry<String, Integer> entry : profile.getStats().getCustomCounters().entrySet()) {
             if (entry == null || entry.getKey() == null) {
                 continue;

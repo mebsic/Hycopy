@@ -33,7 +33,7 @@ public class NewsCommand implements CommandExecutor {
             return true;
         }
         if (plugin.getServerType() == null || !plugin.getServerType().isHub()) {
-            player.sendMessage(ChatColor.RED + "That command is only available in a lobby!");
+            player.sendMessage(ChatColor.RED + CommonMessages.LOBBY_ONLY_COMMAND);
             return true;
         }
 

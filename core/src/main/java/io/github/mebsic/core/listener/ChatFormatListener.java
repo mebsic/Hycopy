@@ -1,6 +1,7 @@
 package io.github.mebsic.core.listener;
 
 import io.github.mebsic.core.CorePlugin;
+import io.github.mebsic.core.manager.MongoManager;
 import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.core.model.Rank;
 import io.github.mebsic.core.server.ServerType;
@@ -25,6 +26,34 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class ChatFormatListener implements Listener {
+    private static final ChatColor[] MURDER_MYSTERY_CHROMA_COLORS = new ChatColor[]{
+            ChatColor.RED,
+            ChatColor.GOLD,
+            ChatColor.YELLOW,
+            ChatColor.GREEN,
+            ChatColor.AQUA,
+            ChatColor.BLUE,
+            ChatColor.LIGHT_PURPLE
+    };
+    private static final MurderMysteryWinPrefixTier[] MURDER_MYSTERY_WIN_PREFIX_TIERS =
+            new MurderMysteryWinPrefixTier[]{
+                    new MurderMysteryWinPrefixTier(0, ChatColor.DARK_GRAY, "✪", false),
+                    new MurderMysteryWinPrefixTier(100, ChatColor.GRAY, "Φ", false),
+                    new MurderMysteryWinPrefixTier(250, ChatColor.WHITE, "∅", false),
+                    new MurderMysteryWinPrefixTier(500, ChatColor.GOLD, "∅", false),
+                    new MurderMysteryWinPrefixTier(750, ChatColor.YELLOW, "Σ", false),
+                    new MurderMysteryWinPrefixTier(1_000, ChatColor.GREEN, "Σ", false),
+                    new MurderMysteryWinPrefixTier(1_500, ChatColor.DARK_GREEN, "Ω", false),
+                    new MurderMysteryWinPrefixTier(2_000, ChatColor.AQUA, "Ω", false),
+                    new MurderMysteryWinPrefixTier(2_500, ChatColor.DARK_AQUA, "α", false),
+                    new MurderMysteryWinPrefixTier(3_000, ChatColor.BLACK, "α", false),
+                    new MurderMysteryWinPrefixTier(4_000, ChatColor.DARK_PURPLE, "≡", false),
+                    new MurderMysteryWinPrefixTier(5_000, ChatColor.BLUE, "≡", false),
+                    new MurderMysteryWinPrefixTier(7_500, ChatColor.LIGHT_PURPLE, "$", false),
+                    new MurderMysteryWinPrefixTier(10_000, ChatColor.DARK_RED, "π", false),
+                    new MurderMysteryWinPrefixTier(15_000, ChatColor.RED, "π", false),
+                    new MurderMysteryWinPrefixTier(20_000, ChatColor.RED, "ƒ", true)
+            };
     private static final Sound MENTION_DING_SOUND = Sound.NOTE_PLING;
     private static final int CASE_INSENSITIVE_FLAGS = Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
     private static final Pattern GOOD_GAME_PATTERN =
@@ -81,7 +110,8 @@ public class ChatFormatListener implements Listener {
             return;
         }
         String baseMessage = highlightGoodGame ? highlightGgPhrases(message, style.messageColor) : message;
-        String header = style.prefix + style.nameColor + sender.getName() + style.separatorColor + ": " + style.messageColor;
+        String header = buildMurderMysteryWinsPrefix(sender.getUniqueId())
+                + style.prefix + style.nameColor + sender.getName() + style.separatorColor + ": " + style.messageColor;
         String normalLine = header + baseMessage;
         UUID senderId = sender.getUniqueId();
         boolean senderSent = false;
@@ -108,6 +138,72 @@ public class ChatFormatListener implements Listener {
             sender.sendMessage(normalLine);
         }
         Bukkit.getConsoleSender().sendMessage(ChatColor.stripColor(normalLine));
+    }
+
+    private String buildMurderMysteryWinsPrefix(UUID uuid) {
+        if (uuid == null || corePlugin == null || !isMurderMysteryServer(corePlugin.getServerType())) {
+            return "";
+        }
+        Profile profile = coreApi.getProfile(uuid);
+        if (profile == null || !profile.isMurderMysteryWinsChatEnabled()) {
+            return "";
+        }
+        int totalWins = Math.max(0, coreApi.getCounter(uuid, MongoManager.MURDER_MYSTERY_LIFETIME_WINS_KEY));
+        MurderMysteryWinPrefixTier tier = resolveMurderMysteryWinPrefixTier(totalWins);
+        String prefix = "[" + formatMurderMysteryWins(totalWins) + tier.symbol + "]";
+        return colorMurderMysteryWinsPrefix(tier, prefix) + " ";
+    }
+
+    private String colorMurderMysteryWinsPrefix(MurderMysteryWinPrefixTier tier, String prefix) {
+        if (tier.chroma) {
+            return colorChroma(prefix);
+        }
+        return tier.color + prefix;
+    }
+
+    private MurderMysteryWinPrefixTier resolveMurderMysteryWinPrefixTier(int wins) {
+        int safeWins = Math.max(0, wins);
+        MurderMysteryWinPrefixTier resolved = MURDER_MYSTERY_WIN_PREFIX_TIERS[0];
+        for (MurderMysteryWinPrefixTier tier : MURDER_MYSTERY_WIN_PREFIX_TIERS) {
+            if (safeWins < tier.minimumWins) {
+                break;
+            }
+            resolved = tier;
+        }
+        return resolved;
+    }
+
+    private String colorChroma(String prefix) {
+        if (prefix == null || prefix.isEmpty()) {
+            return "";
+        }
+        StringBuilder colored = new StringBuilder(prefix.length() * 3);
+        for (int i = 0; i < prefix.length(); i++) {
+            colored.append(MURDER_MYSTERY_CHROMA_COLORS[i % MURDER_MYSTERY_CHROMA_COLORS.length])
+                    .append(prefix.charAt(i));
+        }
+        return colored.toString();
+    }
+
+    private String formatMurderMysteryWins(int wins) {
+        int safeWins = Math.max(0, wins);
+        if (safeWins < 1_000) {
+            return Integer.toString(safeWins);
+        }
+        if (safeWins < 10_000) {
+            int tenths = safeWins / 100;
+            int whole = tenths / 10;
+            int decimal = tenths % 10;
+            if (decimal == 0) {
+                return whole + "k";
+            }
+            return whole + "." + decimal + "k";
+        }
+        return (safeWins / 1_000) + "k";
+    }
+
+    private boolean isMurderMysteryServer(ServerType type) {
+        return type == ServerType.MURDER_MYSTERY || type == ServerType.MURDER_MYSTERY_HUB;
     }
 
     private String highlightExactIgnMentions(String message, String ign, ChatColor restoreColor) {
@@ -205,6 +301,20 @@ public class ChatFormatListener implements Listener {
             this.nameColor = nameColor == null ? ChatColor.WHITE : nameColor;
             this.separatorColor = separatorColor == null ? ChatColor.WHITE : separatorColor;
             this.messageColor = messageColor == null ? ChatColor.WHITE : messageColor;
+        }
+    }
+
+    private static final class MurderMysteryWinPrefixTier {
+        private final int minimumWins;
+        private final ChatColor color;
+        private final String symbol;
+        private final boolean chroma;
+
+        private MurderMysteryWinPrefixTier(int minimumWins, ChatColor color, String symbol, boolean chroma) {
+            this.minimumWins = Math.max(0, minimumWins);
+            this.color = color == null ? ChatColor.GRAY : color;
+            this.symbol = symbol == null || symbol.isEmpty() ? "Φ" : symbol;
+            this.chroma = chroma;
         }
     }
 }

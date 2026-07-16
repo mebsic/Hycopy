@@ -1,6 +1,7 @@
 package io.github.mebsic.murdermystery.stats;
 
 import io.github.mebsic.core.manager.MongoManager;
+import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.core.model.Stats;
 import io.github.mebsic.core.service.CoreApi;
 
@@ -149,6 +150,21 @@ public final class MurderMysteryStats {
             return false;
         }
         stats.addCustomCounter(MongoManager.MURDER_MYSTERY_HINTS_ENABLED_KEY, HINTS_STATE_ENABLED);
+        return true;
+    }
+
+    public static boolean areWinsInChatEnabled(Profile profile) {
+        return profile == null || profile.isMurderMysteryWinsChatEnabled();
+    }
+
+    public static boolean setWinsInChatEnabled(Profile profile, boolean enabled) {
+        if (profile == null) {
+            return false;
+        }
+        if (profile.isMurderMysteryWinsChatEnabled() == enabled) {
+            return false;
+        }
+        profile.setMurderMysteryWinsChatEnabled(enabled);
         return true;
     }
 

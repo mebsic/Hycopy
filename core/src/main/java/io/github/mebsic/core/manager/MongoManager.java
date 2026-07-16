@@ -26,6 +26,7 @@ public class MongoManager {
     public static final String MAP_CONFIG_DEFAULT_GAME_KEY = MURDER_MYSTERY_GAME_KEY;
     public static final String MAP_SPAWNS_KEY = "spawns";
     public static final String MAP_DROP_ITEMS_KEY = "dropItem";
+    public static final String MAP_MYSTERY_POTIONS_KEY = "mysteryPotions";
     public static final String MAP_CREATED_AT_KEY = "createdAt";
     public static final String MAP_PREGAME_SPAWN_KEY = "pregameSpawn";
     public static final String MAP_HUB_SPAWN_KEY = "hubSpawn";
@@ -87,6 +88,7 @@ public class MongoManager {
     public static final String MURDER_MYSTERY_QUICKEST_DETECTIVE_WIN_SECONDS_KEY = "quickestDetectiveWinSeconds";
     public static final String MURDER_MYSTERY_QUICKEST_MURDERER_WIN_SECONDS_KEY = "quickestMurdererWinSeconds";
     public static final String MURDER_MYSTERY_HINTS_ENABLED_KEY = "hintsEnabled";
+    public static final String MURDER_MYSTERY_WINS_CHAT_ENABLED_KEY = "winsChatEnabled";
     public static final String MURDER_MYSTERY_LIFETIME_WINS_KEY = "lifetimeWins";
     public static final String MURDER_MYSTERY_LIFETIME_KILLS_KEY = "lifetimeKills";
     public static final String MURDER_MYSTERY_LIFETIME_GAMES_KEY = "lifetimeGames";

@@ -21,6 +21,7 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
+import org.bukkit.block.Block;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
@@ -46,6 +47,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -1515,6 +1517,60 @@ public class BuildMapConfigService {
         return true;
     }
 
+    public boolean addMysteryPotionFromMenu(Player player, ServerType gameType, String worldDirectory) {
+        if (player == null || gameType == null || gameType == ServerType.UNKNOWN) {
+            return true;
+        }
+        if (gameType != ServerType.MURDER_MYSTERY) {
+            player.sendMessage(ChatColor.RED + "Mystery potions can only be added for Murder Mystery game maps!");
+            return true;
+        }
+        String mapWorld = safeString(worldDirectory);
+        if (mapWorld.isEmpty() && player.getWorld() != null) {
+            mapWorld = safeString(player.getWorld().getName());
+        }
+        if (mapWorld.isEmpty()) {
+            player.sendMessage(ChatColor.RED + "Failed to resolve the map world!");
+            return true;
+        }
+        String gameKey = gameKeyForType(gameType);
+        if (gameKey.isEmpty()) {
+            player.sendMessage(ChatColor.RED + "Failed to resolve game key for that game type!");
+            return true;
+        }
+        MapConfigStore store = mapConfigStore();
+        if (store == null) {
+            player.sendMessage(ChatColor.RED + "MongoDB map config store is unavailable!");
+            return true;
+        }
+        Block targetBlock = targetBrewingStandBlock(player);
+        if (targetBlock == null) {
+            player.sendMessage(ChatColor.RED + "Look at a brewing stand to add a Mystery Potion!");
+            return true;
+        }
+        Location location = targetBlock.getLocation();
+
+        try {
+            synchronized (mapConfigLock) {
+                JsonObject root = loadMapConfigRoot(store, gameKey);
+                JsonObject gameSection = getOrCreateGameSection(root, gameKey);
+                JsonArray maps = getOrCreateArray(gameSection, "maps");
+                JsonObject map = findOrCreateMapByWorldDirectory(maps, mapWorld);
+                String resolvedMapName = mapWorldDirectoryOf(map, mapWorld);
+
+                JsonArray mysteryPotions = getOrCreateArray(map, MongoManager.MAP_MYSTERY_POTIONS_KEY);
+                mysteryPotions.add(toLocationJson(location, System.currentTimeMillis()));
+
+                applyMapRotationDefaults(gameSection, resolvedMapName);
+                saveMapConfigRoot(store, gameKey, root);
+            }
+            sendDone(player, location, "mystery_potion");
+        } catch (Exception ex) {
+            player.sendMessage(ChatColor.RED + "Failed to update map config in MongoDB!\n" + ex.getMessage());
+        }
+        return true;
+    }
+
     public boolean deleteMapLocationFromMenu(Player player,
                                              ServerType gameType,
                                              String worldDirectory,
@@ -1576,6 +1632,7 @@ public class BuildMapConfigService {
             parkourMarkers = collectAllParkourMarkers(map);
             map.add(MongoManager.MAP_SPAWNS_KEY, new JsonArray());
             map.add(MongoManager.MAP_DROP_ITEMS_KEY, new JsonArray());
+            map.add(MongoManager.MAP_MYSTERY_POTIONS_KEY, new JsonArray());
             map.add(MongoManager.MAP_NPCS_KEY, new JsonArray());
             map.add(MongoManager.MAP_PROFILE_NPCS_KEY, new JsonArray());
             map.add(MongoManager.MAP_LEADERBOARDS_KEY, new JsonArray());
@@ -1617,6 +1674,9 @@ public class BuildMapConfigService {
             appendLocationEntries(entries, getOrCreateArray(map, MongoManager.MAP_SPAWNS_KEY), MapLocationType.PLAYER_SPAWN);
             if (!type.isHub()) {
                 appendLocationEntries(entries, getOrCreateDropItemArray(map), MapLocationType.ITEM_DROP);
+            }
+            if (type == ServerType.MURDER_MYSTERY) {
+                appendLocationEntries(entries, getOrCreateArray(map, MongoManager.MAP_MYSTERY_POTIONS_KEY), MapLocationType.MYSTERY_POTION);
             }
             appendSingleLocationEntry(entries, child(map, MongoManager.MAP_PREGAME_SPAWN_KEY), MapLocationType.WAITING_SPAWN);
             appendSingleLocationEntry(entries, child(map, MongoManager.MAP_HUB_SPAWN_KEY), MapLocationType.HUB_SPAWN);
@@ -2162,6 +2222,7 @@ public class BuildMapConfigService {
         map.addProperty("nightTime", false);
         map.add(MongoManager.MAP_SPAWNS_KEY, new JsonArray());
         map.add(MongoManager.MAP_DROP_ITEMS_KEY, new JsonArray());
+        map.add(MongoManager.MAP_MYSTERY_POTIONS_KEY, new JsonArray());
         maps.add(map);
         return map;
     }
@@ -2395,6 +2456,9 @@ public class BuildMapConfigService {
         if (type == MapLocationType.ITEM_DROP) {
             return existingArray(map, MongoManager.MAP_DROP_ITEMS_KEY);
         }
+        if (type == MapLocationType.MYSTERY_POTION) {
+            return existingArray(map, MongoManager.MAP_MYSTERY_POTIONS_KEY);
+        }
         if (type == MapLocationType.HUB_NPC) {
             return existingArray(map, MongoManager.MAP_NPCS_KEY);
         }
@@ -2436,6 +2500,10 @@ public class BuildMapConfigService {
         }
         if (type == MapLocationType.ITEM_DROP) {
             map.add(MongoManager.MAP_DROP_ITEMS_KEY, rebuilt);
+            return;
+        }
+        if (type == MapLocationType.MYSTERY_POTION) {
+            map.add(MongoManager.MAP_MYSTERY_POTIONS_KEY, rebuilt);
             return;
         }
         if (type == MapLocationType.HUB_NPC) {
@@ -2642,6 +2710,31 @@ public class BuildMapConfigService {
         json.addProperty("pitch", pitch);
         json.addProperty(MongoManager.MAP_CREATED_AT_KEY, createdAt <= 0L ? System.currentTimeMillis() : createdAt);
         return json;
+    }
+
+    @SuppressWarnings("deprecation")
+    private Block targetBrewingStandBlock(Player player) {
+        if (player == null) {
+            return null;
+        }
+        Block block;
+        try {
+            block = player.getTargetBlock((HashSet<Byte>) null, 8);
+        } catch (Exception ignored) {
+            return null;
+        }
+        if (block == null || !isBrewingStandBlock(block.getType())) {
+            return null;
+        }
+        return block;
+    }
+
+    private boolean isBrewingStandBlock(Material material) {
+        if (material == null) {
+            return false;
+        }
+        String name = material.name();
+        return "BREWING_STAND".equals(name) || "BREWING_STAND_BLOCK".equals(name);
     }
 
     private String cardinalFacingFromYaw(float yaw) {
@@ -4536,6 +4629,8 @@ public class BuildMapConfigService {
             switch (type) {
                 case ITEM_DROP:
                     return "Drop Item";
+                case MYSTERY_POTION:
+                    return "Mystery Potion";
                 case HUB_SPAWN:
                     return "Hub Spawn";
                 case WAITING_SPAWN:
@@ -4613,6 +4708,7 @@ public class BuildMapConfigService {
     public enum MapLocationType {
         PLAYER_SPAWN,
         ITEM_DROP,
+        MYSTERY_POTION,
         WAITING_SPAWN,
         HUB_SPAWN,
         HUB_NPC,

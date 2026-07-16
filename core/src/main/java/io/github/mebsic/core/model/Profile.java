@@ -31,6 +31,7 @@ public class Profile {
     private boolean spectatorNightVisionEnabled;
     private boolean spectatorHideOtherSpectatorsEnabled;
     private boolean spectatorFirstPersonEnabled;
+    private boolean murderMysteryWinsChatEnabled;
     private final Stats stats;
     private final Set<Rank> unlockedRanks;
     private final Map<CosmeticType, String> selected;
@@ -61,6 +62,7 @@ public class Profile {
         this.spectatorNightVisionEnabled = true;
         this.spectatorHideOtherSpectatorsEnabled = false;
         this.spectatorFirstPersonEnabled = false;
+        this.murderMysteryWinsChatEnabled = true;
         this.stats = new Stats();
         this.unlockedRanks = EnumSet.noneOf(Rank.class);
         this.selected = new EnumMap<>(CosmeticType.class);
@@ -250,6 +252,14 @@ public class Profile {
 
     public void setSpectatorFirstPersonEnabled(boolean spectatorFirstPersonEnabled) {
         this.spectatorFirstPersonEnabled = spectatorFirstPersonEnabled;
+    }
+
+    public boolean isMurderMysteryWinsChatEnabled() {
+        return murderMysteryWinsChatEnabled;
+    }
+
+    public void setMurderMysteryWinsChatEnabled(boolean murderMysteryWinsChatEnabled) {
+        this.murderMysteryWinsChatEnabled = murderMysteryWinsChatEnabled;
     }
 
     public Stats getStats() {

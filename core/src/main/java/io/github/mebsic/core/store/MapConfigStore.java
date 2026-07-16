@@ -322,6 +322,7 @@ public class MapConfigStore {
         JsonArray dropItem = new JsonArray();
         dropItem.add(defaultLocation(2.5d, 64.0d, 2.5d, 0.0f, 0.0f));
         map.add(MongoManager.MAP_DROP_ITEMS_KEY, dropItem);
+        map.add(MongoManager.MAP_MYSTERY_POTIONS_KEY, new JsonArray());
         return map;
     }
 
@@ -603,6 +604,7 @@ public class MapConfigStore {
         changed |= normalizeLocationField(map, MongoManager.MAP_HUB_SPAWN_KEY);
         changed |= normalizeLocationArray(map, "spawns");
         changed |= normalizeLocationArray(map, MongoManager.MAP_DROP_ITEMS_KEY);
+        changed |= normalizeLocationArray(map, MongoManager.MAP_MYSTERY_POTIONS_KEY);
         return changed;
     }
 

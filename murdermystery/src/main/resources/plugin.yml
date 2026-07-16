@@ -8,8 +8,12 @@ commands:
     usage: /start
   token:
     usage: /token <player> <amount>
+  image:
+    usage: /image <url>
   togglehints:
     usage: /togglehints
+  togglewins:
+    usage: /togglewins
   whoismurderer:
     usage: /whoismurderer
   whoisdetective:

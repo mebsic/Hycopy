@@ -70,7 +70,7 @@ public class BuildEditLocationsMenu extends Menu {
             set(inventory, EMPTY_SLOT, item(
                     Material.PAPER,
                     ChatColor.RED + "No Locations",
-                    ChatColor.GRAY + "There are no player spawns or item drops yet."
+                    ChatColor.GRAY + "There are no saved map locations yet."
             ));
             return;
         }
@@ -217,6 +217,9 @@ public class BuildEditLocationsMenu extends Menu {
         if (entry.getType() == BuildMapConfigService.MapLocationType.ITEM_DROP) {
             return resolveItemDropMaterial(entry);
         }
+        if (entry.getType() == BuildMapConfigService.MapLocationType.MYSTERY_POTION) {
+            return resolveBrewingStandMaterial();
+        }
         if (entry.getType() == BuildMapConfigService.MapLocationType.HUB_SPAWN) {
             return resolveHubSpawnMaterial();
         }
@@ -355,6 +358,15 @@ public class BuildEditLocationsMenu extends Menu {
     private Material resolveDropperMaterial() {
         Material dropper = Material.matchMaterial("DROPPER");
         return dropper == null ? Material.PAPER : dropper;
+    }
+
+    private Material resolveBrewingStandMaterial() {
+        Material brewingStand = Material.matchMaterial("BREWING_STAND_ITEM");
+        if (brewingStand != null) {
+            return brewingStand;
+        }
+        brewingStand = Material.matchMaterial("BREWING_STAND");
+        return brewingStand == null ? Material.PAPER : brewingStand;
     }
 
     private String leaderboardTypeLabel(String metric) {
