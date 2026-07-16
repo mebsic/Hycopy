@@ -149,6 +149,9 @@ public class ChatFormatListener implements Listener {
             return "";
         }
         int totalWins = Math.max(0, coreApi.getCounter(uuid, MongoManager.MURDER_MYSTERY_LIFETIME_WINS_KEY));
+        if (totalWins == 0) {
+            return ChatColor.DARK_GRAY + "✪ ";
+        }
         MurderMysteryWinPrefixTier tier = resolveMurderMysteryWinPrefixTier(totalWins);
         String prefix = "[" + formatMurderMysteryWins(totalWins) + tier.symbol + "]";
         return colorMurderMysteryWinsPrefix(tier, prefix) + " ";

@@ -39,13 +39,13 @@ public class ImageCommand implements CommandExecutor {
         if (corePlugin == null) {
             return true;
         }
+        if (!isLobby()) {
+            player.sendMessage(ChatColor.RED + CommonMessages.LOBBY_ONLY_COMMAND);
+            return true;
+        }
         if (args == null || args.length != 1) {
             player.sendMessage(ChatColor.RED + "Invalid usage! Correct usage:");
             player.sendMessage(ChatColor.RED + "/image <URL>");
-            return true;
-        }
-        if (!isLobby()) {
-            player.sendMessage(ChatColor.RED + CommonMessages.LOBBY_ONLY_COMMAND);
             return true;
         }
         if (!RankUtil.hasAtLeast(corePlugin, player, Rank.STAFF)) {
