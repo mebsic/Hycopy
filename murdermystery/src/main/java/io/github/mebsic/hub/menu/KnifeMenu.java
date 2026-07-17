@@ -23,18 +23,21 @@ import java.util.Set;
 public class KnifeMenu extends Menu {
     public static final String TITLE = "My Cosmetics";
     private static final int SIZE = 36;
-    private static final int KNIFE_SKINS_SLOT = 13;
+    private static final int KNIFE_SKINS_SLOT = 12;
+    private static final int PREFIXES_SLOT = 14;
     private static final int BACK_SLOT = 30;
     private static final int TOKENS_SLOT = 31;
 
     private final CoreApi coreApi;
     private final KnifeSkinsMenu knifeSkinsMenu;
+    private final PrefixesMenu prefixesMenu;
     private final NumberFormat numberFormat;
 
     public KnifeMenu(CoreApi coreApi, KnifeSkinsMenu knifeSkinsMenu) {
         super(TITLE, SIZE);
         this.coreApi = coreApi;
         this.knifeSkinsMenu = knifeSkinsMenu;
+        this.prefixesMenu = new PrefixesMenu(coreApi, knifeSkinsMenu);
         this.numberFormat = NumberFormat.getIntegerInstance(Locale.US);
     }
 
@@ -70,6 +73,14 @@ public class KnifeMenu extends Menu {
                 "",
                 ChatColor.YELLOW + "Click to view!"
         ));
+        set(inventory, PREFIXES_SLOT, item(
+                Material.SIGN,
+                ChatColor.GREEN + "Prefixes",
+                ChatColor.GRAY + "Customize how you want the text in",
+                ChatColor.GRAY + "front of your name in chat to appear.",
+                "",
+                ChatColor.YELLOW + "Click to view!"
+        ));
         set(inventory, BACK_SLOT, item(
                 Material.ARROW,
                 ChatColor.GREEN + "Go Back",
@@ -95,6 +106,10 @@ public class KnifeMenu extends Menu {
         }
         if (slot == KNIFE_SKINS_SLOT && knifeSkinsMenu != null) {
             knifeSkinsMenu.firstPage().open(player);
+            return;
+        }
+        if (slot == PREFIXES_SLOT && prefixesMenu != null) {
+            prefixesMenu.open(player);
         }
     }
 

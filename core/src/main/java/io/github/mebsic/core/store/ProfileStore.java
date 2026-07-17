@@ -256,7 +256,9 @@ public class ProfileStore {
                 }
             }
         }
-        profile.getFavorites().get(CosmeticType.KNIFE).retainAll(profile.getUnlocked().get(CosmeticType.KNIFE));
+        for (CosmeticType type : CosmeticType.values()) {
+            profile.getFavorites().get(type).retainAll(profile.getUnlocked().get(type));
+        }
         return new LoadResult(profile, false);
     }
 

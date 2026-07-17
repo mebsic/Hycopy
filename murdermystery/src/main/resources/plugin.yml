@@ -12,8 +12,6 @@ commands:
     usage: /image <URL>
   togglehints:
     usage: /togglehints
-  togglewins:
-    usage: /togglewins
   whoismurderer:
     usage: /whoismurderer
   whoisdetective:

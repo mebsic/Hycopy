@@ -872,6 +872,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
         if (result.isWin()) {
             profile.getStats().addWin();
             profile.setNetworkGold(profile.getNetworkGold() + WIN_REWARD_HYCOPY_GOLD);
+            cosmetics.grantDefaults(profile);
         }
         if (result.getKills() > 0) {
             profile.getStats().addKills(result.getKills());
@@ -1725,6 +1726,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
             profile.setRanksGifted(Math.max(0, profile.getRanksGifted()) + amount);
         } else if (MongoManager.MURDER_MYSTERY_LIFETIME_WINS_KEY.equals(normalizedKey)) {
             profile.getStats().addWins(amount);
+            cosmetics.grantDefaults(profile);
         } else if (MongoManager.MURDER_MYSTERY_LIFETIME_KILLS_KEY.equals(normalizedKey)) {
             profile.getStats().addKills(amount);
         } else if (MongoManager.MURDER_MYSTERY_LIFETIME_GAMES_KEY.equals(normalizedKey)) {

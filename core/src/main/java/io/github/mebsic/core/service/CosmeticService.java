@@ -2,6 +2,7 @@ package io.github.mebsic.core.service;
 
 import io.github.mebsic.core.model.CosmeticType;
 import io.github.mebsic.core.model.KnifeSkinDefinition;
+import io.github.mebsic.core.model.PrefixCosmeticDefinition;
 import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.core.store.KnifeSkinStore;
 import org.bukkit.ChatColor;
@@ -23,6 +24,8 @@ public class CosmeticService {
     public static final String DEFAULT_KNIFE_ID = KnifeSkinStore.DEFAULT_KNIFE_ID;
     public static final String RANDOM_KNIFE_ID = "random";
     public static final String RANDOM_FAVORITE_KNIFE_ID = "random_favorite";
+    public static final String RANDOM_PREFIX_ID = PrefixCosmeticCatalog.RANDOM_ID;
+    public static final String RANDOM_FAVORITE_PREFIX_ID = PrefixCosmeticCatalog.RANDOM_FAVORITE_ID;
     private static final KnifeSkinDefinition DEFAULT_KNIFE = new KnifeSkinDefinition(
             DEFAULT_KNIFE_ID,
             "IRON_SWORD",
@@ -54,27 +57,45 @@ public class CosmeticService {
     }
 
     public List<String> getOptions(CosmeticType type) {
-        if (type != CosmeticType.KNIFE) {
-            return Collections.emptyList();
-        }
-        List<String> options = new ArrayList<>();
-        options.add(DEFAULT_KNIFE_ID);
-        options.add(RANDOM_KNIFE_ID);
-        options.add(RANDOM_FAVORITE_KNIFE_ID);
-        List<String> remaining = new ArrayList<>();
-        for (String key : knifeSkins.keySet()) {
-            if (key == null) {
-                continue;
+        if (type == CosmeticType.KNIFE) {
+            List<String> options = new ArrayList<>();
+            options.add(DEFAULT_KNIFE_ID);
+            options.add(RANDOM_KNIFE_ID);
+            options.add(RANDOM_FAVORITE_KNIFE_ID);
+            List<String> remaining = new ArrayList<>();
+            for (String key : knifeSkins.keySet()) {
+                if (key == null) {
+                    continue;
+                }
+                String normalized = key.trim().toLowerCase(Locale.ROOT);
+                if (normalized.isEmpty() || normalized.equals(DEFAULT_KNIFE_ID)) {
+                    continue;
+                }
+                remaining.add(normalized);
             }
-            String normalized = key.trim().toLowerCase(Locale.ROOT);
-            if (normalized.isEmpty() || normalized.equals(DEFAULT_KNIFE_ID)) {
-                continue;
-            }
-            remaining.add(normalized);
+            Collections.sort(remaining);
+            options.addAll(remaining);
+            return Collections.unmodifiableList(options);
         }
-        Collections.sort(remaining);
-        options.addAll(remaining);
-        return Collections.unmodifiableList(options);
+        if (PrefixCosmeticCatalog.isPrefixType(type)) {
+            List<String> options = new ArrayList<String>();
+            String defaultId = PrefixCosmeticCatalog.defaultId(type);
+            if (!defaultId.isEmpty()) {
+                options.add(defaultId);
+            }
+            for (PrefixCosmeticDefinition definition : PrefixCosmeticCatalog.definitions(type)) {
+                if (definition != null && !definition.getId().isEmpty()) {
+                    if (definition.getId().equals(defaultId)) {
+                        continue;
+                    }
+                    options.add(definition.getId());
+                }
+            }
+            options.add(1, RANDOM_PREFIX_ID);
+            options.add(2, RANDOM_FAVORITE_PREFIX_ID);
+            return Collections.unmodifiableList(options);
+        }
+        return Collections.emptyList();
     }
 
     public ItemStack createKnife(Profile profile) {
@@ -99,84 +120,148 @@ public class CosmeticService {
         if (profile == null) {
             return false;
         }
-        if (type != CosmeticType.KNIFE) {
-            return false;
+        if (type == CosmeticType.KNIFE) {
+            String normalized = normalizeId(id);
+            if (normalized.isEmpty() || isSpecialKnifeId(normalized)) {
+                return false;
+            }
+            if (!getOptions(type).contains(normalized)) {
+                return false;
+            }
+            return profile.getUnlocked().get(type).add(normalized);
         }
-        String normalized = normalizeId(id);
-        if (normalized.isEmpty() || isSpecialKnifeId(normalized)) {
-            return false;
+        if (PrefixCosmeticCatalog.isPrefixType(type)) {
+            String normalized = PrefixCosmeticCatalog.normalizeId(id);
+            if (normalized.isEmpty() || PrefixCosmeticCatalog.isSpecialId(normalized)) {
+                return false;
+            }
+            if (PrefixCosmeticCatalog.definition(type, normalized) == null) {
+                return false;
+            }
+            return profile.getUnlocked().get(type).add(normalized);
         }
-        if (!getOptions(type).contains(normalized)) {
-            return false;
-        }
-        return profile.getUnlocked().get(type).add(normalized);
+        return false;
     }
 
     public boolean select(Profile profile, CosmeticType type, String id) {
         if (profile == null) {
             return false;
         }
-        if (type != CosmeticType.KNIFE) {
-            return false;
-        }
-        String normalized = normalizeId(id);
-        if (normalized.equals(KnifeSkinStore.SKIN_02_CHEST_ID)) {
-            normalized = RANDOM_KNIFE_ID;
-        } else if (normalized.equals(KnifeSkinStore.SKIN_03_ENDER_CHEST_ID)) {
-            normalized = RANDOM_FAVORITE_KNIFE_ID;
-        }
-        if (normalized.isEmpty()) {
-            return false;
-        }
-        if (normalized.equals(RANDOM_KNIFE_ID) || normalized.equals(RANDOM_FAVORITE_KNIFE_ID)) {
+        if (type == CosmeticType.KNIFE) {
+            String normalized = normalizeId(id);
+            if (normalized.equals(KnifeSkinStore.SKIN_02_CHEST_ID)) {
+                normalized = RANDOM_KNIFE_ID;
+            } else if (normalized.equals(KnifeSkinStore.SKIN_03_ENDER_CHEST_ID)) {
+                normalized = RANDOM_FAVORITE_KNIFE_ID;
+            }
+            if (normalized.isEmpty()) {
+                return false;
+            }
+            if (normalized.equals(RANDOM_KNIFE_ID) || normalized.equals(RANDOM_FAVORITE_KNIFE_ID)) {
+                profile.getSelected().put(type, normalized);
+                return true;
+            }
+            if (!getOptions(type).contains(normalized)) {
+                return false;
+            }
+            if (!containsNormalized(profile.getUnlocked().get(type), normalized)) {
+                return false;
+            }
             profile.getSelected().put(type, normalized);
             return true;
         }
-        if (!getOptions(type).contains(normalized)) {
-            return false;
+        if (PrefixCosmeticCatalog.isPrefixType(type)) {
+            String normalized = PrefixCosmeticCatalog.normalizeId(id);
+            if (normalized.isEmpty()) {
+                return false;
+            }
+            if (PrefixCosmeticCatalog.isSpecialId(normalized)) {
+                profile.getSelected().put(type, normalized);
+                return true;
+            }
+            if (PrefixCosmeticCatalog.definition(type, normalized) == null) {
+                return false;
+            }
+            if (!containsPrefixId(profile.getUnlocked().get(type), normalized)) {
+                return false;
+            }
+            profile.getSelected().put(type, normalized);
+            return true;
         }
-        if (!containsNormalized(profile.getUnlocked().get(type), normalized)) {
-            return false;
-        }
-        profile.getSelected().put(type, normalized);
-        return true;
+        return false;
     }
 
     public boolean toggleFavorite(Profile profile, CosmeticType type, String id) {
-        if (profile == null || type != CosmeticType.KNIFE) {
+        if (profile == null) {
             return false;
         }
-        String normalized = normalizeId(id);
-        if (normalized.isEmpty() || isSpecialKnifeId(normalized)) {
-            return false;
-        }
-        if (!containsNormalized(profile.getUnlocked().get(type), normalized)) {
-            return false;
-        }
-        Set<String> favorites = profile.getFavorites().get(type);
-        if (containsNormalized(favorites, normalized)) {
-            removeNormalized(favorites, normalized);
+        if (type == CosmeticType.KNIFE) {
+            String normalized = normalizeId(id);
+            if (normalized.isEmpty() || isSpecialKnifeId(normalized)) {
+                return false;
+            }
+            if (!containsNormalized(profile.getUnlocked().get(type), normalized)) {
+                return false;
+            }
+            Set<String> favorites = profile.getFavorites().get(type);
+            if (containsNormalized(favorites, normalized)) {
+                removeNormalized(favorites, normalized);
+                return true;
+            }
+            favorites.add(normalized);
             return true;
         }
-        favorites.add(normalized);
-        return true;
+        if (PrefixCosmeticCatalog.isPrefixType(type)) {
+            String normalized = PrefixCosmeticCatalog.normalizeId(id);
+            if (normalized.isEmpty()
+                    || PrefixCosmeticCatalog.isSpecialId(normalized)
+                    || PrefixCosmeticCatalog.isNoneSchemeId(normalized)) {
+                return false;
+            }
+            if (!containsPrefixId(profile.getUnlocked().get(type), normalized)) {
+                return false;
+            }
+            Set<String> favorites = profile.getFavorites().get(type);
+            if (containsPrefixId(favorites, normalized)) {
+                removePrefixId(favorites, normalized);
+                return true;
+            }
+            favorites.add(normalized);
+            return true;
+        }
+        return false;
     }
 
     public boolean isFavorite(Profile profile, CosmeticType type, String id) {
-        if (profile == null || type != CosmeticType.KNIFE) {
+        if (profile == null) {
             return false;
         }
-        String normalized = normalizeId(id);
-        if (normalized.isEmpty()) {
-            return false;
+        if (type == CosmeticType.KNIFE) {
+            String normalized = normalizeId(id);
+            if (normalized.isEmpty()) {
+                return false;
+            }
+            return containsNormalized(profile.getFavorites().get(type), normalized);
         }
-        return containsNormalized(profile.getFavorites().get(type), normalized);
+        if (PrefixCosmeticCatalog.isPrefixType(type)) {
+            String normalized = PrefixCosmeticCatalog.normalizeId(id);
+            if (normalized.isEmpty()) {
+                return false;
+            }
+            return containsPrefixId(profile.getFavorites().get(type), normalized);
+        }
+        return false;
     }
 
     public void grantDefaults(Profile profile) {
+        if (profile == null) {
+            return;
+        }
         profile.getUnlocked().get(CosmeticType.KNIFE).add(DEFAULT_KNIFE_ID);
         profile.getSelected().putIfAbsent(CosmeticType.KNIFE, DEFAULT_KNIFE_ID);
         profile.getFavorites().get(CosmeticType.KNIFE).retainAll(profile.getUnlocked().get(CosmeticType.KNIFE));
+        grantPrefixDefaults(profile, CosmeticType.PREFIX_ICON);
+        grantPrefixDefaults(profile, CosmeticType.PREFIX_SCHEME);
     }
 
     public Map<String, KnifeSkinDefinition> getKnifeSkins() {
@@ -291,6 +376,60 @@ public class CosmeticService {
                 iterator.remove();
             }
         }
+    }
+
+    private boolean containsPrefixId(Set<String> values, String targetNormalized) {
+        if (values == null || values.isEmpty()) {
+            return false;
+        }
+        String normalizedTarget = PrefixCosmeticCatalog.normalizeId(targetNormalized);
+        if (normalizedTarget.isEmpty()) {
+            return false;
+        }
+        for (String value : values) {
+            if (normalizedTarget.equals(PrefixCosmeticCatalog.normalizeId(value))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void removePrefixId(Set<String> values, String targetNormalized) {
+        if (values == null || values.isEmpty()) {
+            return;
+        }
+        String normalizedTarget = PrefixCosmeticCatalog.normalizeId(targetNormalized);
+        if (normalizedTarget.isEmpty()) {
+            return;
+        }
+        java.util.Iterator<String> iterator = values.iterator();
+        while (iterator.hasNext()) {
+            if (normalizedTarget.equals(PrefixCosmeticCatalog.normalizeId(iterator.next()))) {
+                iterator.remove();
+            }
+        }
+    }
+
+    private void grantPrefixDefaults(Profile profile, CosmeticType type) {
+        if (profile == null || !PrefixCosmeticCatalog.isPrefixType(type)) {
+            return;
+        }
+        int wins = Math.max(0, profile.getStats().getWins());
+        Set<String> unlocked = profile.getUnlocked().get(type);
+        for (PrefixCosmeticDefinition definition : PrefixCosmeticCatalog.definitions(type)) {
+            if (definition == null || definition.getId().isEmpty()) {
+                continue;
+            }
+            if (wins >= definition.getRequiredWins()) {
+                unlocked.add(PrefixCosmeticCatalog.normalizeId(definition.getId()));
+            }
+        }
+        String defaultId = PrefixCosmeticCatalog.defaultId(type);
+        if (!defaultId.isEmpty()) {
+            unlocked.add(defaultId);
+            profile.getSelected().putIfAbsent(type, defaultId);
+        }
+        profile.getFavorites().get(type).retainAll(unlocked);
     }
 
     private Set<String> normalizeIdSet(Set<String> values) {

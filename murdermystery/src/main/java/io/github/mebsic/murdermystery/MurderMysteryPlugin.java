@@ -32,7 +32,6 @@ import io.github.mebsic.hub.service.HubScoreboardService;
 import io.github.mebsic.hub.util.LocationUtil;
 import io.github.mebsic.murdermystery.command.TokenCommand;
 import io.github.mebsic.murdermystery.command.ToggleHintsCommand;
-import io.github.mebsic.murdermystery.command.ToggleWinsCommand;
 import io.github.mebsic.murdermystery.command.WhoIsRoleCommand;
 import io.github.mebsic.murdermystery.command.GetRoleCommand;
 import io.github.mebsic.murdermystery.command.ImageCommand;
@@ -123,7 +122,6 @@ public class MurderMysteryPlugin extends JavaPlugin implements HubContext {
         this.corePlugin.ensureServerIdentity();
         registerCommand("token", new TokenCommand(corePlugin));
         registerCommand("image", new ImageCommand(corePlugin));
-        registerCommand("togglewins", new ToggleWinsCommand(corePlugin));
         try {
             if (serverType != null && serverType.isHub()) {
                 setupHub(corePlugin);

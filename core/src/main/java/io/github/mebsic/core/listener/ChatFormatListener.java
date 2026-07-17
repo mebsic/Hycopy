@@ -2,10 +2,13 @@ package io.github.mebsic.core.listener;
 
 import io.github.mebsic.core.CorePlugin;
 import io.github.mebsic.core.manager.MongoManager;
+import io.github.mebsic.core.model.CosmeticType;
+import io.github.mebsic.core.model.PrefixCosmeticDefinition;
 import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.core.model.Rank;
 import io.github.mebsic.core.server.ServerType;
 import io.github.mebsic.core.service.CoreApi;
+import io.github.mebsic.core.service.PrefixCosmeticCatalog;
 import io.github.mebsic.core.util.RankFormatUtil;
 import io.github.mebsic.game.model.GameState;
 import net.md_5.bungee.api.chat.BaseComponent;
@@ -21,11 +24,14 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -39,26 +45,6 @@ public class ChatFormatListener implements Listener {
             ChatColor.BLUE,
             ChatColor.LIGHT_PURPLE
     };
-    private static final MurderMysteryWinPrefixTier[] MURDER_MYSTERY_WIN_PREFIX_TIERS =
-            new MurderMysteryWinPrefixTier[]{
-                    new MurderMysteryWinPrefixTier(0, ChatColor.GRAY, "✪", false),
-                    new MurderMysteryWinPrefixTier(1, ChatColor.DARK_GRAY, "✪", false),
-                    new MurderMysteryWinPrefixTier(100, ChatColor.GRAY, "Φ", false),
-                    new MurderMysteryWinPrefixTier(250, ChatColor.WHITE, "∅", false),
-                    new MurderMysteryWinPrefixTier(500, ChatColor.GOLD, "∅", false),
-                    new MurderMysteryWinPrefixTier(750, ChatColor.YELLOW, "Σ", false),
-                    new MurderMysteryWinPrefixTier(1_000, ChatColor.GREEN, "Σ", false),
-                    new MurderMysteryWinPrefixTier(1_500, ChatColor.DARK_GREEN, "Ω", false),
-                    new MurderMysteryWinPrefixTier(2_000, ChatColor.AQUA, "Ω", false),
-                    new MurderMysteryWinPrefixTier(2_500, ChatColor.DARK_AQUA, "α", false),
-                    new MurderMysteryWinPrefixTier(3_000, ChatColor.BLACK, "α", false),
-                    new MurderMysteryWinPrefixTier(4_000, ChatColor.DARK_PURPLE, "≡", false),
-                    new MurderMysteryWinPrefixTier(5_000, ChatColor.BLUE, "≡", false),
-                    new MurderMysteryWinPrefixTier(7_500, ChatColor.LIGHT_PURPLE, "$", false),
-                    new MurderMysteryWinPrefixTier(10_000, ChatColor.DARK_RED, "π", false),
-                    new MurderMysteryWinPrefixTier(15_000, ChatColor.RED, "π", false),
-                    new MurderMysteryWinPrefixTier(20_000, ChatColor.RED, "ƒ", true)
-            };
     private static final Sound MENTION_DING_SOUND = Sound.NOTE_PLING;
     private static final int CASE_INSENSITIVE_FLAGS = Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
     private static final Pattern GOOD_GAME_PATTERN =
@@ -159,10 +145,12 @@ public class ChatFormatListener implements Listener {
             return null;
         }
         int totalWins = Math.max(0, coreApi.getCounter(uuid, MongoManager.MURDER_MYSTERY_LIFETIME_WINS_KEY));
-        MurderMysteryWinPrefixTier tier = resolveMurderMysteryWinPrefixTier(totalWins);
+        PrefixCosmeticDefinition icon = resolveSelectedPrefixCosmetic(profile, CosmeticType.PREFIX_ICON);
+        PrefixCosmeticDefinition scheme = resolveSelectedPrefixCosmetic(profile, CosmeticType.PREFIX_SCHEME);
+        String symbol = icon == null || icon.getSymbol().isEmpty() ? "✪" : icon.getSymbol();
         String actualPrefix = totalWins == 0
-                ? ChatColor.GRAY + tier.symbol
-                : colorMurderMysteryWinsPrefix(tier, "[" + formatMurderMysteryWins(totalWins) + tier.symbol + "]");
+                ? ChatColor.GRAY + "✪"
+                : colorMurderMysteryWinsPrefix(scheme, "[" + formatMurderMysteryWins(totalWins) + symbol + "]");
         String visiblePrefix = profile.isMurderMysteryWinsChatEnabled()
                 ? actualPrefix
                 : ChatColor.GRAY + "✪";
@@ -217,23 +205,83 @@ public class ChatFormatListener implements Listener {
         }
     }
 
-    private String colorMurderMysteryWinsPrefix(MurderMysteryWinPrefixTier tier, String prefix) {
-        if (tier.chroma) {
+    private String colorMurderMysteryWinsPrefix(PrefixCosmeticDefinition scheme, String prefix) {
+        if (scheme != null && scheme.isChroma()) {
             return colorChroma(prefix);
         }
-        return tier.color + prefix;
+        return parsePrefixColor(scheme == null ? null : scheme.getColor()) + prefix;
     }
 
-    private MurderMysteryWinPrefixTier resolveMurderMysteryWinPrefixTier(int wins) {
-        int safeWins = Math.max(0, wins);
-        MurderMysteryWinPrefixTier resolved = MURDER_MYSTERY_WIN_PREFIX_TIERS[0];
-        for (MurderMysteryWinPrefixTier tier : MURDER_MYSTERY_WIN_PREFIX_TIERS) {
-            if (safeWins < tier.minimumWins) {
-                break;
-            }
-            resolved = tier;
+    private PrefixCosmeticDefinition resolveSelectedPrefixCosmetic(Profile profile, CosmeticType type) {
+        if (profile == null || !PrefixCosmeticCatalog.isPrefixType(type)) {
+            return PrefixCosmeticCatalog.definition(type, PrefixCosmeticCatalog.defaultId(type));
         }
-        return resolved;
+        String selected = PrefixCosmeticCatalog.normalizeId(profile.getSelected().get(type));
+        if (PrefixCosmeticCatalog.RANDOM_ID.equals(selected)) {
+            return pickRandomPrefixCosmetic(profile, type, false);
+        }
+        if (PrefixCosmeticCatalog.RANDOM_FAVORITE_ID.equals(selected)) {
+            return pickRandomPrefixCosmetic(profile, type, true);
+        }
+        PrefixCosmeticDefinition definition = PrefixCosmeticCatalog.definition(type, selected);
+        if (definition != null && hasUnlockedPrefixCosmetic(profile, type, definition.getId())) {
+            return definition;
+        }
+        return PrefixCosmeticCatalog.definition(type, PrefixCosmeticCatalog.defaultId(type));
+    }
+
+    private PrefixCosmeticDefinition pickRandomPrefixCosmetic(Profile profile, CosmeticType type, boolean favoritesOnly) {
+        List<PrefixCosmeticDefinition> candidates = new ArrayList<PrefixCosmeticDefinition>();
+        Set<String> source = favoritesOnly ? profile.getFavorites().get(type) : profile.getUnlocked().get(type);
+        if (source != null) {
+            for (String id : source) {
+                if (type == CosmeticType.PREFIX_SCHEME && PrefixCosmeticCatalog.isNoneSchemeId(id)) {
+                    continue;
+                }
+                PrefixCosmeticDefinition definition = PrefixCosmeticCatalog.definition(type, id);
+                if (definition != null && hasUnlockedPrefixCosmetic(profile, type, definition.getId())) {
+                    candidates.add(definition);
+                }
+            }
+        }
+        if (candidates.isEmpty() && favoritesOnly) {
+            return pickRandomPrefixCosmetic(profile, type, false);
+        }
+        if (candidates.isEmpty()) {
+            return PrefixCosmeticCatalog.definition(type, PrefixCosmeticCatalog.defaultId(type));
+        }
+        return candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
+    }
+
+    private boolean hasUnlockedPrefixCosmetic(Profile profile, CosmeticType type, String id) {
+        if (profile == null || !PrefixCosmeticCatalog.isPrefixType(type)) {
+            return false;
+        }
+        String normalized = PrefixCosmeticCatalog.normalizeId(id);
+        if (normalized.isEmpty()) {
+            return false;
+        }
+        Set<String> unlocked = profile.getUnlocked().get(type);
+        if (unlocked == null || unlocked.isEmpty()) {
+            return false;
+        }
+        for (String unlockedId : unlocked) {
+            if (normalized.equals(PrefixCosmeticCatalog.normalizeId(unlockedId))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private ChatColor parsePrefixColor(String colorName) {
+        if (colorName != null && !colorName.trim().isEmpty()) {
+            try {
+                return ChatColor.valueOf(colorName.trim().toUpperCase(Locale.ROOT));
+            } catch (IllegalArgumentException ignored) {
+                return ChatColor.GRAY;
+            }
+        }
+        return ChatColor.GRAY;
     }
 
     private String colorChroma(String prefix) {
@@ -381,17 +429,4 @@ public class ChatFormatListener implements Listener {
         }
     }
 
-    private static final class MurderMysteryWinPrefixTier {
-        private final int minimumWins;
-        private final ChatColor color;
-        private final String symbol;
-        private final boolean chroma;
-
-        private MurderMysteryWinPrefixTier(int minimumWins, ChatColor color, String symbol, boolean chroma) {
-            this.minimumWins = Math.max(0, minimumWins);
-            this.color = color == null ? ChatColor.GRAY : color;
-            this.symbol = symbol == null || symbol.isEmpty() ? "Φ" : symbol;
-            this.chroma = chroma;
-        }
-    }
 }
