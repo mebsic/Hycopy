@@ -32,7 +32,7 @@ public final class PrefixCosmeticCatalog {
     ));
 
     private static final List<PrefixCosmeticDefinition> SCHEMES = Collections.unmodifiableList(Arrays.asList(
-            scheme("dull_dark_gray", "INK_SACK", 8, "Dull Dark Gray", 1, "DARK_GRAY", false),
+            scheme("dull_dark_gray", "SULPHUR", 0, "Dull Dark Gray", 1, "DARK_GRAY", false),
             scheme("sharp_gray", "INK_SACK", 8, "Sharp Gray", 100, "GRAY", false),
             scheme("basic_white", "INK_SACK", 15, "Basic White", 250, "WHITE", false),
             scheme("bloodthirsty_gold", "INK_SACK", 14, "Bloodthirsty Gold", 500, "GOLD", false),
@@ -45,7 +45,7 @@ public final class PrefixCosmeticCatalog {
             scheme("regal_dark_purple", "INK_SACK", 5, "Regal Dark Purple", 4_000, "DARK_PURPLE", false),
             scheme("disguised_blue", "INK_SACK", 4, "Disguised Blue", 5_000, "BLUE", false),
             scheme("ruthless_light_purple", "INK_SACK", 13, "Ruthless Light Purple", 7_500, "LIGHT_PURPLE", false),
-            scheme("dried_dark_red", "INK_SACK", 3, "Dried Dark Red", 10_000, "DARK_RED", false),
+            scheme("dried_dark_red", "REDSTONE", 0, "Dried Dark Red", 10_000, "DARK_RED", false),
             scheme("guilty_blood_red", "INK_SACK", 1, "Guilty Blood Red", 15_000, "RED", false),
             scheme("killer_khroma", "INK_SACK", 9, "Killer Khroma", 20_000, "RED", true)
     ));

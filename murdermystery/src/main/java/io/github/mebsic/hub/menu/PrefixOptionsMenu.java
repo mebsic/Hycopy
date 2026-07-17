@@ -317,7 +317,9 @@ public class PrefixOptionsMenu extends Menu {
                 : resolveSelectedDefinition(profile, CosmeticType.PREFIX_SCHEME);
         String symbol = icon == null || icon.getSymbol().isEmpty() ? "✪" : icon.getSymbol();
         int wins = Math.max(0, coreApi.getCounter(profile.getUuid(), MongoManager.MURDER_MYSTERY_LIFETIME_WINS_KEY));
-        String winsPrefix = wins == 0
+        boolean plainStarPrefix = wins == 0
+                || PrefixCosmeticCatalog.isNoneSchemeId(scheme == null ? null : scheme.getId());
+        String winsPrefix = plainStarPrefix
                 ? ChatColor.GRAY + "✪"
                 : colorPrefix(scheme, "[" + formatMurderMysteryWins(wins) + symbol + "]");
         return winsPrefix + " " + rankedName(profile);

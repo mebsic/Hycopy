@@ -148,7 +148,9 @@ public class ChatFormatListener implements Listener {
         PrefixCosmeticDefinition icon = resolveSelectedPrefixCosmetic(profile, CosmeticType.PREFIX_ICON);
         PrefixCosmeticDefinition scheme = resolveSelectedPrefixCosmetic(profile, CosmeticType.PREFIX_SCHEME);
         String symbol = icon == null || icon.getSymbol().isEmpty() ? "✪" : icon.getSymbol();
-        String actualPrefix = totalWins == 0
+        boolean plainStarPrefix = totalWins == 0
+                || PrefixCosmeticCatalog.isNoneSchemeId(scheme == null ? null : scheme.getId());
+        String actualPrefix = plainStarPrefix
                 ? ChatColor.GRAY + "✪"
                 : colorMurderMysteryWinsPrefix(scheme, "[" + formatMurderMysteryWins(totalWins) + symbol + "]");
         String visiblePrefix = profile.isMurderMysteryWinsChatEnabled()

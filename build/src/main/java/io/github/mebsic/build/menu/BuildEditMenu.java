@@ -23,6 +23,10 @@ public class BuildEditMenu extends Menu {
     private static final int TOP_LEFT_SLOT = 11;
     private static final int TOP_MIDDLE_SLOT = 13;
     private static final int TOP_RIGHT_SLOT = 15;
+    private static final int MURDER_MYSTERY_TOP_LEFT_SLOT = 10;
+    private static final int MURDER_MYSTERY_TOP_MIDDLE_SLOT = 12;
+    private static final int MURDER_MYSTERY_TOP_RIGHT_SLOT = 14;
+    private static final int MURDER_MYSTERY_POTION_SLOT = 16;
     private static final int BOTTOM_LEFT_SLOT = 29;
     private static final int BOTTOM_MIDDLE_SLOT = 31;
     private static final int BOTTOM_RIGHT_SLOT = 33;
@@ -66,12 +70,12 @@ public class BuildEditMenu extends Menu {
             set(inventory, deleteSlot(), deleteMapItem());
         }
 
-        set(inventory, TOP_LEFT_SLOT, primaryActionItem(player));
-        set(inventory, TOP_MIDDLE_SLOT, secondaryActionItem());
+        set(inventory, primaryActionSlot(), primaryActionItem(player));
+        set(inventory, secondaryActionSlot(), secondaryActionItem());
         if (hasLocations) {
-            set(inventory, TOP_RIGHT_SLOT, locationsItem());
+            set(inventory, locationsSlot(), locationsItem());
         } else {
-            set(inventory, TOP_RIGHT_SLOT, noLocationsItem());
+            set(inventory, locationsSlot(), noLocationsItem());
         }
         set(inventory, exportSlot(), exportWorldItem());
 
@@ -80,7 +84,7 @@ public class BuildEditMenu extends Menu {
             set(inventory, BOTTOM_MIDDLE_SLOT, hubImageDisplayItem(player));
             set(inventory, BOTTOM_RIGHT_SLOT, leaderboardItem(player));
         } else if (isMurderMysteryGameMode()) {
-            set(inventory, BOTTOM_LEFT_SLOT, mysteryPotionItem());
+            set(inventory, mysteryPotionSlot(), mysteryPotionItem());
         }
     }
 
@@ -109,7 +113,7 @@ public class BuildEditMenu extends Menu {
             player.closeInventory();
             return;
         }
-        if (slot == TOP_LEFT_SLOT) {
+        if (slot == primaryActionSlot()) {
             if (mapConfigService != null) {
                 if (isHubMode()) {
                     mapConfigService.setHubSpawnFromMenu(player, gameType, worldDirectory);
@@ -122,7 +126,7 @@ public class BuildEditMenu extends Menu {
             player.closeInventory();
             return;
         }
-        if (slot == TOP_MIDDLE_SLOT) {
+        if (slot == secondaryActionSlot()) {
             if (mapConfigService != null) {
                 if (isHubMode()) {
                     new BuildHubNpcMenu(mapConfigService, gameType, worldDirectory, this).open(player);
@@ -141,7 +145,7 @@ public class BuildEditMenu extends Menu {
             player.closeInventory();
             return;
         }
-        if (slot == TOP_RIGHT_SLOT) {
+        if (slot == locationsSlot()) {
             if (!hasLocations()) {
                 player.closeInventory();
                 player.sendMessage(ChatColor.RED + "There are no locations for this map!");
@@ -157,7 +161,7 @@ public class BuildEditMenu extends Menu {
             player.closeInventory();
             return;
         }
-        if (!isHubMode() && isMurderMysteryGameMode() && slot == BOTTOM_LEFT_SLOT) {
+        if (!isHubMode() && isMurderMysteryGameMode() && slot == mysteryPotionSlot()) {
             if (mapConfigService != null) {
                 mapConfigService.addMysteryPotionFromMenu(player, gameType, worldDirectory);
             }
@@ -204,6 +208,22 @@ public class BuildEditMenu extends Menu {
 
     private int exportSlot() {
         return isHubMode() ? HUB_EXPORT_SLOT : GAME_EXPORT_SLOT;
+    }
+
+    private int primaryActionSlot() {
+        return isMurderMysteryGameMode() ? MURDER_MYSTERY_TOP_LEFT_SLOT : TOP_LEFT_SLOT;
+    }
+
+    private int secondaryActionSlot() {
+        return isMurderMysteryGameMode() ? MURDER_MYSTERY_TOP_MIDDLE_SLOT : TOP_MIDDLE_SLOT;
+    }
+
+    private int locationsSlot() {
+        return isMurderMysteryGameMode() ? MURDER_MYSTERY_TOP_RIGHT_SLOT : TOP_RIGHT_SLOT;
+    }
+
+    private int mysteryPotionSlot() {
+        return MURDER_MYSTERY_POTION_SLOT;
     }
 
     private boolean isHubMode() {
