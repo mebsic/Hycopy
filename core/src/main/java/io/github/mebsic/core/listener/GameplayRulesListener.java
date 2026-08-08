@@ -66,7 +66,7 @@ public class GameplayRulesListener implements Listener {
         this.weatherCycleEnabled = weatherEnabled;
         boolean resolvedVanillaAchievements =
                 resolveToggle(config, "gameplay.vanillaAchievements", this.serverType, serverName, false);
-        if (this.serverType != null && this.serverType.isGame()) {
+        if (shouldDisableVanillaAchievements(this.serverType)) {
             resolvedVanillaAchievements = false;
         }
         this.vanillaAchievementsEnabled = resolvedVanillaAchievements;
@@ -97,7 +97,10 @@ public class GameplayRulesListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onAchievementAwarded(PlayerAchievementAwardedEvent event) {
-        if (vanillaAchievementsEnabled || event == null) {
+        if (event == null) {
+            return;
+        }
+        if (!shouldDisableVanillaAchievements() && vanillaAchievementsEnabled) {
             return;
         }
         event.setCancelled(true);
@@ -283,9 +286,17 @@ public class GameplayRulesListener implements Listener {
         if (player == null || player.getWorld() == null) {
             return;
         }
-        String value = Boolean.toString(vanillaAchievementsEnabled);
+        String value = Boolean.toString(!shouldDisableVanillaAchievements() && vanillaAchievementsEnabled);
         player.getWorld().setGameRuleValue("announceAchievements", value);
         player.getWorld().setGameRuleValue("announceAdvancements", value);
+    }
+
+    private boolean shouldDisableVanillaAchievements() {
+        return shouldDisableVanillaAchievements(serverType);
+    }
+
+    private boolean shouldDisableVanillaAchievements(ServerType type) {
+        return type != null && (type.isHub() || type.isGame());
     }
 
     private boolean isBlockedContainerInteractionMaterial(Material material) {
