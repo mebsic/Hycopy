@@ -24,13 +24,7 @@ import io.github.mebsic.murdermystery.game.MurderMysteryRole;
 import io.github.mebsic.murdermystery.registry.KnifeSkinRegistry;
 import io.github.mebsic.murdermystery.service.ActionBarService;
 import io.github.mebsic.murdermystery.stats.MurderMysteryStats;
-import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
-import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.OfflinePlayer;
-import org.bukkit.Sound;
-import org.bukkit.World;
+import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.BlockState;
@@ -104,6 +98,10 @@ public class MurderMysteryGameManager extends GameManager {
     private static final int GOLD_HOTBAR_SLOT = 8; // Last hotbar slot.
     private static final int MAP_GOLD_PICKUP_DELAY_TICKS = 10;
     private static final int GOLD_FOR_BOW = 10;
+    private static final long MYSTERY_POTION_COOLDOWN_MILLIS = 15000L;
+    private static final int MYSTERY_POTION_SHORT_DURATION_TICKS = 8 * 20;
+    private static final int MYSTERY_POTION_MEDIUM_DURATION_TICKS = 12 * 20;
+    private static final int MYSTERY_POTION_LONG_DURATION_TICKS = 20 * 20;
     private static final double DROPPED_BOW_PICKUP_RADIUS_SQUARED = 2.25D;
     private static final float DROPPED_BOW_ROTATION_DEGREES_PER_TICK = 8.0f;
     private static final double DROPPED_BOW_HEIGHT_OFFSET = 0.35D;
@@ -126,6 +124,8 @@ public class MurderMysteryGameManager extends GameManager {
             resolveCompatibleSound("ORB_PICKUP", "ENTITY_EXPERIENCE_ORB_PICKUP");
     private static final Sound WIN_GAME_SOUND = resolveCompatibleSound("LEVEL_UP", "ENTITY_PLAYER_LEVELUP");
     private static final Sound MURDER_KILL_DAMAGE_SOUND = resolveMurderKillDamageSound();
+    private static final Sound MYSTERY_POTION_SOUND =
+            resolveCompatibleSound("DRINK", "ENTITY_GENERIC_DRINK", "FIZZ", "BLOCK_BREWING_STAND_BREW");
     private static final String TOKEN_REASON_SURVIVED_30_SECONDS = "Survived 30 seconds";
     private static final String TOKEN_REASON_PICKED_UP_GOLD = "Picked up gold";
     private static final String SPECTATOR_CHAT_HINT_LINE_ONE =
@@ -148,6 +148,7 @@ public class MurderMysteryGameManager extends GameManager {
     private BukkitTask droppedBowTask;
     private float droppedBowYaw;
     private final Map<Item, Integer> activeMapDropItems = new HashMap<>();
+    private final Map<UUID, Long> mysteryPotionCooldowns = new HashMap<>();
     private final Set<Arrow> activeRoundArrows = new HashSet<>();
     private final Set<OpenableBlockRef> trackedOpenables = new HashSet<>();
     private UUID originalDetectiveUuid;
@@ -194,6 +195,7 @@ public class MurderMysteryGameManager extends GameManager {
         closeTrackedOpenables();
         clearActiveRoundArrows();
         clearActiveMapDropItems();
+        mysteryPotionCooldowns.clear();
         clearDroppedBowDisplay();
         getTablistService().setNameTagsHidden(true);
         getTablistService().setForcedNameColor(ChatColor.WHITE);
@@ -295,6 +297,7 @@ public class MurderMysteryGameManager extends GameManager {
         closeTrackedOpenables();
         clearActiveRoundArrows();
         clearActiveMapDropItems();
+        mysteryPotionCooldowns.clear();
         clearDroppedBowDisplay();
         forceOutcomeTitlesOnGameEnd();
         murdererSwordUnlocked = false;
@@ -969,6 +972,130 @@ public class MurderMysteryGameManager extends GameManager {
             return;
         }
         trackedOpenables.add(OpenableBlockRef.from(normalized));
+    }
+
+    public boolean handleMysteryPotionInteract(Player player, Block block) {
+        if (player == null || block == null || !isBrewingStandBlock(block.getType())) {
+            return false;
+        }
+        if (!isConfiguredMysteryPotionBlock(block)) {
+            return false;
+        }
+        MurderMysteryGamePlayer mmPlayer = getMurderMysteryPlayer(player);
+        if (getState() != GameState.IN_GAME || mmPlayer == null || !mmPlayer.isAlive()) {
+            player.sendMessage(ChatColor.RED + "Mystery Potions are only available during active games!");
+            return true;
+        }
+        long now = System.currentTimeMillis();
+        Long nextAllowed = mysteryPotionCooldowns.get(player.getUniqueId());
+        if (nextAllowed != null && nextAllowed.longValue() > now) {
+            long remainingMillis = nextAllowed.longValue() - now;
+            long remainingSeconds = Math.max(1L, (remainingMillis + 999L) / 1000L);
+            player.sendMessage(ChatColor.RED + "You can drink another Mystery Potion in "
+                    + remainingSeconds
+                    + "s!");
+            return true;
+        }
+        mysteryPotionCooldowns.put(player.getUniqueId(), now + MYSTERY_POTION_COOLDOWN_MILLIS);
+        applyRandomMysteryPotion(player);
+        return true;
+    }
+
+    private boolean isConfiguredMysteryPotionBlock(Block block) {
+        if (block == null || block.getWorld() == null) {
+            return false;
+        }
+        GameMap map = getMapManager() == null ? null : getMapManager().getActiveMap();
+        if (map == null || map.getMysteryPotionLocations().isEmpty()) {
+            return false;
+        }
+        for (Location location : map.getMysteryPotionLocations()) {
+            if (sameBlock(location, block)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean sameBlock(Location location, Block block) {
+        if (location == null || block == null || location.getWorld() == null || block.getWorld() == null) {
+            return false;
+        }
+        if (!location.getWorld().getName().equalsIgnoreCase(block.getWorld().getName())) {
+            return false;
+        }
+        return location.getBlockX() == block.getX()
+                && location.getBlockY() == block.getY()
+                && location.getBlockZ() == block.getZ();
+    }
+
+    private boolean isBrewingStandBlock(Material material) {
+        if (material == null) {
+            return false;
+        }
+        String name = material.name();
+        return "BREWING_STAND".equals(name) || "BREWING_STAND_BLOCK".equals(name);
+    }
+
+    private void applyRandomMysteryPotion(Player player) {
+        if (player == null) {
+            return;
+        }
+        int roll = (int) Math.floor(Math.random() * 8.0D);
+        String effectName;
+        PotionEffect effect;
+        switch (roll) {
+            case 0:
+                effectName = "Speed";
+                effect = new PotionEffect(PotionEffectType.SPEED, MYSTERY_POTION_LONG_DURATION_TICKS, 1, false, false);
+                break;
+            case 1:
+                effectName = "Jump Boost";
+                effect = new PotionEffect(PotionEffectType.JUMP, MYSTERY_POTION_LONG_DURATION_TICKS, 1, false, false);
+                break;
+            case 2:
+                effectName = "Invisibility";
+                effect = new PotionEffect(PotionEffectType.INVISIBILITY, MYSTERY_POTION_MEDIUM_DURATION_TICKS, 0, false, false);
+                break;
+            case 3:
+                effectName = "Regeneration";
+                effect = new PotionEffect(PotionEffectType.REGENERATION, MYSTERY_POTION_SHORT_DURATION_TICKS, 0, false, false);
+                break;
+            case 4:
+                effectName = "Haste";
+                effect = new PotionEffect(PotionEffectType.FAST_DIGGING, MYSTERY_POTION_LONG_DURATION_TICKS, 0, false, false);
+                break;
+            case 5:
+                effectName = "Blindness";
+                effect = new PotionEffect(PotionEffectType.BLINDNESS, MYSTERY_POTION_SHORT_DURATION_TICKS, 0, false, false);
+                break;
+            case 6:
+                effectName = "Slowness";
+                effect = new PotionEffect(PotionEffectType.SLOW, MYSTERY_POTION_MEDIUM_DURATION_TICKS, 0, false, false);
+                break;
+            default:
+                effectName = "Nausea";
+                effect = new PotionEffect(PotionEffectType.CONFUSION, MYSTERY_POTION_MEDIUM_DURATION_TICKS, 0, false, false);
+                break;
+        }
+        player.addPotionEffect(effect, true);
+        playMysteryPotionSound(player.getLocation());
+        player.sendMessage(ChatColor.LIGHT_PURPLE + "Mystery Potion! "
+                + ChatColor.YELLOW + effectName);
+    }
+
+    private void playMysteryPotionSound(Location location) {
+        if (location == null || location.getWorld() == null) {
+            return;
+        }
+        if (MYSTERY_POTION_SOUND != null) {
+            try {
+                location.getWorld().playSound(location, MYSTERY_POTION_SOUND, 1.0F, 1.0F);
+                return;
+            } catch (IllegalArgumentException ignored) {
+                // Sound enum mismatch on legacy/newer API variants.
+            }
+        }
     }
 
     public void sendProjectileKillDistanceMessage(Player killer, Player victim, double distanceMeters) {
@@ -1878,6 +2005,7 @@ public class MurderMysteryGameManager extends GameManager {
         closeTrackedOpenables();
         clearActiveRoundArrows();
         clearActiveMapDropItems();
+        mysteryPotionCooldowns.clear();
         clearDroppedBowDisplay();
     }
 

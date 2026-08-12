@@ -45,8 +45,10 @@ import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.UpdateOptions;
+import com.velocitypowered.api.command.Command;
 import com.velocitypowered.api.command.CommandManager;
 import com.velocitypowered.api.event.Subscribe;
+import com.velocitypowered.api.event.ResultedEvent;
 import com.velocitypowered.api.event.command.CommandExecuteEvent;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
 import com.velocitypowered.api.event.connection.PluginMessageEvent;
@@ -207,20 +209,20 @@ public class HycopyProxyPlugin {
             commands.unregister("message");
             commands.unregister("w");
             commands.unregister("whisper");
-            commands.register("play", new PlayCommand(proxy, registryService, partyService));
-            commands.register("build", new BuildCommand(registryService, rankResolver, partyService));
+            registerCommand(commands, "play", new PlayCommand(proxy, registryService, partyService));
+            registerCommand(commands, "build", new BuildCommand(registryService, rankResolver, partyService));
             HubCommand hubCommand = new HubCommand(proxy, config, registryService);
-            commands.register("hub", hubCommand);
-            commands.register("h", hubCommand);
-            commands.register("l", hubCommand);
-            commands.register("lobby", hubCommand);
-            commands.register("maintenance", new MaintenanceCommand(proxy, this, config, mongoDatabase, motdCache, rankResolver));
+            registerCommand(commands, "hub", hubCommand);
+            registerCommand(commands, "h", hubCommand);
+            registerCommand(commands, "l", hubCommand);
+            registerCommand(commands, "lobby", hubCommand);
+            registerCommand(commands, "maintenance", new MaintenanceCommand(proxy, this, config, mongoDatabase, motdCache, rankResolver));
             this.updateCommand = new UpdateCommand(proxy, this, rankResolver, logger);
-            commands.register("update", this.updateCommand);
-            commands.register("cancelupdate", new CancelUpdateCommand(this.updateCommand, rankResolver));
+            registerCommand(commands, "update", this.updateCommand);
+            registerCommand(commands, "cancelupdate", new CancelUpdateCommand(this.updateCommand, rankResolver));
             RestartCommand restartCommand = new RestartCommand(proxy, this, rankResolver, registryService, logger);
-            commands.register("restart", restartCommand);
-            commands.register("cancelrestart", new CancelRestartCommand(restartCommand, rankResolver));
+            registerCommand(commands, "restart", restartCommand);
+            registerCommand(commands, "cancelrestart", new CancelRestartCommand(restartCommand, rankResolver));
             FriendCommand friendCommand = new FriendCommand(proxy, friendService, blockService, "friend");
             FriendCommand friendAliasCommand = new FriendCommand(proxy, friendService, blockService, "f");
             BlockCommand blockCommand = new BlockCommand(proxy, blockService, friendService);
@@ -254,21 +256,21 @@ public class HycopyProxyPlugin {
             );
             ChatCommand chatCommand = new ChatCommand(chatChannelService, partyService);
             StaffChatCommand staffChatCommand = new StaffChatCommand(staffChatService);
-            commands.register("friend", friendCommand);
-            commands.register("f", friendAliasCommand);
-            commands.register("block", blockCommand);
-            commands.register("msg", friendMessageCommand);
-            commands.register("tell", friendMessageCommand);
-            commands.register("message", friendMessageCommand);
-            commands.register("w", friendMessageCommand);
-            commands.register("whisper", friendMessageCommand);
-            commands.register("party", partyCommand);
-            commands.register("p", partyAliasCommand);
-            commands.register("pchat", partyChatCommand);
-            commands.register("pc", partyChatCommand);
-            commands.register("chat", chatCommand);
-            commands.register("staffchat", staffChatCommand);
-            commands.register("sc", staffChatCommand);
+            registerCommand(commands, "friend", friendCommand);
+            registerCommand(commands, "f", friendAliasCommand);
+            registerCommand(commands, "block", blockCommand);
+            registerCommand(commands, "msg", friendMessageCommand);
+            registerCommand(commands, "tell", friendMessageCommand);
+            registerCommand(commands, "message", friendMessageCommand);
+            registerCommand(commands, "w", friendMessageCommand);
+            registerCommand(commands, "whisper", friendMessageCommand);
+            registerCommand(commands, "party", partyCommand);
+            registerCommand(commands, "p", partyAliasCommand);
+            registerCommand(commands, "pchat", partyChatCommand);
+            registerCommand(commands, "pc", partyChatCommand);
+            registerCommand(commands, "chat", chatCommand);
+            registerCommand(commands, "staffchat", staffChatCommand);
+            registerCommand(commands, "sc", staffChatCommand);
             proxy.getChannelRegistrar().register(PLAY_AGAIN_INTENT_CHANNEL);
             int refresh = config == null ? 1 : Math.max(1, config.getRegistryRefreshSeconds());
             proxy.getScheduler().buildTask(this, () -> {
@@ -304,6 +306,10 @@ public class HycopyProxyPlugin {
         } catch (Exception ex) {
             triggerInfrastructureFailover("startup", ex);
         }
+    }
+
+    private void registerCommand(CommandManager commands, String alias, Command command, String... aliases) {
+        commands.register(commands.metaBuilder(alias).aliases(aliases).plugin(this).build(), command);
     }
 
     @Subscribe
@@ -553,7 +559,7 @@ public class HycopyProxyPlugin {
             return;
         }
         if (message.trim().isEmpty()) {
-            event.setResult(PlayerChatEvent.ChatResult.denied());
+            denyPlayerChat(event);
             return;
         }
 
@@ -563,12 +569,12 @@ public class HycopyProxyPlugin {
                     "You are not in a party. Your chat channel has been set to ALL.",
                     NamedTextColor.RED
             ));
-            event.setResult(PlayerChatEvent.ChatResult.denied());
+            denyPlayerChat(event);
             return;
         }
         if (muted) {
             sendPartyChatFramed(player, Component.text("You are currently muted!", NamedTextColor.RED));
-            event.setResult(PlayerChatEvent.ChatResult.denied());
+            denyPlayerChat(event);
             return;
         }
         if (partyService.isPartyChatMuted(playerId)
@@ -576,7 +582,7 @@ public class HycopyProxyPlugin {
                 && !partyService.isModerator(playerId)
                 && !isStaff(playerId)) {
             sendPartyChatFramed(player, Component.text("This party is currently muted!", NamedTextColor.RED));
-            event.setResult(PlayerChatEvent.ChatResult.denied());
+            denyPlayerChat(event);
             return;
         }
         partyService.sendPartyMessage(
@@ -585,7 +591,12 @@ public class HycopyProxyPlugin {
                 memberId -> canReceivePartyChat(playerId, memberId)
         );
         storeChatMessage(player, message, ChatChannelService.ChatChannel.PARTY);
-        event.setResult(PlayerChatEvent.ChatResult.denied());
+        denyPlayerChat(event);
+    }
+
+    private void denyPlayerChat(PlayerChatEvent event) {
+        ResultedEvent<PlayerChatEvent.ChatResult> resultedEvent = event;
+        resultedEvent.setResult(PlayerChatEvent.ChatResult.denied());
     }
 
     @Subscribe

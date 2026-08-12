@@ -12,6 +12,7 @@ public class GameMap {
     private final List<Location> spawnPoints;
     private final List<Location> dropItemSpawns;
     private final List<ItemStack> dropItemStacks;
+    private final List<Location> mysteryPotionLocations;
     private final boolean nightTime;
 
     public GameMap(String name, boolean nightTime) {
@@ -25,6 +26,7 @@ public class GameMap {
         this.spawnPoints = new ArrayList<>();
         this.dropItemSpawns = new ArrayList<>();
         this.dropItemStacks = new ArrayList<>();
+        this.mysteryPotionLocations = new ArrayList<>();
     }
 
     public String getName() {
@@ -45,6 +47,10 @@ public class GameMap {
 
     public List<ItemStack> getDropItemStacks() {
         return dropItemStacks;
+    }
+
+    public List<Location> getMysteryPotionLocations() {
+        return mysteryPotionLocations;
     }
 
     public boolean isNightTime() {

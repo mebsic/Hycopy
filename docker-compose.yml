@@ -283,7 +283,8 @@ services:
     build:
       context: ./docker/production/images/velocity
       args:
-        VELOCITY_VERSION: "latest"
+        VELOCITY_VERSION: "${VELOCITY_VERSION:-latest}"
+        VELOCITY_BUILD_CHANNEL: "${VELOCITY_BUILD_CHANNEL:-STABLE}"
         USER_AGENT: "hycopy-docker/2.0 (https://example.net)"
     ports:
       - "25565:25565"
@@ -294,6 +295,9 @@ services:
         condition: service_healthy
     environment:
       <<: *network-env
+      VELOCITY_VERSION: "${VELOCITY_VERSION:-latest}"
+      VELOCITY_BUILD_CHANNEL: "${VELOCITY_BUILD_CHANNEL:-STABLE}"
+      VELOCITY_BUILD: "${VELOCITY_BUILD:-latest}"
       JAVA_OPTS: "${VELOCITY_JAVA_OPTS:--Xms512M -Xmx1G}"
       CONFIG_SOURCE: /bootstrap/config.json
       ROLLOUT_WEBHOOK_URL: "${ROLLOUT_WEBHOOK_URL:-http://control-panel:8080/restart}"

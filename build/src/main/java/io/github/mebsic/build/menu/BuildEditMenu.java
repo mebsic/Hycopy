@@ -25,8 +25,8 @@ public class BuildEditMenu extends Menu {
     private static final int TOP_RIGHT_SLOT = 15;
     private static final int MURDER_MYSTERY_TOP_LEFT_SLOT = 10;
     private static final int MURDER_MYSTERY_TOP_MIDDLE_SLOT = 12;
-    private static final int MURDER_MYSTERY_TOP_RIGHT_SLOT = 14;
-    private static final int MURDER_MYSTERY_POTION_SLOT = 16;
+    private static final int MURDER_MYSTERY_POTION_SLOT = 14;
+    private static final int MURDER_MYSTERY_LOCATIONS_SLOT = 16;
     private static final int BOTTOM_LEFT_SLOT = 29;
     private static final int BOTTOM_MIDDLE_SLOT = 31;
     private static final int BOTTOM_RIGHT_SLOT = 33;
@@ -219,7 +219,7 @@ public class BuildEditMenu extends Menu {
     }
 
     private int locationsSlot() {
-        return isMurderMysteryGameMode() ? MURDER_MYSTERY_TOP_RIGHT_SLOT : TOP_RIGHT_SLOT;
+        return isMurderMysteryGameMode() ? MURDER_MYSTERY_LOCATIONS_SLOT : TOP_RIGHT_SLOT;
     }
 
     private int mysteryPotionSlot() {
@@ -318,10 +318,10 @@ public class BuildEditMenu extends Menu {
         return item(
                 resolveBrewingStandMaterial(),
                 ChatColor.GREEN + "Mystery Potion",
-                ChatColor.GRAY + "This will save the brewing stand",
-                ChatColor.GRAY + "you are looking at as a Mystery Potion.",
+                ChatColor.GRAY + "This will arm the next brewing stand",
+                ChatColor.GRAY + "you click as a Mystery Potion.",
                 "",
-                ChatColor.YELLOW + "Click to add!"
+                ChatColor.YELLOW + "Click to select!"
         );
     }
 

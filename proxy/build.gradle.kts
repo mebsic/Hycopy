@@ -1,7 +1,11 @@
+import org.gradle.api.attributes.java.TargetJvmVersion
+
 plugins {
     id("java")
     id("com.github.johnrengelman.shadow") version "8.1.1"
 }
+
+val velocityJavaVersion = 25
 
 repositories {
     mavenCentral()
@@ -9,8 +13,8 @@ repositories {
 }
 
 dependencies {
-    compileOnly("com.velocitypowered:velocity-api:3.2.0-SNAPSHOT")
-    annotationProcessor("com.velocitypowered:velocity-api:3.2.0-SNAPSHOT")
+    compileOnly("com.velocitypowered:velocity-api:4.1.0-SNAPSHOT")
+    annotationProcessor("com.velocitypowered:velocity-api:4.1.0-SNAPSHOT")
     implementation(project(":core"))
     implementation("org.mongodb:mongodb-driver-sync:4.11.1")
     implementation("com.google.code.gson:gson:2.10.1")
@@ -18,13 +22,19 @@ dependencies {
 }
 
 java {
+    sourceCompatibility = JavaVersion.toVersion(velocityJavaVersion)
+    targetCompatibility = JavaVersion.toVersion(velocityJavaVersion)
     toolchain {
-        languageVersion.set(JavaLanguageVersion.of(17))
+        languageVersion.set(JavaLanguageVersion.of(velocityJavaVersion))
     }
 }
 
-tasks.withType<JavaCompile> {
-    options.release.set(17)
+configurations.configureEach {
+    attributes.attribute(TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE, velocityJavaVersion)
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    options.release.set(velocityJavaVersion)
 }
 
 tasks.shadowJar {

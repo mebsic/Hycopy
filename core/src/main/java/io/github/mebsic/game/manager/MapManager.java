@@ -102,6 +102,14 @@ public class MapManager {
                         }
                     }
                 }
+                if (entry.mysteryPotions != null) {
+                    for (LocationEntry loc : entry.mysteryPotions) {
+                        Location location = toLocation(loc);
+                        if (location != null) {
+                            map.getMysteryPotionLocations().add(location);
+                        }
+                    }
+                }
                 maps.put(normalizeMapKey(map.getName()), map);
                 registerMapAlias(map.getName(), map.getName());
                 registerMapAlias(worldDirectory, map.getName());
@@ -804,6 +812,7 @@ public class MapManager {
         private Boolean nightTime;
         private List<LocationEntry> spawns;
         private List<LocationEntry> dropItem;
+        private List<LocationEntry> mysteryPotions;
         private LocationEntry pregameSpawn;
     }
 

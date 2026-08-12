@@ -95,7 +95,7 @@ public class GameplayRulesListener implements Listener {
         applyVanillaAchievementRules(event.getPlayer());
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onAchievementAwarded(PlayerAchievementAwardedEvent event) {
         if (event == null) {
             return;

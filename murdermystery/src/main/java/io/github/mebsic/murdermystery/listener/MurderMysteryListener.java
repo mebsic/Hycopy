@@ -76,10 +76,10 @@ public class MurderMysteryListener implements Listener {
     private static final long GLASS_PANE_BREAK_RESET_SECONDS = 5L;
     private static final long MURDERER_KNIFE_DRIP_PARTICLE_INTERVAL_TICKS = 3L;
     private static final double MURDERER_KNIFE_DRIP_PARTICLE_CHANCE = 0.35D;
-    private static final double MURDERER_KNIFE_DRIP_HAND_HEIGHT = 1.15D;
-    private static final double MURDERER_KNIFE_DRIP_HAND_FORWARD_OFFSET = 0.42D;
-    private static final double MURDERER_KNIFE_DRIP_HAND_SIDE_OFFSET = -0.17D;
-    private static final double MURDERER_KNIFE_DRIP_HAND_JITTER = 0.07D;
+    private static final double MURDERER_KNIFE_DRIP_HAND_HEIGHT = 1.05D;
+    private static final double MURDERER_KNIFE_DRIP_HAND_FORWARD_OFFSET = 0.32D;
+    private static final double MURDERER_KNIFE_DRIP_HAND_SIDE_OFFSET = -0.28D;
+    private static final double MURDERER_KNIFE_DRIP_HAND_JITTER = 0.03D;
     private static final float MURDERER_KNIFE_DRIP_RED = 1.0F;
     private static final float MURDERER_KNIFE_DRIP_GREEN = 0.0F;
     private static final float MURDERER_KNIFE_DRIP_BLUE = 0.0F;
@@ -181,6 +181,11 @@ public class MurderMysteryListener implements Listener {
             return;
         }
         Action action = event.getAction();
+        if ((action == Action.LEFT_CLICK_BLOCK || action == Action.RIGHT_CLICK_BLOCK)
+                && gameManager.handleMysteryPotionInteract(player, event.getClickedBlock())) {
+            event.setCancelled(true);
+            return;
+        }
         if (action != Action.RIGHT_CLICK_AIR && action != Action.RIGHT_CLICK_BLOCK) {
             return;
         }

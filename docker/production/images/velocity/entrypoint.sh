@@ -4,6 +4,7 @@ set -euo pipefail
 CONFIG_SOURCE="${CONFIG_SOURCE:-/bootstrap/config.json}"
 PLUGIN_SOURCE_DIR="${PLUGIN_SOURCE_DIR:-/bootstrap/plugins}"
 VELOCITY_INSTALL_SCRIPT="${VELOCITY_INSTALL_SCRIPT:-/usr/local/bin/install-velocity.sh}"
+VELOCITY_LMBDA_PATCHER="${VELOCITY_LMBDA_PATCHER:-/usr/local/bin/PatchVelocityLmbda.java}"
 
 mkdir -p /server/plugins/hycopyproxy
 
@@ -25,8 +26,31 @@ download_velocity() {
   fi
 
   if [[ -f /server/velocity.version ]]; then
-    echo "[bootstrap] Using Velocity version $(cat /server/velocity.version)."
+    local version_label
+    version_label="$(cat /server/velocity.version)"
+    if [[ -f /server/velocity.build ]]; then
+      version_label="${version_label} build $(cat /server/velocity.build)"
+    fi
+    if [[ -f /server/velocity.channel ]]; then
+      version_label="${version_label} ($(cat /server/velocity.channel))"
+    fi
+    echo "[bootstrap] Using Velocity version ${version_label}."
   fi
+}
+
+patch_velocity_lmbda() {
+  if [[ "${VELOCITY_PATCH_LMBDA:-true}" != "true" ]]; then
+    echo "[bootstrap] Velocity lmbda patch disabled."
+    return 0
+  fi
+
+  if [[ ! -f "${VELOCITY_LMBDA_PATCHER}" ]]; then
+    echo "[bootstrap] Velocity lmbda patcher not found: ${VELOCITY_LMBDA_PATCHER}" >&2
+    return 1
+  fi
+
+  echo "[bootstrap] Patching Velocity lmbda hidden-class bridge..."
+  java -cp /server/velocity.jar "${VELOCITY_LMBDA_PATCHER}" /server/velocity.jar
 }
 
 stage_proxy_plugin() {
@@ -133,6 +157,7 @@ TOML
 fi
 
 download_velocity
+patch_velocity_lmbda
 stage_proxy_plugin
 
 exec java ${JAVA_OPTS:-"-Xms256M -Xmx512M"} -jar /server/velocity.jar

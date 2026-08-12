@@ -47,7 +47,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -70,8 +69,8 @@ public class BuildMapConfigService {
     private static final String DEFAULT_NPC_SKIN = "Steve";
     private static final String DEFAULT_CLICK_TO_PLAY_NPC_COLOR = ChatColor.GOLD.name();
     private static final String NPC_KIND_CLICK_TO_PLAY = "CLICK_TO_PLAY";
-    // Only known public owner for this skin.
-    public static final String MURDER_MYSTERY_CLICK_TO_PLAY_SKIN_REFERENCE = "MURDER4SVTVN";
+    // NameMC-listed owner for the Murder Mystery click-to-play skin.
+    public static final String MURDER_MYSTERY_CLICK_TO_PLAY_SKIN_REFERENCE = "bobaless";
     private static final String DEFAULT_PROFILE_NPC_COLOR = ChatColor.AQUA.name();
     private static final String DEFAULT_NPC_COLOR = ChatColor.GREEN.name();
     private static final Set<PosixFilePermission> EXPORT_DIRECTORY_PERMISSIONS = Collections.unmodifiableSet(
@@ -101,6 +100,8 @@ public class BuildMapConfigService {
     private final Map<UUID, RuntimeLeaderboard> leaderboardsByAnchor = new ConcurrentHashMap<UUID, RuntimeLeaderboard>();
     private final Map<UUID, ParkourDraft> parkourDraftsByPlayer = new ConcurrentHashMap<UUID, ParkourDraft>();
     private final Map<UUID, String> leaderboardMetricByPlayer = new ConcurrentHashMap<UUID, String>();
+    private final Map<UUID, MysteryPotionSelection> mysteryPotionSelectionsByPlayer =
+            new ConcurrentHashMap<UUID, MysteryPotionSelection>();
     private final Map<String, UUID> worldExportLocks = new ConcurrentHashMap<String, UUID>();
 
     public BuildMapConfigService(CorePlugin corePlugin) {
@@ -111,6 +112,7 @@ public class BuildMapConfigService {
         despawnAllRuntimeArtifacts();
         parkourDraftsByPlayer.clear();
         leaderboardMetricByPlayer.clear();
+        mysteryPotionSelectionsByPlayer.clear();
     }
 
     public void clearPlayerState(UUID playerUuid) {
@@ -119,6 +121,7 @@ public class BuildMapConfigService {
         }
         parkourDraftsByPlayer.remove(playerUuid);
         leaderboardMetricByPlayer.remove(playerUuid);
+        mysteryPotionSelectionsByPlayer.remove(playerUuid);
     }
 
     public void clearPlayerStateOnDisconnect(Player player) {
@@ -134,6 +137,7 @@ public class BuildMapConfigService {
             removeParkourDraftMarkers(draft, player.getWorld());
         }
         leaderboardMetricByPlayer.remove(playerUuid);
+        mysteryPotionSelectionsByPlayer.remove(playerUuid);
     }
 
     public ServerType parseGameType(String input) {
@@ -1533,22 +1537,72 @@ public class BuildMapConfigService {
             player.sendMessage(ChatColor.RED + "Failed to resolve the map world!");
             return true;
         }
+        mysteryPotionSelectionsByPlayer.put(
+                player.getUniqueId(),
+                new MysteryPotionSelection(gameType, mapWorld)
+        );
+        player.sendMessage(ChatColor.YELLOW + "Left-click or right-click a brewing stand in "
+                + ChatColor.GOLD + mapWorld
+                + ChatColor.YELLOW + " to add a Mystery Potion.");
+        return true;
+    }
+
+    public boolean handleMysteryPotionSelectionClick(Player player, Block block) {
+        if (player == null) {
+            return false;
+        }
+        MysteryPotionSelection selection = mysteryPotionSelectionsByPlayer.get(player.getUniqueId());
+        if (selection == null) {
+            return false;
+        }
+        if (block == null) {
+            player.sendMessage(ChatColor.RED + "Click a brewing stand to add a Mystery Potion!");
+            return true;
+        }
+        if (!isBrewingStandBlock(block.getType())) {
+            player.sendMessage(ChatColor.RED + "That isn't a brewing stand! Click a brewing stand to add a Mystery Potion.");
+            return true;
+        }
+        String selectedWorld = safeString(selection.worldDirectory);
+        String blockWorld = block.getWorld() == null ? "" : safeString(block.getWorld().getName());
+        if (!selectedWorld.isEmpty() && !blockWorld.equalsIgnoreCase(selectedWorld)) {
+            player.sendMessage(ChatColor.RED + "Click a brewing stand inside " + selectedWorld + "!");
+            return true;
+        }
+        Location location = block.getLocation();
+        if (saveMysteryPotionLocation(player, selection.gameType, selection.worldDirectory, location)) {
+            mysteryPotionSelectionsByPlayer.remove(player.getUniqueId());
+        }
+        return true;
+    }
+
+    private boolean saveMysteryPotionLocation(Player player, ServerType gameType, String worldDirectory, Location location) {
+        if (player == null || gameType == null || gameType == ServerType.UNKNOWN) {
+            return false;
+        }
+        if (gameType != ServerType.MURDER_MYSTERY) {
+            player.sendMessage(ChatColor.RED + "Mystery potions can only be added for Murder Mystery game maps!");
+            return false;
+        }
+        String mapWorld = safeString(worldDirectory);
+        if (mapWorld.isEmpty() && location != null && location.getWorld() != null) {
+            mapWorld = safeString(location.getWorld().getName());
+        }
+        if (mapWorld.isEmpty()) {
+            player.sendMessage(ChatColor.RED + "Failed to resolve the map world!");
+            return false;
+        }
         String gameKey = gameKeyForType(gameType);
         if (gameKey.isEmpty()) {
             player.sendMessage(ChatColor.RED + "Failed to resolve game key for that game type!");
-            return true;
+            return false;
         }
         MapConfigStore store = mapConfigStore();
         if (store == null) {
             player.sendMessage(ChatColor.RED + "MongoDB map config store is unavailable!");
-            return true;
+            return false;
         }
-        Block targetBlock = targetBrewingStandBlock(player);
-        if (targetBlock == null) {
-            player.sendMessage(ChatColor.RED + "Look at a brewing stand to add a Mystery Potion!");
-            return true;
-        }
-        Location location = targetBlock.getLocation();
+        Location selectedLocation = location == null ? player.getLocation() : location;
 
         try {
             synchronized (mapConfigLock) {
@@ -1559,16 +1613,17 @@ public class BuildMapConfigService {
                 String resolvedMapName = mapWorldDirectoryOf(map, mapWorld);
 
                 JsonArray mysteryPotions = getOrCreateArray(map, MongoManager.MAP_MYSTERY_POTIONS_KEY);
-                mysteryPotions.add(toLocationJson(location, System.currentTimeMillis()));
+                mysteryPotions.add(toLocationJson(selectedLocation, System.currentTimeMillis()));
 
                 applyMapRotationDefaults(gameSection, resolvedMapName);
                 saveMapConfigRoot(store, gameKey, root);
             }
-            sendDone(player, location, "mystery_potion");
+            sendDone(player, selectedLocation, "mystery_potion");
+            return true;
         } catch (Exception ex) {
             player.sendMessage(ChatColor.RED + "Failed to update map config in MongoDB!\n" + ex.getMessage());
+            return false;
         }
-        return true;
     }
 
     public boolean deleteMapLocationFromMenu(Player player,
@@ -2710,23 +2765,6 @@ public class BuildMapConfigService {
         json.addProperty("pitch", pitch);
         json.addProperty(MongoManager.MAP_CREATED_AT_KEY, createdAt <= 0L ? System.currentTimeMillis() : createdAt);
         return json;
-    }
-
-    @SuppressWarnings("deprecation")
-    private Block targetBrewingStandBlock(Player player) {
-        if (player == null) {
-            return null;
-        }
-        Block block;
-        try {
-            block = player.getTargetBlock((HashSet<Byte>) null, 8);
-        } catch (Exception ignored) {
-            return null;
-        }
-        if (block == null || !isBrewingStandBlock(block.getType())) {
-            return null;
-        }
-        return block;
     }
 
     private boolean isBrewingStandBlock(Material material) {
@@ -4490,6 +4528,16 @@ public class BuildMapConfigService {
         private ServerType gameType;
         private Location start;
         private final List<Location> checkpoints = new ArrayList<Location>();
+    }
+
+    private static final class MysteryPotionSelection {
+        private final ServerType gameType;
+        private final String worldDirectory;
+
+        private MysteryPotionSelection(ServerType gameType, String worldDirectory) {
+            this.gameType = gameType == null ? ServerType.UNKNOWN : gameType;
+            this.worldDirectory = worldDirectory == null ? "" : worldDirectory;
+        }
     }
 
     private static final class MapExportTarget {
