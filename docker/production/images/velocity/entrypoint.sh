@@ -4,7 +4,7 @@ set -euo pipefail
 CONFIG_SOURCE="${CONFIG_SOURCE:-/bootstrap/config.json}"
 PLUGIN_SOURCE_DIR="${PLUGIN_SOURCE_DIR:-/bootstrap/plugins}"
 VELOCITY_INSTALL_SCRIPT="${VELOCITY_INSTALL_SCRIPT:-/usr/local/bin/install-velocity.sh}"
-VELOCITY_LMBDA_PATCHER="${VELOCITY_LMBDA_PATCHER:-/usr/local/bin/PatchVelocityLmbda.java}"
+VELOCITY_LMBDA_PATCHER="${VELOCITY_LMBDA_PATCHER:-/usr/local/share/hycopy/velocity/PatchVelocityLmbda.java}"
 
 mkdir -p /server/plugins/hycopyproxy
 

@@ -60,7 +60,7 @@ public class HubNpcListener implements Listener {
     private static final String MAP_CONFIG_UPDATE_PREFIX = "maps:";
     private static final String CLICK_TO_PLAY_LABEL = "CLICK TO PLAY";
     private static final String PROFILE_CLICK_LABEL = "CLICK FOR STATS";
-    private static final String DEFAULT_CLICK_TO_PLAY_SKIN = "bobaless";
+    private static final String DEFAULT_CLICK_TO_PLAY_SKIN = "2171";
     private static final double HOLOGRAM_LINE_SPACING = 0.30d;
     private static final double CLICK_TO_PLAY_HOLOGRAM_BOTTOM_Y_OFFSET = 0.05d;
     private static final double PROFILE_HOLOGRAM_BOTTOM_Y_OFFSET = 0.05d;

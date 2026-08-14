@@ -40,8 +40,4 @@ public enum Rank {
     public boolean isAtLeast(Rank other) {
         return this.weight >= other.weight;
     }
-
-    public String formatName(String name) {
-        return color + name;
-    }
 }

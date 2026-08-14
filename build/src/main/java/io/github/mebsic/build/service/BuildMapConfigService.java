@@ -69,8 +69,8 @@ public class BuildMapConfigService {
     private static final String DEFAULT_NPC_SKIN = "Steve";
     private static final String DEFAULT_CLICK_TO_PLAY_NPC_COLOR = ChatColor.GOLD.name();
     private static final String NPC_KIND_CLICK_TO_PLAY = "CLICK_TO_PLAY";
-    // NameMC-listed owner for the Murder Mystery click-to-play skin.
-    public static final String MURDER_MYSTERY_CLICK_TO_PLAY_SKIN_REFERENCE = "bobaless";
+    // Name of the 2171 account's Murder Mystery click-to-play skin.
+    public static final String MURDER_MYSTERY_CLICK_TO_PLAY_SKIN_REFERENCE = "2171";
     private static final String DEFAULT_PROFILE_NPC_COLOR = ChatColor.AQUA.name();
     private static final String DEFAULT_NPC_COLOR = ChatColor.GREEN.name();
     private static final Set<PosixFilePermission> EXPORT_DIRECTORY_PERMISSIONS = Collections.unmodifiableSet(
