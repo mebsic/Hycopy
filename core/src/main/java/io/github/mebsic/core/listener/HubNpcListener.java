@@ -1,5 +1,9 @@
 package io.github.mebsic.core.listener;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.mongodb.client.MongoCollection;
 import net.citizensnpcs.api.CitizensAPI;
 import net.citizensnpcs.api.npc.MemoryNPCDataStore;
@@ -39,7 +43,11 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.lang.reflect.Method;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -61,11 +69,18 @@ public class HubNpcListener implements Listener {
     private static final String CLICK_TO_PLAY_LABEL = "CLICK TO PLAY";
     private static final String PROFILE_CLICK_LABEL = "CLICK FOR STATS";
     private static final String DEFAULT_CLICK_TO_PLAY_SKIN = "2171";
+    private static final String DEFAULT_CLICK_TO_PLAY_SKIN_UUID = "841188aef0fe40e6a7f5e4e021f9b38c";
+    private static final String MINECRAFT_SESSION_PROFILE_ENDPOINT =
+            "https://sessionserver.mojang.com/session/minecraft/profile/";
     private static final double HOLOGRAM_LINE_SPACING = 0.30d;
     private static final double CLICK_TO_PLAY_HOLOGRAM_BOTTOM_Y_OFFSET = 0.05d;
     private static final double PROFILE_HOLOGRAM_BOTTOM_Y_OFFSET = 0.05d;
     private static final long CLICK_TO_PLAY_REFRESH_INTERVAL_TICKS = 40L;
     private static final long CLICK_TO_PLAY_REFRESH_MILLIS = 2_000L;
+    private static final long CLICK_TO_PLAY_SKIN_REFRESH_INITIAL_DELAY_TICKS = 20L;
+    private static final long CLICK_TO_PLAY_SKIN_REFRESH_INTERVAL_TICKS = 20L * 60L * 30L;
+    private static final int SKIN_PROFILE_CONNECT_TIMEOUT_MILLIS = 5_000;
+    private static final int SKIN_PROFILE_READ_TIMEOUT_MILLIS = 5_000;
     private static final int PROFILE_STATS_REFRESH_ATTEMPTS = 6;
     private static final long PROFILE_STATS_REFRESH_INTERVAL_TICKS = 4L;
     private static final long PROFILE_HOLOGRAM_REFRESH_INTERVAL_TICKS = 5L;
@@ -87,6 +102,7 @@ public class HubNpcListener implements Listener {
     private final ProfileNpcMenu profileMenu;
     private final ServerRegistrySnapshot registrySnapshot;
     private final BukkitTask clickToPlayRefreshTask;
+    private final BukkitTask clickToPlaySkinRefreshTask;
     private final BukkitTask profileHologramRefreshTask;
     private final NumberFormat numberFormat;
     private final NPCRegistry npcRegistry;
@@ -97,6 +113,8 @@ public class HubNpcListener implements Listener {
     private final List<ProfileNpcTemplate> profileNpcTemplates;
     private final Map<UUID, List<RuntimeNpc>> profileNpcsByViewer;
     private volatile String activeGameKey;
+    private volatile SkinTextureCache clickToPlaySkinCache;
+    private volatile boolean clickToPlaySkinRefreshRunning;
 
     public HubNpcListener(JavaPlugin plugin, CorePlugin corePlugin, ServerType serverType) {
         this.plugin = plugin;
@@ -125,6 +143,7 @@ public class HubNpcListener implements Listener {
         loadAndSpawn();
         subscribeToMapConfigUpdates();
         this.clickToPlayRefreshTask = startClickToPlayRefreshTask();
+        this.clickToPlaySkinRefreshTask = startClickToPlaySkinRefreshTask();
         this.profileHologramRefreshTask = startProfileHologramRefreshTask();
     }
 
@@ -133,6 +152,9 @@ public class HubNpcListener implements Listener {
         removeRuntimeNpcRegistry();
         if (clickToPlayRefreshTask != null) {
             clickToPlayRefreshTask.cancel();
+        }
+        if (clickToPlaySkinRefreshTask != null) {
+            clickToPlaySkinRefreshTask.cancel();
         }
         if (profileHologramRefreshTask != null) {
             profileHologramRefreshTask.cancel();
@@ -1096,6 +1118,18 @@ public class HubNpcListener implements Listener {
         );
     }
 
+    private BukkitTask startClickToPlaySkinRefreshTask() {
+        if (plugin == null || !serverType.isHub()) {
+            return null;
+        }
+        return plugin.getServer().getScheduler().runTaskTimerAsynchronously(
+                plugin,
+                this::refreshClickToPlaySkinCache,
+                CLICK_TO_PLAY_SKIN_REFRESH_INITIAL_DELAY_TICKS,
+                CLICK_TO_PLAY_SKIN_REFRESH_INTERVAL_TICKS
+        );
+    }
+
     private BukkitTask startProfileHologramRefreshTask() {
         if (plugin == null || !serverType.isHub()) {
             return null;
@@ -1106,6 +1140,152 @@ public class HubNpcListener implements Listener {
                 PROFILE_HOLOGRAM_REFRESH_INTERVAL_TICKS,
                 PROFILE_HOLOGRAM_REFRESH_INTERVAL_TICKS
         );
+    }
+
+    private void refreshClickToPlaySkinCache() {
+        if (clickToPlaySkinRefreshRunning) {
+            return;
+        }
+        clickToPlaySkinRefreshRunning = true;
+        try {
+            SkinTextureCache refreshed = fetchClickToPlaySkinTexture();
+            if (refreshed == null) {
+                return;
+            }
+            clickToPlaySkinCache = refreshed;
+            if (plugin == null) {
+                return;
+            }
+            plugin.getServer().getScheduler().runTask(plugin, () -> applyClickToPlaySkinCache(refreshed));
+        } finally {
+            clickToPlaySkinRefreshRunning = false;
+        }
+    }
+
+    private SkinTextureCache fetchClickToPlaySkinTexture() {
+        HttpURLConnection connection = null;
+        try {
+            URL url = new URL(MINECRAFT_SESSION_PROFILE_ENDPOINT + DEFAULT_CLICK_TO_PLAY_SKIN_UUID + "?unsigned=false");
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setConnectTimeout(SKIN_PROFILE_CONNECT_TIMEOUT_MILLIS);
+            connection.setReadTimeout(SKIN_PROFILE_READ_TIMEOUT_MILLIS);
+            connection.setRequestMethod("GET");
+            int status = connection.getResponseCode();
+            if (status != 200) {
+                return null;
+            }
+            try (InputStream input = connection.getInputStream()) {
+                JsonObject profile = new JsonParser()
+                        .parse(new InputStreamReader(input, StandardCharsets.UTF_8))
+                        .getAsJsonObject();
+                JsonArray properties = profile == null || !profile.has("properties")
+                        ? null
+                        : profile.getAsJsonArray("properties");
+                if (properties == null || properties.size() == 0) {
+                    return null;
+                }
+                for (JsonElement rawProperty : properties) {
+                    if (rawProperty == null || !rawProperty.isJsonObject()) {
+                        continue;
+                    }
+                    JsonObject property = rawProperty.getAsJsonObject();
+                    if (!"textures".equalsIgnoreCase(safeJsonString(property, "name"))) {
+                        continue;
+                    }
+                    String texture = safeJsonString(property, "value");
+                    String signature = safeJsonString(property, "signature");
+                    if (texture.isEmpty() || signature.isEmpty()) {
+                        return null;
+                    }
+                    String profileName = safeJsonString(profile, "name");
+                    return new SkinTextureCache(
+                            profileName.isEmpty() ? DEFAULT_CLICK_TO_PLAY_SKIN : profileName,
+                            texture,
+                            signature,
+                            System.currentTimeMillis()
+                    );
+                }
+            }
+        } catch (Exception ignored) {
+            return null;
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
+        return null;
+    }
+
+    private String safeJsonString(JsonObject object, String key) {
+        if (object == null || key == null || key.isEmpty() || !object.has(key)) {
+            return "";
+        }
+        try {
+            JsonElement element = object.get(key);
+            if (element == null || element.isJsonNull()) {
+                return "";
+            }
+            return safeText(element.getAsString());
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    private void applyClickToPlaySkinCache(SkinTextureCache cache) {
+        if (cache == null || !citizensEnabled) {
+            return;
+        }
+        List<RuntimeNpc> snapshot = new ArrayList<RuntimeNpc>(npcsById.values());
+        for (RuntimeNpc runtime : snapshot) {
+            if (runtime == null || runtime.kind != NpcKind.CLICK_TO_PLAY) {
+                continue;
+            }
+            applyClickToPlaySkinCache(runtime, cache);
+        }
+    }
+
+    private void applyClickToPlaySkinCache(RuntimeNpc runtime, SkinTextureCache cache) {
+        if (runtime == null || runtime.kind != NpcKind.CLICK_TO_PLAY || cache == null) {
+            return;
+        }
+        NPC npc = runtime.npc;
+        if (npc == null) {
+            respawnRuntimeAnchor(runtime);
+            return;
+        }
+        applyCitizensSkin(npc, runtime.kind, runtime.skinOwner);
+        refreshRuntimeNpcSpawn(runtime);
+        ensureRuntimeAnchor(runtime);
+        int players = runtime.lastClickToPlayPlayers < 0 ? currentClickToPlayPlayerCount() : runtime.lastClickToPlayPlayers;
+        runtime.lastClickToPlayPlayers = players;
+        applyNpcHologramLines(runtime, clickToPlayHologramLines(players));
+    }
+
+    private void refreshRuntimeNpcSpawn(RuntimeNpc runtime) {
+        if (runtime == null || runtime.spawnLocation == null || runtime.spawnLocation.getWorld() == null) {
+            return;
+        }
+        NPC npc = runtime.npc;
+        if (npc == null) {
+            respawnRuntimeAnchor(runtime);
+            return;
+        }
+        try {
+            if (npc.isSpawned()) {
+                npc.despawn();
+            }
+            if (!npc.spawn(runtime.spawnLocation.clone())) {
+                throw new IllegalStateException("Citizens refused to respawn NPC");
+            }
+        } catch (Exception ignored) {
+            deregisterNpc(npc);
+            if (runtime.npcId > 0) {
+                npcsById.remove(runtime.npcId);
+            }
+            runtime.npc = null;
+            runtime.npcId = -1;
+            respawnRuntimeAnchor(runtime);
+        }
     }
 
     private void refreshProfileHolograms() {
@@ -1496,11 +1676,16 @@ public class HubNpcListener implements Listener {
         }
         String owner = resolveCitizensSkinOwner(kind, skinOwner);
         Object skinTrait = resolveSkinTrait(npc);
+        SkinTextureCache textureCache = kind == NpcKind.CLICK_TO_PLAY ? clickToPlaySkinCache : null;
         if (kind == NpcKind.CLICK_TO_PLAY && skinTrait != null) {
             disableSkinTraitAutoUpdates(skinTrait);
         }
         if (skinTrait != null) {
-            applySkinTraitName(skinTrait, owner, kind == NpcKind.PROFILE);
+            boolean appliedPersistent = textureCache != null
+                    && applySkinTraitPersistent(skinTrait, owner, textureCache);
+            if (!appliedPersistent) {
+                applySkinTraitName(skinTrait, owner, kind == NpcKind.PROFILE);
+            }
         }
         if (kind == NpcKind.CLICK_TO_PLAY) {
             setNpcMetadataPersistent(npc, NPC.Metadata.PLAYER_SKIN_USE_LATEST, Boolean.FALSE);
@@ -1510,9 +1695,16 @@ public class HubNpcListener implements Listener {
         setNpcMetadataPersistent(npc, NPC.Metadata.PLAYER_SKIN_UUID, owner);
         setNpcDataPersistent(npc, "cached-skin-uuid-name", owner);
         setNpcDataPersistent(npc, "player-skin-name", owner);
-        // Clear any stale texture snapshot metadata from older implementations.
-        setNpcDataPersistent(npc, "cached-texture", "");
-        setNpcDataPersistent(npc, "cached-signature", "");
+        if (textureCache != null) {
+            setNpcMetadataPersistent(npc, NPC.Metadata.PLAYER_SKIN_TEXTURE_PROPERTIES, textureCache.texture);
+            setNpcMetadataPersistent(npc, NPC.Metadata.PLAYER_SKIN_TEXTURE_PROPERTIES_SIGN, textureCache.signature);
+            setNpcDataPersistent(npc, "cached-texture", textureCache.texture);
+            setNpcDataPersistent(npc, "cached-signature", textureCache.signature);
+        } else {
+            // Clear any stale texture snapshot metadata from older implementations.
+            setNpcDataPersistent(npc, "cached-texture", "");
+            setNpcDataPersistent(npc, "cached-signature", "");
+        }
     }
 
     private String resolveCitizensSkinOwner(NpcKind kind, String skinOwner) {
@@ -1539,6 +1731,29 @@ public class HubNpcListener implements Listener {
             return getOrAddTrait.invoke(npc, skinTraitClass);
         } catch (Exception ignored) {
             return null;
+        }
+    }
+
+    private boolean applySkinTraitPersistent(Object skinTrait, String owner, SkinTextureCache textureCache) {
+        if (skinTrait == null || textureCache == null || !textureCache.isUsable()) {
+            return false;
+        }
+        try {
+            Method setSkinPersistent = skinTrait.getClass().getMethod(
+                    "setSkinPersistent",
+                    String.class,
+                    String.class,
+                    String.class
+            );
+            setSkinPersistent.invoke(
+                    skinTrait,
+                    textureCache.skinName.isEmpty() ? owner : textureCache.skinName,
+                    textureCache.signature,
+                    textureCache.texture
+            );
+            return true;
+        } catch (Exception ignored) {
+            return false;
         }
     }
 
@@ -2783,6 +2998,24 @@ public class HubNpcListener implements Listener {
         private HologramLineSpawn(UUID entityUuid, int npcId) {
             this.entityUuid = entityUuid;
             this.npcId = npcId;
+        }
+    }
+
+    private static final class SkinTextureCache {
+        private final String skinName;
+        private final String texture;
+        private final String signature;
+        private final long refreshedAtMillis;
+
+        private SkinTextureCache(String skinName, String texture, String signature, long refreshedAtMillis) {
+            this.skinName = skinName == null ? "" : skinName;
+            this.texture = texture == null ? "" : texture;
+            this.signature = signature == null ? "" : signature;
+            this.refreshedAtMillis = refreshedAtMillis;
+        }
+
+        private boolean isUsable() {
+            return refreshedAtMillis > 0L && !texture.isEmpty() && !signature.isEmpty();
         }
     }
 
