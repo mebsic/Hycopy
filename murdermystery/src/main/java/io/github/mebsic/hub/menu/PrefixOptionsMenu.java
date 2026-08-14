@@ -224,7 +224,7 @@ public class PrefixOptionsMenu extends Menu {
             lore.add(ChatColor.YELLOW + "Shift-click to toggle favorite!");
         } else {
             lore.add(ChatColor.RED + "You need " + ChatColor.GOLD
-                    + formatNumber(definition.getRequiredWins() - wins) + ChatColor.RED + " more wins!");
+                    + formatMoreCount(definition.getRequiredWins() - wins, "win", "wins") + ChatColor.RED + "!");
         }
         return definitionItem(definition, itemName, lore);
     }
@@ -303,6 +303,11 @@ public class PrefixOptionsMenu extends Menu {
 
     private String formatNumber(int value) {
         return numberFormat.format(Math.max(0, value));
+    }
+
+    private String formatMoreCount(int value, String singular, String plural) {
+        int safeValue = Math.max(0, value);
+        return formatNumber(safeValue) + " more " + (safeValue == 1 ? singular : plural);
     }
 
     private String buildPreview(Profile profile, PrefixCosmeticDefinition definition) {
