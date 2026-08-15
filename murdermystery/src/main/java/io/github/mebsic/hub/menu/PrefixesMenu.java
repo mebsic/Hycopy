@@ -171,8 +171,8 @@ public class PrefixesMenu extends Menu {
         if (player == null) {
             return;
         }
-        player.sendMessage(ChatColor.RED + "You need " + ChatColor.GOLD + formatMoreCount(winsNeeded, "win", "wins")
-                + ChatColor.RED + "!");
+        player.sendMessage(ChatColor.RED + "You need " + ChatColor.GOLD + formatNumber(winsNeeded)
+                + ChatColor.RED + formatMoreSuffix(winsNeeded, "win", "wins") + "!");
     }
 
     void sendSelectedMessage(Player player, String selectedName) {
@@ -187,9 +187,9 @@ public class PrefixesMenu extends Menu {
         return numberFormat.format(Math.max(0, value));
     }
 
-    private String formatMoreCount(int value, String singular, String plural) {
+    private String formatMoreSuffix(int value, String singular, String plural) {
         int safeValue = Math.max(0, value);
-        return formatNumber(safeValue) + " more " + (safeValue == 1 ? singular : plural);
+        return " more " + (safeValue == 1 ? singular : plural);
     }
 
     private String safeSelectedName(String selectedName) {

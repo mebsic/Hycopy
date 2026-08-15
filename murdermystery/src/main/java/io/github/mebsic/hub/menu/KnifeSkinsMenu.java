@@ -292,9 +292,9 @@ public class KnifeSkinsMenu extends Menu {
         return numberFormat.format(safeValue) + " " + (safeValue == 1 ? singular : plural);
     }
 
-    private String formatMoreCount(int value, String singular, String plural) {
+    private String formatMoreSuffix(int value, String singular, String plural) {
         int safeValue = Math.max(0, value);
-        return numberFormat.format(safeValue) + " more " + (safeValue == 1 ? singular : plural);
+        return " more " + (safeValue == 1 ? singular : plural);
     }
 
     private void openPage(Player player, int targetPage) {
@@ -532,8 +532,8 @@ public class KnifeSkinsMenu extends Menu {
                 lore.add(ChatColor.YELLOW + "Click to purchase!");
             } else {
                 int needed = Math.max(0, cost - Math.max(0, availableTokens));
-                lore.add(ChatColor.RED + "You need " + ChatColor.DARK_GREEN + formatMoreCount(needed, "Token", "Tokens")
-                        + ChatColor.RED + "!");
+                lore.add(ChatColor.RED + "You need " + ChatColor.DARK_GREEN + numberFormat.format(needed)
+                        + ChatColor.RED + formatMoreSuffix(needed, "Token", "Tokens") + "!");
             }
             ItemStack lockedItem = item(material, itemName, lore);
             applyLegacyVariantData(lockedItem, entry.optionId);
@@ -797,8 +797,8 @@ public class KnifeSkinsMenu extends Menu {
         if (player == null) {
             return;
         }
-        player.sendMessage(ChatColor.RED + "You need " + ChatColor.DARK_GREEN + formatMoreCount(needed, "token", "tokens")
-                + ChatColor.RED + " to purchase " + ChatColor.GOLD
+        player.sendMessage(ChatColor.RED + "You need " + ChatColor.DARK_GREEN + numberFormat.format(Math.max(0, needed))
+                + ChatColor.RED + formatMoreSuffix(needed, "token", "tokens") + " to purchase " + ChatColor.GOLD
                 + (knifeName == null ? "Knife Skin" : knifeName) + ChatColor.RED + "!");
     }
 

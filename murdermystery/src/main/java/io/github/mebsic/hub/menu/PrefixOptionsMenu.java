@@ -223,8 +223,9 @@ public class PrefixOptionsMenu extends Menu {
             lore.add(selected ? ChatColor.GREEN + "SELECTED!" : ChatColor.YELLOW + "Click to select!");
             lore.add(ChatColor.YELLOW + "Shift-click to toggle favorite!");
         } else {
-            lore.add(ChatColor.RED + "You need " + ChatColor.GOLD
-                    + formatMoreCount(definition.getRequiredWins() - wins, "win", "wins") + ChatColor.RED + "!");
+            int needed = definition.getRequiredWins() - wins;
+            lore.add(ChatColor.RED + "You need " + ChatColor.GOLD + formatNumber(needed)
+                    + ChatColor.RED + formatMoreSuffix(needed, "win", "wins") + "!");
         }
         return definitionItem(definition, itemName, lore);
     }
@@ -305,9 +306,9 @@ public class PrefixOptionsMenu extends Menu {
         return numberFormat.format(Math.max(0, value));
     }
 
-    private String formatMoreCount(int value, String singular, String plural) {
+    private String formatMoreSuffix(int value, String singular, String plural) {
         int safeValue = Math.max(0, value);
-        return formatNumber(safeValue) + " more " + (safeValue == 1 ? singular : plural);
+        return " more " + (safeValue == 1 ? singular : plural);
     }
 
     private String buildPreview(Profile profile, PrefixCosmeticDefinition definition) {
