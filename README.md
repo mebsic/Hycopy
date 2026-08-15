@@ -8,7 +8,7 @@ This is an unofficial project. It is not affiliated with or endorsed by Hypixel 
 
 ## Preview
 
-To try out this project, connect to `mc.hycopy.net` using Minecraft Java Edition (version 1.8)
+To try out this project, connect to `mc.hycopy.net` using Minecraft Java Edition.
 
 ## Project Structure
 
