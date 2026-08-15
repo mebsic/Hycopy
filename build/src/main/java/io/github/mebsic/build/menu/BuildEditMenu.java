@@ -318,7 +318,7 @@ public class BuildEditMenu extends Menu {
         return item(
                 resolveBrewingStandMaterial(),
                 ChatColor.GREEN + "Mystery Potion",
-                ChatColor.GRAY + "This will arm the next brewing stand",
+                ChatColor.GRAY + "This will set the next block",
                 ChatColor.GRAY + "you click as a Mystery Potion.",
                 "",
                 ChatColor.YELLOW + "Click to select!"

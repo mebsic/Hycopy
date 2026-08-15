@@ -1541,7 +1541,7 @@ public class BuildMapConfigService {
                 player.getUniqueId(),
                 new MysteryPotionSelection(gameType, mapWorld)
         );
-        player.sendMessage(ChatColor.YELLOW + "Left-click or right-click a brewing stand in "
+        player.sendMessage(ChatColor.YELLOW + "Left-click or right-click a block in "
                 + ChatColor.GOLD + mapWorld
                 + ChatColor.YELLOW + " to add a Mystery Potion.");
         return true;
@@ -1556,17 +1556,13 @@ public class BuildMapConfigService {
             return false;
         }
         if (block == null) {
-            player.sendMessage(ChatColor.RED + "Click a brewing stand to add a Mystery Potion!");
-            return true;
-        }
-        if (!isBrewingStandBlock(block.getType())) {
-            player.sendMessage(ChatColor.RED + "That isn't a brewing stand! Click a brewing stand to add a Mystery Potion.");
+            player.sendMessage(ChatColor.RED + "Click a block to add a Mystery Potion!");
             return true;
         }
         String selectedWorld = safeString(selection.worldDirectory);
         String blockWorld = block.getWorld() == null ? "" : safeString(block.getWorld().getName());
         if (!selectedWorld.isEmpty() && !blockWorld.equalsIgnoreCase(selectedWorld)) {
-            player.sendMessage(ChatColor.RED + "Click a brewing stand inside " + selectedWorld + "!");
+            player.sendMessage(ChatColor.RED + "Click a block inside " + selectedWorld + "!");
             return true;
         }
         Location location = block.getLocation();
@@ -2765,14 +2761,6 @@ public class BuildMapConfigService {
         json.addProperty("pitch", pitch);
         json.addProperty(MongoManager.MAP_CREATED_AT_KEY, createdAt <= 0L ? System.currentTimeMillis() : createdAt);
         return json;
-    }
-
-    private boolean isBrewingStandBlock(Material material) {
-        if (material == null) {
-            return false;
-        }
-        String name = material.name();
-        return "BREWING_STAND".equals(name) || "BREWING_STAND_BLOCK".equals(name);
     }
 
     private String cardinalFacingFromYaw(float yaw) {

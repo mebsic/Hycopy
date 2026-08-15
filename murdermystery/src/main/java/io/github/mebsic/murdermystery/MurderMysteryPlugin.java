@@ -105,6 +105,7 @@ public class MurderMysteryPlugin extends JavaPlugin implements HubContext {
     private HubLeaderboardListener hubLeaderboardListener;
     private ImageListener hubImageDisplayListener;
     private ItemFrameListener itemFrameListener;
+    private ImageCommand imageCommand;
 
     @Override
     public void onEnable() {
@@ -121,7 +122,8 @@ public class MurderMysteryPlugin extends JavaPlugin implements HubContext {
         this.roleChanceStore = corePlugin.getRoleChanceStore();
         this.corePlugin.ensureServerIdentity();
         registerCommand("token", new TokenCommand(corePlugin));
-        registerCommand("image", new ImageCommand(corePlugin));
+        this.imageCommand = new ImageCommand(corePlugin);
+        registerCommand("image", imageCommand);
         try {
             if (serverType != null && serverType.isHub()) {
                 setupHub(corePlugin);
@@ -391,6 +393,13 @@ public class MurderMysteryPlugin extends JavaPlugin implements HubContext {
         }
         this.hubLeaderboardListener = new HubLeaderboardListener(this, corePlugin, serverType);
         this.hubImageDisplayListener = new ImageListener(this, corePlugin, serverType);
+        if (imageCommand != null) {
+            imageCommand.setRefreshAction(() -> {
+                if (hubImageDisplayListener != null) {
+                    hubImageDisplayListener.refreshNow();
+                }
+            });
+        }
         this.itemFrameListener = new ItemFrameListener(serverType, hubImageDisplayListener);
         corePlugin.setHubParkourCommandHandler(hubParkourListener);
         TablistService tablistService = new TablistService(coreApi, serverType);

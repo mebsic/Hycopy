@@ -975,7 +975,7 @@ public class MurderMysteryGameManager extends GameManager {
     }
 
     public boolean handleMysteryPotionInteract(Player player, Block block) {
-        if (player == null || block == null || !isBrewingStandBlock(block.getType())) {
+        if (player == null || block == null) {
             return false;
         }
         if (!isConfiguredMysteryPotionBlock(block)) {
@@ -1027,14 +1027,6 @@ public class MurderMysteryGameManager extends GameManager {
         return location.getBlockX() == block.getX()
                 && location.getBlockY() == block.getY()
                 && location.getBlockZ() == block.getZ();
-    }
-
-    private boolean isBrewingStandBlock(Material material) {
-        if (material == null) {
-            return false;
-        }
-        String name = material.name();
-        return "BREWING_STAND".equals(name) || "BREWING_STAND_BLOCK".equals(name);
     }
 
     private void applyRandomMysteryPotion(Player player) {

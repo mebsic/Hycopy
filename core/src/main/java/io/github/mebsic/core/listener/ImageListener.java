@@ -24,6 +24,7 @@ import org.bukkit.map.MapView;
 import org.bukkit.plugin.Plugin;
 
 import javax.imageio.ImageIO;
+import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
@@ -55,9 +56,6 @@ public class ImageListener implements Listener {
     private static final int IMAGE_GRID_WIDTH = 15;
     private static final int IMAGE_GRID_HEIGHT = 6;
     private static final int IMAGE_TILE_SIZE = 128;
-    private static final int IMAGE_TOTAL_WIDTH = IMAGE_GRID_WIDTH * IMAGE_TILE_SIZE;
-    private static final int IMAGE_TOTAL_HEIGHT = IMAGE_GRID_HEIGHT * IMAGE_TILE_SIZE;
-    private static final int IMAGE_TOTAL_TILES = IMAGE_GRID_WIDTH * IMAGE_GRID_HEIGHT;
     private static final String IMAGE_FACING_KEY = "imageFacing";
     private static final String IMAGE_URL_KEY = "imageUrl";
     private static final String IMAGE_ENABLED_KEY = "imageEnabled";
@@ -71,7 +69,8 @@ public class ImageListener implements Listener {
     private final Set<UUID> pendingRuntimeFrameUuids;
     private volatile String activeGameKey;
     private volatile String cachedImageSource;
-    private volatile BufferedImage cachedScaledImage;
+    private volatile BufferedImage cachedImage;
+    private ImageGrid mapTileGrid;
     private RuntimeImage runtimeImage;
 
     public ImageListener(Plugin plugin, CorePlugin corePlugin, ServerType serverType) {
@@ -84,13 +83,15 @@ public class ImageListener implements Listener {
         this.mapTiles = new ArrayList<MapTile>();
         this.pendingRuntimeFrameUuids = Collections.newSetFromMap(new ConcurrentHashMap<UUID, Boolean>());
         this.cachedImageSource = "";
-        this.cachedScaledImage = null;
+        this.cachedImage = null;
+        this.mapTileGrid = null;
         refreshDisplay();
     }
 
     public void shutdown() {
         despawnRuntimeImage();
         mapTiles.clear();
+        mapTileGrid = null;
     }
 
     public void refreshNow() {
@@ -112,16 +113,15 @@ public class ImageListener implements Listener {
                 config = resolveImageConfig();
                 if (config != null && config.enabled && !config.imageSource.isEmpty()) {
                     String source = safeText(config.imageSource);
-                    BufferedImage cached = cachedScaledImage;
+                    BufferedImage cached = cachedImage;
                     if (!source.isEmpty() && source.equals(cachedImageSource) && cached != null) {
                         image = cached;
                     } else {
                         BufferedImage loaded = loadImage(source);
                         if (loaded != null) {
-                            BufferedImage scaled = isGridSized(loaded) ? loaded : scaleImageForGrid(loaded);
                             cachedImageSource = source;
-                            cachedScaledImage = scaled;
-                            image = scaled;
+                            cachedImage = loaded;
+                            image = loaded;
                         }
                     }
                 }
@@ -175,14 +175,18 @@ public class ImageListener implements Listener {
         }
         facing = resolveFacingWithOppositeFallback(world, config.location, facing);
 
-        ensureMapTiles(world);
-        if (mapTiles.size() != IMAGE_TOTAL_TILES) {
+        ImageGrid grid = resolveImageGrid(world, config.location, facing);
+        ensureMapTiles(world, grid);
+        if (grid == null || mapTiles.size() != grid.totalTiles) {
             return;
         }
 
-        BufferedImage scaled = isGridSized(image) ? image : scaleImageForGrid(image);
-        applyMapTileImages(scaled);
-        ensureRuntimeFrames(world, config.location, facing);
+        BufferedImage scaled = scaleImageForGrid(image, grid);
+        if (scaled == null) {
+            return;
+        }
+        applyMapTileImages(scaled, grid);
+        ensureRuntimeFrames(world, config.location, facing, grid);
     }
 
     private BlockFace resolveFacingWithOppositeFallback(World world, ImageLocation location, BlockFace preferred) {
@@ -243,36 +247,114 @@ public class ImageListener implements Listener {
         }
     }
 
-    private BufferedImage scaleImageForGrid(BufferedImage source) {
-        BufferedImage scaled = new BufferedImage(IMAGE_TOTAL_WIDTH, IMAGE_TOTAL_HEIGHT, BufferedImage.TYPE_INT_RGB);
+    private ImageGrid resolveImageGrid(World world, ImageLocation location, BlockFace facing) {
+        int width = detectSupportedGridWidth(world, location, facing);
+        int height = detectSupportedGridHeight(world, location, facing, width);
+        if (width <= 0 || height <= 0) {
+            return new ImageGrid(IMAGE_GRID_WIDTH, IMAGE_GRID_HEIGHT);
+        }
+        return new ImageGrid(width, height);
+    }
+
+    private int detectSupportedGridWidth(World world, ImageLocation location, BlockFace facing) {
+        int width = 0;
+        for (int col = 0; col < IMAGE_GRID_WIDTH; col++) {
+            if (hasSupportedBlockInColumn(world, location, facing, col)) {
+                width = col + 1;
+                continue;
+            }
+            if (width > 0) {
+                break;
+            }
+        }
+        return width;
+    }
+
+    private int detectSupportedGridHeight(World world, ImageLocation location, BlockFace facing, int width) {
+        int scanWidth = width <= 0 ? IMAGE_GRID_WIDTH : width;
+        int height = 0;
+        for (int yOffset = 0; yOffset < IMAGE_GRID_HEIGHT; yOffset++) {
+            if (hasSupportedBlockInRow(world, location, facing, yOffset, scanWidth)) {
+                height = yOffset + 1;
+                continue;
+            }
+            if (height > 0) {
+                break;
+            }
+        }
+        return height;
+    }
+
+    private boolean hasSupportedBlockInColumn(World world, ImageLocation location, BlockFace facing, int col) {
+        for (int yOffset = 0; yOffset < IMAGE_GRID_HEIGHT; yOffset++) {
+            if (hasSupportedBlockAt(world, location, facing, col, yOffset)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasSupportedBlockInRow(World world, ImageLocation location, BlockFace facing, int yOffset, int width) {
+        for (int col = 0; col < width; col++) {
+            if (hasSupportedBlockAt(world, location, facing, col, yOffset)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasSupportedBlockAt(World world, ImageLocation location, BlockFace facing, int col, int yOffset) {
+        if (world == null || location == null || facing == null) {
+            return false;
+        }
+        Location tile = tileLocationFromBottom(world, location, facing, col, yOffset);
+        if (tile == null) {
+            return false;
+        }
+        Block support = tile.getBlock().getRelative(facing.getOppositeFace());
+        return isSolidSupport(support == null ? null : support.getType());
+    }
+
+    private BufferedImage scaleImageForGrid(BufferedImage source, ImageGrid grid) {
+        if (source == null || source.getWidth() <= 0 || source.getHeight() <= 0) {
+            return null;
+        }
+        if (grid == null || grid.totalWidth <= 0 || grid.totalHeight <= 0) {
+            return null;
+        }
+        BufferedImage scaled = new BufferedImage(grid.totalWidth, grid.totalHeight, BufferedImage.TYPE_INT_RGB);
         Graphics2D graphics = scaled.createGraphics();
         try {
             graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
             graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
             graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            graphics.drawImage(source, 0, 0, IMAGE_TOTAL_WIDTH, IMAGE_TOTAL_HEIGHT, null);
+            graphics.setColor(Color.BLACK);
+            graphics.fillRect(0, 0, grid.totalWidth, grid.totalHeight);
+
+            double widthScale = grid.totalWidth / (double) source.getWidth();
+            double heightScale = grid.totalHeight / (double) source.getHeight();
+            double scale = Math.min(widthScale, heightScale);
+            int drawWidth = Math.max(1, (int) Math.round(source.getWidth() * scale));
+            int drawHeight = Math.max(1, (int) Math.round(source.getHeight() * scale));
+            int drawX = (grid.totalWidth - drawWidth) / 2;
+            int drawY = (grid.totalHeight - drawHeight) / 2;
+            graphics.drawImage(source, drawX, drawY, drawWidth, drawHeight, null);
         } finally {
             graphics.dispose();
         }
         return scaled;
     }
 
-    private boolean isGridSized(BufferedImage image) {
-        if (image == null) {
-            return false;
-        }
-        return image.getWidth() == IMAGE_TOTAL_WIDTH && image.getHeight() == IMAGE_TOTAL_HEIGHT;
-    }
-
-    private void ensureMapTiles(World world) {
-        if (world == null) {
+    private void ensureMapTiles(World world, ImageGrid grid) {
+        if (world == null || grid == null) {
             return;
         }
-        if (mapTiles.size() == IMAGE_TOTAL_TILES) {
+        if (mapTiles.size() == grid.totalTiles && grid.matches(mapTileGrid)) {
             return;
         }
         mapTiles.clear();
-        for (int i = 0; i < IMAGE_TOTAL_TILES; i++) {
+        mapTileGrid = grid;
+        for (int i = 0; i < grid.totalTiles; i++) {
             MapView view = Bukkit.createMap(world);
             StaticImageMapRenderer renderer = new StaticImageMapRenderer();
             for (MapRenderer existing : new ArrayList<MapRenderer>(view.getRenderers())) {
@@ -283,13 +365,13 @@ public class ImageListener implements Listener {
         }
     }
 
-    private void applyMapTileImages(BufferedImage scaled) {
-        if (scaled == null || mapTiles.size() != IMAGE_TOTAL_TILES) {
+    private void applyMapTileImages(BufferedImage scaled, ImageGrid grid) {
+        if (scaled == null || grid == null || mapTiles.size() != grid.totalTiles) {
             return;
         }
-        for (int rowTop = 0; rowTop < IMAGE_GRID_HEIGHT; rowTop++) {
-            for (int col = 0; col < IMAGE_GRID_WIDTH; col++) {
-                int index = rowTop * IMAGE_GRID_WIDTH + col;
+        for (int rowTop = 0; rowTop < grid.height; rowTop++) {
+            for (int col = 0; col < grid.width; col++) {
+                int index = rowTop * grid.width + col;
                 MapTile tile = mapTiles.get(index);
                 if (tile == null || tile.renderer == null) {
                     continue;
@@ -305,21 +387,21 @@ public class ImageListener implements Listener {
         }
     }
 
-    private void ensureRuntimeFrames(World world, ImageLocation location, BlockFace facing) {
-        if (world == null || location == null || facing == null || mapTiles.size() != IMAGE_TOTAL_TILES) {
+    private void ensureRuntimeFrames(World world, ImageLocation location, BlockFace facing, ImageGrid grid) {
+        if (world == null || location == null || facing == null || grid == null || mapTiles.size() != grid.totalTiles) {
             return;
         }
         List<UUID> previous = runtimeImage == null || runtimeImage.frameUuids == null
                 ? new ArrayList<UUID>()
                 : new ArrayList<UUID>(runtimeImage.frameUuids);
         Set<UUID> previousSet = new HashSet<UUID>(previous);
-        removeConflictingFramesNearGrid(world, location, facing, previousSet);
-        List<UUID> next = new ArrayList<UUID>(IMAGE_TOTAL_TILES);
+        removeConflictingFramesNearGrid(world, location, facing, previousSet, grid);
+        List<UUID> next = new ArrayList<UUID>(grid.totalTiles);
 
-        for (int rowTop = 0; rowTop < IMAGE_GRID_HEIGHT; rowTop++) {
-            for (int col = 0; col < IMAGE_GRID_WIDTH; col++) {
-                int index = rowTop * IMAGE_GRID_WIDTH + col;
-                Location tileLocation = tileLocation(world, location, facing, col, rowTop);
+        for (int rowTop = 0; rowTop < grid.height; rowTop++) {
+            for (int col = 0; col < grid.width; col++) {
+                int index = rowTop * grid.width + col;
+                Location tileLocation = tileLocation(world, location, facing, col, rowTop, grid.height);
                 if (tileLocation == null) {
                     continue;
                 }
@@ -380,14 +462,15 @@ public class ImageListener implements Listener {
     private void removeConflictingFramesNearGrid(World world,
                                                  ImageLocation location,
                                                  BlockFace facing,
-                                                 Set<UUID> preserve) {
-        if (world == null || location == null || facing == null) {
+                                                 Set<UUID> preserve,
+                                                 ImageGrid grid) {
+        if (world == null || location == null || facing == null || grid == null) {
             return;
         }
         Set<UUID> scanned = new HashSet<UUID>();
-        for (int rowTop = 0; rowTop < IMAGE_GRID_HEIGHT; rowTop++) {
-            for (int col = 0; col < IMAGE_GRID_WIDTH; col++) {
-                Location tile = tileLocation(world, location, facing, col, rowTop);
+        for (int rowTop = 0; rowTop < grid.height; rowTop++) {
+            for (int col = 0; col < grid.width; col++) {
+                Location tile = tileLocation(world, location, facing, col, rowTop, grid.height);
                 if (tile == null) {
                     continue;
                 }
@@ -418,13 +501,21 @@ public class ImageListener implements Listener {
     }
 
     private Location tileLocation(World world, ImageLocation anchor, BlockFace facing, int col, int rowTop) {
+        return tileLocation(world, anchor, facing, col, rowTop, IMAGE_GRID_HEIGHT);
+    }
+
+    private Location tileLocation(World world, ImageLocation anchor, BlockFace facing, int col, int rowTop, int gridHeight) {
+        int yOffset = (Math.max(1, gridHeight) - 1) - Math.max(0, rowTop);
+        return tileLocationFromBottom(world, anchor, facing, col, yOffset);
+    }
+
+    private Location tileLocationFromBottom(World world, ImageLocation anchor, BlockFace facing, int col, int yOffset) {
         if (world == null || anchor == null || facing == null) {
             return null;
         }
         int[] step = widthStepForFacing(facing);
         int xStep = step[0];
         int zStep = step[1];
-        int yOffset = (IMAGE_GRID_HEIGHT - 1) - Math.max(0, rowTop);
 
         double baseX = Math.floor(anchor.x) + 0.5d;
         double baseY = Math.floor(anchor.y) + 0.5d;
@@ -432,7 +523,7 @@ public class ImageListener implements Listener {
         return new Location(
                 world,
                 baseX + (xStep * col),
-                baseY + yOffset,
+                baseY + Math.max(0, yOffset),
                 baseZ + (zStep * col),
                 anchor.yaw,
                 anchor.pitch
@@ -992,6 +1083,26 @@ public class ImageListener implements Listener {
         private MapTile(MapView mapView, StaticImageMapRenderer renderer) {
             this.mapView = mapView;
             this.renderer = renderer;
+        }
+    }
+
+    private static final class ImageGrid {
+        private final int width;
+        private final int height;
+        private final int totalWidth;
+        private final int totalHeight;
+        private final int totalTiles;
+
+        private ImageGrid(int width, int height) {
+            this.width = Math.max(1, Math.min(IMAGE_GRID_WIDTH, width));
+            this.height = Math.max(1, Math.min(IMAGE_GRID_HEIGHT, height));
+            this.totalWidth = this.width * IMAGE_TILE_SIZE;
+            this.totalHeight = this.height * IMAGE_TILE_SIZE;
+            this.totalTiles = this.width * this.height;
+        }
+
+        private boolean matches(ImageGrid other) {
+            return other != null && width == other.width && height == other.height;
         }
     }
 

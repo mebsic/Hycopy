@@ -53,6 +53,85 @@ patch_velocity_lmbda() {
   java -cp /server/velocity.jar "${VELOCITY_LMBDA_PATCHER}" /server/velocity.jar
 }
 
+download_hangar_velocity_plugin() {
+  local project="$1"
+  local version="$2"
+  local file_name="$3"
+  local target="/server/plugins/${file_name}"
+  local tmp_target="${target}.download"
+  local user_agent="${USER_AGENT:-hycopy-docker/2.0 (https://example.net)}"
+  local api_root="https://hangar.papermc.io/api/v1/projects/${project}"
+  local resolved_version="${version}"
+  local url="https://hangar.papermc.io/api/v1/projects/${project}/versions/${version}/VELOCITY/download"
+
+  if [[ -s "${target}" && "${VIA_FORCE_DOWNLOAD:-false}" != "true" ]]; then
+    echo "[bootstrap] Using existing ${file_name}."
+    return 0
+  fi
+
+  if [[ "${version}" == "latest" ]]; then
+    resolved_version="$(curl --globoff -fsSL -H "User-Agent: ${user_agent}" "${api_root}/latestrelease")"
+    url="${api_root}/versions/${resolved_version}/VELOCITY/download"
+  fi
+
+  echo "[bootstrap] Downloading ${project} ${resolved_version} for Velocity..."
+  rm -f "${tmp_target}"
+  curl --globoff -fsSL -H "User-Agent: ${user_agent}" -o "${tmp_target}" "${url}"
+  mv "${tmp_target}" "${target}"
+}
+
+install_via_plugins() {
+  if [[ "${VIA_PLUGINS_ENABLED:-true}" != "true" ]]; then
+    echo "[bootstrap] Official Via plugin installation disabled."
+    return 0
+  fi
+
+  mkdir -p /server/plugins
+  download_hangar_velocity_plugin "ViaVersion" "${VIAVERSION_VERSION:-latest}" "ViaVersion.jar"
+  download_hangar_velocity_plugin "ViaBackwards" "${VIABACKWARDS_VERSION:-latest}" "ViaBackwards.jar"
+  download_hangar_velocity_plugin "ViaRewind" "${VIAREWIND_VERSION:-latest}" "ViaRewind.jar"
+}
+
+configure_viaversion() {
+  if [[ "${VIA_PLUGINS_ENABLED:-true}" != "true" ]]; then
+    return 0
+  fi
+
+  local config_file="/server/plugins/viaversion/config.yml"
+  local interval="${VIA_VELOCITY_PING_INTERVAL:-1}"
+  local input_file="/dev/null"
+  local tmp_file=""
+
+  mkdir -p "$(dirname "${config_file}")"
+
+  if [[ -f "${config_file}" ]]; then
+    input_file="${config_file}"
+  fi
+
+  tmp_file="$(mktemp)"
+  if awk -v interval="${interval}" '
+    BEGIN { updated = 0 }
+    /^[[:space:]]*velocity-ping-interval:/ {
+      print "velocity-ping-interval: " interval
+      updated = 1
+      next
+    }
+    { print }
+    END {
+      if (!updated) {
+        print "velocity-ping-interval: " interval
+      }
+    }
+  ' "${input_file}" > "${tmp_file}"; then
+    mv "${tmp_file}" "${config_file}"
+    echo "[bootstrap] ViaVersion velocity-ping-interval set to ${interval}s."
+  else
+    echo "[bootstrap] Failed to configure ViaVersion velocity-ping-interval." >&2
+    rm -f "${tmp_file}"
+    return 1
+  fi
+}
+
 stage_proxy_plugin() {
   local file_name="HycopyProxy.jar"
   local runtime_target="/server/plugins/${file_name}"
@@ -158,6 +237,8 @@ fi
 
 download_velocity
 patch_velocity_lmbda
+install_via_plugins
+configure_viaversion
 stage_proxy_plugin
 
 exec java ${JAVA_OPTS:-"-Xms256M -Xmx512M"} -jar /server/velocity.jar

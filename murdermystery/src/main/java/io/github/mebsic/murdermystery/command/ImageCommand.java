@@ -6,6 +6,7 @@ import io.github.mebsic.core.CorePlugin;
 import io.github.mebsic.core.manager.MongoManager;
 import io.github.mebsic.core.model.Rank;
 import io.github.mebsic.core.server.ServerType;
+import io.github.mebsic.core.store.MapConfigStore;
 import io.github.mebsic.core.util.CommonMessages;
 import io.github.mebsic.core.util.RankUtil;
 import org.bson.Document;
@@ -22,11 +23,18 @@ import java.util.Locale;
 public class ImageCommand implements CommandExecutor {
     private static final String IMAGE_URL_KEY = "imageUrl";
     private static final String IMAGE_ENABLED_KEY = "imageEnabled";
+    private static final String MAP_CONFIG_UPDATE_CHANNEL = "map_config_update";
+    private static final String MAP_CONFIG_UPDATE_PREFIX = "maps:";
 
     private final CorePlugin corePlugin;
+    private Runnable refreshAction;
 
     public ImageCommand(CorePlugin corePlugin) {
         this.corePlugin = corePlugin;
+    }
+
+    public void setRefreshAction(Runnable refreshAction) {
+        this.refreshAction = refreshAction;
     }
 
     @Override
@@ -82,6 +90,7 @@ public class ImageCommand implements CommandExecutor {
                             .append("$setOnInsert", new Document("createdAt", now)),
                     new UpdateOptions().upsert(true)
             );
+            refreshImageDisplays();
             player.sendMessage(ChatColor.GREEN + CommonMessages.DONE);
         } catch (Exception ex) {
             player.sendMessage(ChatColor.RED + "Failed to update lobby image!\n" + ex.getMessage());
@@ -92,6 +101,33 @@ public class ImageCommand implements CommandExecutor {
     private boolean isLobby() {
         ServerType serverType = corePlugin.getServerType();
         return serverType != null && serverType.isHub();
+    }
+
+    private void refreshImageDisplays() {
+        Runnable action = refreshAction;
+        if (action != null) {
+            try {
+                action.run();
+            } catch (Exception ignored) {
+                // Redis fan-out below can still refresh other lobby instances.
+            }
+        }
+        publishImageRefresh();
+    }
+
+    private void publishImageRefresh() {
+        if (corePlugin == null || corePlugin.getPubSubService() == null) {
+            return;
+        }
+        String gameKey = MapConfigStore.normalizeGameKey(corePlugin.getConfig().getString("server.group", ""));
+        if (gameKey.isEmpty()) {
+            return;
+        }
+        try {
+            corePlugin.getPubSubService().publish(MAP_CONFIG_UPDATE_CHANNEL, MAP_CONFIG_UPDATE_PREFIX + gameKey);
+        } catch (Exception ignored) {
+            // The image URL was saved; Redis refresh fan-out is best effort.
+        }
     }
 
     private boolean isSupportedImageUrl(String value) {
