@@ -72,11 +72,11 @@ public final class ChatEmoteUtil {
         emotes.add(new ChatEmote(":tableflip:", RED + "(╯°□°）╯" + WHITE + "︵ " + GRAY + "┻━┻"));
         emotes.add(new ChatEmote("o/", LIGHT_PURPLE + "(ﾟ◡ﾟ)/"));
         emotes.add(new ChatEmote(":123:", GREEN + "1" + YELLOW + "2" + RED + "3"));
-        emotes.add(new ChatEmote(":totem:", AQUA + "◎_◎"));
+        emotes.add(new ChatEmote(":totem:", AQUA + "◎" + YELLOW + "_" + AQUA + "◎"));
         emotes.add(new ChatEmote(":typing:", YELLOW + "✎" + GOLD + "..."));
         emotes.add(new ChatEmote(":maths:", GREEN + "√" + YELLOW + BOLD + "(" + GREEN + "π" + GREEN + BOLD + "+" + GREEN + BOLD + "x" + YELLOW + BOLD + ")" + GREEN + BOLD + "=" + RED + BOLD + "L"));
         emotes.add(new ChatEmote(":snail:", YELLOW + "@" + GREEN + "'" + YELLOW + "-" + GREEN + "'"));
-        emotes.add(new ChatEmote(":thinking:", GOLD + "(" + GREEN + "0" + GOLD + "." + RED + "o" + GOLD + "?)"));
+        emotes.add(new ChatEmote(":thinking:", GOLD + "(" + GREEN + "0" + GOLD + "." + GREEN + "o" + RED + "?" + GOLD + ")"));
         emotes.add(new ChatEmote(":gimme:", AQUA + "༼つ◕_◕༽つ"));
         emotes.add(new ChatEmote(":wizard:", YELLOW + "(" + AQUA + "'" + YELLOW + "-" + AQUA + "'" + YELLOW + ")⊃" + RED + "━" + LIGHT_PURPLE + "☆ﾟ.*･｡ﾟ"));
         emotes.add(new ChatEmote(":pvp:", YELLOW + "⚔"));
