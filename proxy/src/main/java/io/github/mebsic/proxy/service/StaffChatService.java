@@ -1,5 +1,6 @@
 package io.github.mebsic.proxy.service;
 
+import io.github.mebsic.core.util.ChatEmoteUtil;
 import io.github.mebsic.proxy.util.Components;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
@@ -38,12 +39,30 @@ public class StaffChatService {
             return;
         }
         storeStaffChatMessage(sender, message);
+        String renderedMessage = renderMessage(sender.getUniqueId(), message, "§f");
         String formattedSender = formatStatusName(sender);
         proxy.getAllPlayers().forEach(target -> {
             if (isStaff(target.getUniqueId())) {
-                target.sendMessage(Components.staffChat(formattedSender, message));
+                target.sendMessage(Components.staffChat(formattedSender, renderedMessage));
             }
         });
+    }
+
+    private String renderMessage(UUID senderId, String message, String restoreColor) {
+        if (senderId == null || rankResolver == null) {
+            return message == null ? "" : message;
+        }
+        boolean canUseMvpPlusPlusEmotes = rankResolver.hasAtLeast(senderId, "MVP_PLUS_PLUS");
+        boolean canUseRankGiftingEmotes = rankResolver.hasGiftedRank(senderId);
+        if (!canUseMvpPlusPlusEmotes && !canUseRankGiftingEmotes) {
+            return message == null ? "" : message;
+        }
+        return ChatEmoteUtil.replaceEmotes(
+                message,
+                canUseMvpPlusPlusEmotes,
+                canUseRankGiftingEmotes,
+                restoreColor
+        );
     }
 
     private void storeStaffChatMessage(Player sender, String message) {

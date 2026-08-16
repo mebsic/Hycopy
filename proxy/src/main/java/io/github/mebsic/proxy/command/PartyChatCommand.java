@@ -1,6 +1,7 @@
 package io.github.mebsic.proxy.command;
 
 import io.github.mebsic.core.util.CommonMessages;
+import io.github.mebsic.core.util.ChatEmoteUtil;
 import io.github.mebsic.proxy.service.BlockService;
 import io.github.mebsic.proxy.service.ChatChannelService;
 import io.github.mebsic.proxy.service.ChatMessageService;
@@ -76,13 +77,14 @@ public class PartyChatCommand implements SimpleCommand {
             sendFramed(player, Component.text("This party is currently muted!", NamedTextColor.RED));
             return;
         }
-        String message = joinArgs(args);
+        String rawMessage = joinArgs(args);
+        String message = renderMessage(playerId, rawMessage, "§f");
         parties.sendPartyMessage(
                 playerId,
                 Components.partyChat(formatPartyChatName(playerId, player.getUsername()), message),
                 memberId -> canReceivePartyChat(playerId, memberId)
         );
-        storePartyChatMessage(player, message);
+        storePartyChatMessage(player, rawMessage);
     }
 
     private boolean canReceivePartyChat(UUID senderId, UUID recipientId) {
@@ -118,6 +120,23 @@ public class PartyChatCommand implements SimpleCommand {
             builder.append(args[i]);
         }
         return builder.toString();
+    }
+
+    private String renderMessage(UUID senderId, String message, String restoreColor) {
+        if (senderId == null || rankResolver == null) {
+            return message == null ? "" : message;
+        }
+        boolean canUseMvpPlusPlusEmotes = rankResolver.hasAtLeast(senderId, "MVP_PLUS_PLUS");
+        boolean canUseRankGiftingEmotes = rankResolver.hasGiftedRank(senderId);
+        if (!canUseMvpPlusPlusEmotes && !canUseRankGiftingEmotes) {
+            return message == null ? "" : message;
+        }
+        return ChatEmoteUtil.replaceEmotes(
+                message,
+                canUseMvpPlusPlusEmotes,
+                canUseRankGiftingEmotes,
+                restoreColor
+        );
     }
 
     private void storePartyChatMessage(Player player, String message) {

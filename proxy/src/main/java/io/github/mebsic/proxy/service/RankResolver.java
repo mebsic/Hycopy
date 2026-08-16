@@ -13,22 +13,22 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class RankResolver {
-    private static final String COLOR_GRAY = "\u00A77";
-    private static final String COLOR_GREEN = "\u00A7a";
-    private static final String COLOR_GOLD = "\u00A76";
-    private static final String COLOR_AQUA = "\u00A7b";
-    private static final String COLOR_RED = "\u00A7c";
-    private static final String COLOR_WHITE = "\u00A7f";
-    private static final String COLOR_YELLOW = "\u00A7e";
-    private static final String COLOR_LIGHT_PURPLE = "\u00A7d";
-    private static final String COLOR_BLUE = "\u00A79";
-    private static final String COLOR_DARK_GREEN = "\u00A72";
-    private static final String COLOR_DARK_RED = "\u00A74";
-    private static final String COLOR_DARK_AQUA = "\u00A73";
-    private static final String COLOR_DARK_PURPLE = "\u00A75";
-    private static final String COLOR_DARK_GRAY = "\u00A78";
-    private static final String COLOR_BLACK = "\u00A70";
-    private static final String COLOR_DARK_BLUE = "\u00A71";
+    private static final String COLOR_GRAY = "§7";
+    private static final String COLOR_GREEN = "§a";
+    private static final String COLOR_GOLD = "§6";
+    private static final String COLOR_AQUA = "§b";
+    private static final String COLOR_RED = "§c";
+    private static final String COLOR_WHITE = "§f";
+    private static final String COLOR_YELLOW = "§e";
+    private static final String COLOR_LIGHT_PURPLE = "§d";
+    private static final String COLOR_BLUE = "§9";
+    private static final String COLOR_DARK_GREEN = "§2";
+    private static final String COLOR_DARK_RED = "§4";
+    private static final String COLOR_DARK_AQUA = "§3";
+    private static final String COLOR_DARK_PURPLE = "§5";
+    private static final String COLOR_DARK_GRAY = "§8";
+    private static final String COLOR_BLACK = "§0";
+    private static final String COLOR_DARK_BLUE = "§1";
 
     private static final String MVP_PLUS_PLUS_PREFIX_GOLD = "gold";
     private static final String MVP_PLUS_PLUS_PREFIX_AQUA = "aqua";
@@ -73,6 +73,15 @@ public class RankResolver {
             return "DEFAULT";
         }
         return resolveRankName(loadProfile(uuid));
+    }
+
+    public boolean hasGiftedRank(UUID uuid) {
+        if (database == null || uuid == null) {
+            return false;
+        }
+        Document profile = loadProfile(uuid);
+        Object raw = profile == null ? null : profile.get(MongoManager.PROFILE_RANKS_GIFTED_KEY);
+        return raw instanceof Number && ((Number) raw).intValue() >= 1;
     }
 
     public String formatNameWithRank(UUID uuid, String fallbackName) {

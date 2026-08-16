@@ -4,7 +4,6 @@ import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import io.github.mebsic.core.util.CommonMessages;
-import io.github.mebsic.core.util.ChatEmoteUtil;
 import io.github.mebsic.core.util.MojangApi;
 import io.github.mebsic.proxy.service.BlockService;
 import io.github.mebsic.proxy.service.ChatRestrictionService;
@@ -14,36 +13,37 @@ import io.github.mebsic.proxy.service.RankResolver;
 import io.github.mebsic.proxy.util.Components;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
 import java.util.Optional;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
-public class FriendMessageCommand implements SimpleCommand {
-    private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacySection();
+public class ImMutedCommand implements SimpleCommand {
+    private static final long NOTIFY_COOLDOWN_MILLIS = 5L * 60L * 1000L;
+    private static final String MUTED_MESSAGE = "Hey! I'm currently muted and am unable to message right now.";
+
     private final ProxyServer proxy;
     private final FriendService friends;
     private final BlockService blocks;
     private final ChatRestrictionService chatRestrictions;
     private final RankResolver rankResolver;
     private final PrivateMessageReplyService replies;
+    private final Map<String, Long> notifiedPairs;
 
-    public FriendMessageCommand(ProxyServer proxy, FriendService friends, BlockService blocks, RankResolver rankResolver) {
-        this(proxy, friends, blocks, null, rankResolver, null);
-    }
-
-    public FriendMessageCommand(ProxyServer proxy,
-                                FriendService friends,
-                                BlockService blocks,
-                                ChatRestrictionService chatRestrictions,
-                                RankResolver rankResolver,
-                                PrivateMessageReplyService replies) {
+    public ImMutedCommand(ProxyServer proxy,
+                          FriendService friends,
+                          BlockService blocks,
+                          ChatRestrictionService chatRestrictions,
+                          RankResolver rankResolver,
+                          PrivateMessageReplyService replies) {
         this.proxy = proxy;
         this.friends = friends;
         this.blocks = blocks;
         this.chatRestrictions = chatRestrictions;
         this.rankResolver = rankResolver;
         this.replies = replies;
+        this.notifiedPairs = new ConcurrentHashMap<String, Long>();
     }
 
     @Override
@@ -54,12 +54,12 @@ public class FriendMessageCommand implements SimpleCommand {
         }
         Player sender = (Player) invocation.source();
         String[] args = invocation.arguments();
-        if (args.length < 2) {
-            sendInvalidUsage(sender);
+        if (args.length != 1) {
+            sender.sendMessage(Component.text("Invalid usage! Use: /immuted <player>", NamedTextColor.RED));
             return;
         }
-        if (chatRestrictions != null && chatRestrictions.isMuted(sender.getUniqueId())) {
-            sendMuteMessage(sender);
+        if (chatRestrictions == null || !chatRestrictions.isMuted(sender.getUniqueId())) {
+            sender.sendMessage(Component.text("You are not muted!", NamedTextColor.RED));
             return;
         }
         String targetInput = args[0];
@@ -80,28 +80,33 @@ public class FriendMessageCommand implements SimpleCommand {
             sender.sendMessage(Component.text("You cannot message this player!", NamedTextColor.RED));
             return;
         }
+        String notificationKey = notificationKey(sender.getUniqueId(), targetId);
+        long now = System.currentTimeMillis();
+        Long lastNotifiedAt = notifiedPairs.get(notificationKey);
+        if (lastNotifiedAt != null && now - lastNotifiedAt.longValue() < NOTIFY_COOLDOWN_MILLIS) {
+            sender.sendMessage(Component.text("You have already tried notifying this player of your mute!", NamedTextColor.RED));
+            return;
+        }
         Optional<Player> target = proxy.getPlayer(targetId);
         if (!target.isPresent()) {
             sender.sendMessage(Component.text("That player is offline!", NamedTextColor.RED));
             return;
         }
-        String message = renderMessage(sender.getUniqueId(), joinArgs(args, 1), "§7");
         Player recipient = target.get();
         friends.rememberName(sender.getUniqueId(), sender.getUsername());
         friends.rememberName(recipient.getUniqueId(), recipient.getUsername());
         String senderDisplay = formatRankedName(sender.getUniqueId(), sender.getUsername());
         String recipientDisplay = formatRankedName(recipient.getUniqueId(), recipient.getUsername());
-        sender.sendMessage(Components.friendPrivateMessage(true, recipientDisplay, message));
-        recipient.sendMessage(Components.friendPrivateMessage(false, senderDisplay, message));
+        sender.sendMessage(Components.friendPrivateMessage(true, recipientDisplay, MUTED_MESSAGE, "§e"));
+        recipient.sendMessage(Components.friendPrivateMessage(false, senderDisplay, MUTED_MESSAGE, "§e"));
+        notifiedPairs.put(notificationKey, now);
         if (replies != null) {
             replies.rememberConversation(sender.getUniqueId(), recipient.getUniqueId());
         }
     }
 
-    private void sendInvalidUsage(Player sender) {
-        sender.sendMessage(Component.text(
-                "Invalid usage! Use: /msg <player> <message>",
-                NamedTextColor.RED));
+    private String notificationKey(UUID senderId, UUID targetId) {
+        return senderId.toString() + ":" + targetId.toString();
     }
 
     private UUID resolveUuid(String name) {
@@ -129,45 +134,5 @@ public class FriendMessageCommand implements SimpleCommand {
             return fallbackName == null ? "" : fallbackName;
         }
         return rankResolver.formatNameWithRank(uuid, fallbackName);
-    }
-
-    private String renderMessage(UUID senderId, String message, String restoreColor) {
-        if (senderId == null || rankResolver == null) {
-            return message == null ? "" : message;
-        }
-        boolean canUseMvpPlusPlusEmotes = rankResolver.hasAtLeast(senderId, "MVP_PLUS_PLUS");
-        boolean canUseRankGiftingEmotes = rankResolver.hasGiftedRank(senderId);
-        if (!canUseMvpPlusPlusEmotes && !canUseRankGiftingEmotes) {
-            return message == null ? "" : message;
-        }
-        return ChatEmoteUtil.replaceEmotes(
-                message,
-                canUseMvpPlusPlusEmotes,
-                canUseRankGiftingEmotes,
-                restoreColor
-        );
-    }
-
-    private String joinArgs(String[] args, int start) {
-        StringBuilder builder = new StringBuilder();
-        for (int i = start; i < args.length; i++) {
-            if (builder.length() > 0) {
-                builder.append(' ');
-            }
-            builder.append(args[i]);
-        }
-        return builder.toString();
-    }
-
-    private void sendMuteMessage(Player player) {
-        if (player == null) {
-            return;
-        }
-        String message = chatRestrictions == null ? null : chatRestrictions.formatActiveMuteMessage(player.getUniqueId());
-        if (message == null || message.trim().isEmpty()) {
-            player.sendMessage(Component.text("You are currently muted!", NamedTextColor.RED));
-            return;
-        }
-        player.sendMessage(LEGACY.deserialize(message));
     }
 }

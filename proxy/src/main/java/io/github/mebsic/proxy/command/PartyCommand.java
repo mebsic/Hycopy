@@ -2,6 +2,7 @@ package io.github.mebsic.proxy.command;
 
 import io.github.mebsic.core.util.MojangApi;
 import io.github.mebsic.core.server.ServerType;
+import io.github.mebsic.core.util.ChatEmoteUtil;
 import io.github.mebsic.core.util.CommonMessages;
 import io.github.mebsic.proxy.service.BlockService;
 import io.github.mebsic.proxy.service.ChatChannelService;
@@ -838,14 +839,32 @@ public class PartyCommand implements SimpleCommand {
             sendFramed(player, Component.text("This party is currently muted!", NamedTextColor.RED));
             return;
         }
-        String message = joinArgs(args, start);
+        String rawMessage = joinArgs(args, start);
         UUID senderId = player.getUniqueId();
+        String message = renderMessage(senderId, rawMessage, "§f");
         parties.sendPartyMessage(
                 senderId,
                 Components.partyChat(formatPartyChatName(senderId, player.getUsername()), message),
                 memberId -> canReceivePartyChat(senderId, memberId)
         );
-        storePartyChatMessage(player, message);
+        storePartyChatMessage(player, rawMessage);
+    }
+
+    private String renderMessage(UUID senderId, String message, String restoreColor) {
+        if (senderId == null || rankResolver == null) {
+            return message == null ? "" : message;
+        }
+        boolean canUseMvpPlusPlusEmotes = rankResolver.hasAtLeast(senderId, "MVP_PLUS_PLUS");
+        boolean canUseRankGiftingEmotes = rankResolver.hasGiftedRank(senderId);
+        if (!canUseMvpPlusPlusEmotes && !canUseRankGiftingEmotes) {
+            return message == null ? "" : message;
+        }
+        return ChatEmoteUtil.replaceEmotes(
+                message,
+                canUseMvpPlusPlusEmotes,
+                canUseRankGiftingEmotes,
+                restoreColor
+        );
     }
 
     private boolean canReceivePartyChat(UUID senderId, UUID recipientId) {

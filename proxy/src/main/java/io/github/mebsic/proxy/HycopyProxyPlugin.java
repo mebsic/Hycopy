@@ -5,11 +5,13 @@ import com.mongodb.ConnectionString;
 import com.mongodb.MongoClientSettings;
 import io.github.mebsic.core.server.ServerType;
 import io.github.mebsic.core.util.CommonMessages;
+import io.github.mebsic.core.util.ChatEmoteUtil;
 import io.github.mebsic.core.util.DomainSettingsStore;
 import io.github.mebsic.core.util.HubMessageUtil;
 import io.github.mebsic.core.util.NetworkConstants;
 import io.github.mebsic.proxy.cache.MotdCache;
 import io.github.mebsic.proxy.command.BlockCommand;
+import io.github.mebsic.proxy.command.BoopCommand;
 import io.github.mebsic.proxy.command.BuildCommand;
 import io.github.mebsic.proxy.command.CancelRestartCommand;
 import io.github.mebsic.proxy.command.CancelUpdateCommand;
@@ -17,10 +19,12 @@ import io.github.mebsic.proxy.command.ChatCommand;
 import io.github.mebsic.proxy.command.FriendCommand;
 import io.github.mebsic.proxy.command.FriendMessageCommand;
 import io.github.mebsic.proxy.command.HubCommand;
+import io.github.mebsic.proxy.command.ImMutedCommand;
 import io.github.mebsic.proxy.command.MaintenanceCommand;
 import io.github.mebsic.proxy.command.PartyChatCommand;
 import io.github.mebsic.proxy.command.PartyCommand;
 import io.github.mebsic.proxy.command.PlayCommand;
+import io.github.mebsic.proxy.command.ReplyCommand;
 import io.github.mebsic.proxy.command.RestartCommand;
 import io.github.mebsic.proxy.command.StaffChatCommand;
 import io.github.mebsic.proxy.command.UpdateCommand;
@@ -34,6 +38,7 @@ import io.github.mebsic.proxy.service.ChatMessageService;
 import io.github.mebsic.proxy.service.ChatRestrictionService;
 import io.github.mebsic.proxy.service.FriendService;
 import io.github.mebsic.proxy.service.PartyService;
+import io.github.mebsic.proxy.service.PrivateMessageReplyService;
 import io.github.mebsic.proxy.service.QueueOrchestrator;
 import io.github.mebsic.proxy.service.RankResolver;
 import io.github.mebsic.proxy.service.StaffChatService;
@@ -138,6 +143,7 @@ public class HycopyProxyPlugin {
     private ChatChannelService chatChannelService;
     private ChatMessageService chatMessageService;
     private ChatRestrictionService chatRestrictionService;
+    private PrivateMessageReplyService privateMessageReplyService;
     private PartyService partyService;
     private StaffChatService staffChatService;
     private UpdateCommand updateCommand;
@@ -203,6 +209,8 @@ public class HycopyProxyPlugin {
             commands.unregister("message");
             commands.unregister("w");
             commands.unregister("whisper");
+            commands.unregister("reply");
+            commands.unregister("r");
             registerCommand(commands, "play", new PlayCommand(proxy, registryService, partyService));
             registerCommand(commands, "build", new BuildCommand(registryService, rankResolver, partyService));
             HubCommand hubCommand = new HubCommand(proxy, config, registryService);
@@ -217,10 +225,58 @@ public class HycopyProxyPlugin {
             RestartCommand restartCommand = new RestartCommand(proxy, this, rankResolver, registryService, logger);
             registerCommand(commands, "restart", restartCommand);
             registerCommand(commands, "cancelrestart", new CancelRestartCommand(restartCommand, rankResolver));
-            FriendCommand friendCommand = new FriendCommand(proxy, friendService, blockService, "friend");
-            FriendCommand friendAliasCommand = new FriendCommand(proxy, friendService, blockService, "f");
+            this.privateMessageReplyService = new PrivateMessageReplyService();
+            FriendCommand friendCommand = new FriendCommand(
+                    proxy,
+                    friendService,
+                    blockService,
+                    chatRestrictionService,
+                    rankResolver,
+                    privateMessageReplyService,
+                    "friend"
+            );
+            FriendCommand friendAliasCommand = new FriendCommand(
+                    proxy,
+                    friendService,
+                    blockService,
+                    chatRestrictionService,
+                    rankResolver,
+                    privateMessageReplyService,
+                    "f"
+            );
             BlockCommand blockCommand = new BlockCommand(proxy, blockService, friendService);
-            FriendMessageCommand friendMessageCommand = new FriendMessageCommand(proxy, friendService, blockService, rankResolver);
+            BoopCommand boopCommand = new BoopCommand(
+                    proxy,
+                    friendService,
+                    blockService,
+                    chatRestrictionService,
+                    rankResolver,
+                    privateMessageReplyService
+            );
+            FriendMessageCommand friendMessageCommand = new FriendMessageCommand(
+                    proxy,
+                    friendService,
+                    blockService,
+                    chatRestrictionService,
+                    rankResolver,
+                    privateMessageReplyService
+            );
+            ReplyCommand replyCommand = new ReplyCommand(
+                    proxy,
+                    friendService,
+                    blockService,
+                    chatRestrictionService,
+                    rankResolver,
+                    privateMessageReplyService
+            );
+            ImMutedCommand imMutedCommand = new ImMutedCommand(
+                    proxy,
+                    friendService,
+                    blockService,
+                    chatRestrictionService,
+                    rankResolver,
+                    privateMessageReplyService
+            );
             PartyCommand partyCommand = new PartyCommand(
                     proxy,
                     partyService,
@@ -253,11 +309,15 @@ public class HycopyProxyPlugin {
             registerCommand(commands, "friend", friendCommand);
             registerCommand(commands, "f", friendAliasCommand);
             registerCommand(commands, "block", blockCommand);
+            registerCommand(commands, "boop", boopCommand);
+            registerCommand(commands, "immuted", imMutedCommand);
             registerCommand(commands, "msg", friendMessageCommand);
             registerCommand(commands, "tell", friendMessageCommand);
             registerCommand(commands, "message", friendMessageCommand);
             registerCommand(commands, "w", friendMessageCommand);
             registerCommand(commands, "whisper", friendMessageCommand);
+            registerCommand(commands, "reply", replyCommand);
+            registerCommand(commands, "r", replyCommand);
             registerCommand(commands, "party", partyCommand);
             registerCommand(commands, "p", partyAliasCommand);
             registerCommand(commands, "pchat", partyChatCommand);
@@ -579,9 +639,10 @@ public class HycopyProxyPlugin {
             denyPlayerChat(event);
             return;
         }
+        String renderedMessage = renderPartyMessage(playerId, message);
         partyService.sendPartyMessage(
                 playerId,
-                Components.partyChat(formatPartyChatName(playerId, player.getUsername()), message),
+                Components.partyChat(formatPartyChatName(playerId, player.getUsername()), renderedMessage),
                 memberId -> canReceivePartyChat(playerId, memberId)
         );
         storeChatMessage(player, message, ChatChannelService.ChatChannel.PARTY);
@@ -680,6 +741,7 @@ public class HycopyProxyPlugin {
         chatChannelService = null;
         chatMessageService = null;
         chatRestrictionService = null;
+        privateMessageReplyService = null;
         partyService = null;
         staffChatService = null;
         updateCommand = null;
@@ -744,6 +806,9 @@ public class HycopyProxyPlugin {
         deferredPostGameQueueRequests.remove(playerId);
         if (chatChannelService != null) {
             chatChannelService.clear(playerId);
+        }
+        if (privateMessageReplyService != null) {
+            privateMessageReplyService.clear(playerId);
         }
         if (friendService != null) {
             friendService.markOffline(event.getPlayer());
@@ -1700,6 +1765,18 @@ public class HycopyProxyPlugin {
         } catch (Throwable ignored) {
             return false;
         }
+    }
+
+    private String renderPartyMessage(UUID senderId, String message) {
+        if (senderId == null || rankResolver == null) {
+            return message == null ? "" : message;
+        }
+        boolean canUseMvpPlusPlusEmotes = rankResolver.hasAtLeast(senderId, "MVP_PLUS_PLUS");
+        boolean canUseRankGiftingEmotes = rankResolver.hasGiftedRank(senderId);
+        if (!canUseMvpPlusPlusEmotes && !canUseRankGiftingEmotes) {
+            return message == null ? "" : message;
+        }
+        return ChatEmoteUtil.replaceEmotes(message, canUseMvpPlusPlusEmotes, canUseRankGiftingEmotes, "§f");
     }
 
     private String formatPartyChatName(UUID playerId, String fallbackName) {

@@ -96,7 +96,7 @@ public final class Components {
         return Component.text("[STAFF] ", NamedTextColor.AQUA)
                 .append(LEGACY.deserialize(safeName))
                 .append(Component.text(": ", NamedTextColor.WHITE))
-                .append(Component.text(message, NamedTextColor.WHITE));
+                .append(legacyMessage(message, "§f"));
     }
 
     public static Component partyChat(String name, String message) {
@@ -106,16 +106,26 @@ public final class Components {
                 .append(Component.text(" > ", NamedTextColor.DARK_GRAY))
                 .append(LEGACY.deserialize(safeName))
                 .append(Component.text(": ", NamedTextColor.WHITE))
-                .append(Component.text(safeMessage, NamedTextColor.WHITE));
+                .append(legacyMessage(safeMessage, "§f"));
     }
 
     public static Component friendPrivateMessage(boolean outgoing, String formattedName, String message) {
+        return friendPrivateMessage(outgoing, formattedName, message, "§7");
+    }
+
+    public static Component friendPrivateMessage(boolean outgoing, String formattedName, String message, String messageColorCode) {
         String safeName = formattedName == null ? "" : formattedName;
         String safeMessage = message == null ? "" : message;
         return Component.text(outgoing ? "To " : "From ", NamedTextColor.LIGHT_PURPLE)
                 .append(LEGACY.deserialize(safeName))
                 .append(Component.text(": ", NamedTextColor.GRAY))
-                .append(Component.text(safeMessage, NamedTextColor.GRAY));
+                .append(legacyMessage(safeMessage, messageColorCode == null ? "§7" : messageColorCode));
+    }
+
+    private static Component legacyMessage(String message, String colorCode) {
+        String safeMessage = message == null ? "" : message;
+        String safeColor = colorCode == null ? "" : colorCode;
+        return LEGACY.deserialize(safeColor + safeMessage);
     }
 
     public static Component friendRequestExpired(String formattedTargetName) {

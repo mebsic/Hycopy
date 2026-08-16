@@ -4,7 +4,6 @@ import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import io.github.mebsic.core.util.CommonMessages;
-import io.github.mebsic.core.util.ChatEmoteUtil;
 import io.github.mebsic.core.util.MojangApi;
 import io.github.mebsic.proxy.service.BlockService;
 import io.github.mebsic.proxy.service.ChatRestrictionService;
@@ -19,8 +18,10 @@ import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import java.util.Optional;
 import java.util.UUID;
 
-public class FriendMessageCommand implements SimpleCommand {
+public class BoopCommand implements SimpleCommand {
     private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacySection();
+    private static final String BOOP_MESSAGE = "Boop!";
+
     private final ProxyServer proxy;
     private final FriendService friends;
     private final BlockService blocks;
@@ -28,16 +29,16 @@ public class FriendMessageCommand implements SimpleCommand {
     private final RankResolver rankResolver;
     private final PrivateMessageReplyService replies;
 
-    public FriendMessageCommand(ProxyServer proxy, FriendService friends, BlockService blocks, RankResolver rankResolver) {
+    public BoopCommand(ProxyServer proxy, FriendService friends, BlockService blocks, RankResolver rankResolver) {
         this(proxy, friends, blocks, null, rankResolver, null);
     }
 
-    public FriendMessageCommand(ProxyServer proxy,
-                                FriendService friends,
-                                BlockService blocks,
-                                ChatRestrictionService chatRestrictions,
-                                RankResolver rankResolver,
-                                PrivateMessageReplyService replies) {
+    public BoopCommand(ProxyServer proxy,
+                       FriendService friends,
+                       BlockService blocks,
+                       ChatRestrictionService chatRestrictions,
+                       RankResolver rankResolver,
+                       PrivateMessageReplyService replies) {
         this.proxy = proxy;
         this.friends = friends;
         this.blocks = blocks;
@@ -54,8 +55,8 @@ public class FriendMessageCommand implements SimpleCommand {
         }
         Player sender = (Player) invocation.source();
         String[] args = invocation.arguments();
-        if (args.length < 2) {
-            sendInvalidUsage(sender);
+        if (args.length != 1) {
+            sender.sendMessage(Component.text("Invalid usage! Use: /boop <player>", NamedTextColor.RED));
             return;
         }
         if (chatRestrictions != null && chatRestrictions.isMuted(sender.getUniqueId())) {
@@ -69,15 +70,15 @@ public class FriendMessageCommand implements SimpleCommand {
             return;
         }
         if (targetId.equals(sender.getUniqueId())) {
-            sender.sendMessage(Component.text("You cannot message yourself!", NamedTextColor.RED));
+            sender.sendMessage(Component.text("You cannot boop yourself!", NamedTextColor.RED));
             return;
         }
         if (!friends.areFriends(sender.getUniqueId(), targetId)) {
-            sender.sendMessage(Component.text("You can only message players on your friends list!", NamedTextColor.RED));
+            sender.sendMessage(Component.text("You can only boop players on your friends list!", NamedTextColor.RED));
             return;
         }
         if (blocks != null && blocks.isEitherBlocked(sender.getUniqueId(), targetId)) {
-            sender.sendMessage(Component.text("You cannot message this player!", NamedTextColor.RED));
+            sender.sendMessage(Component.text("You cannot boop this player!", NamedTextColor.RED));
             return;
         }
         Optional<Player> target = proxy.getPlayer(targetId);
@@ -85,23 +86,16 @@ public class FriendMessageCommand implements SimpleCommand {
             sender.sendMessage(Component.text("That player is offline!", NamedTextColor.RED));
             return;
         }
-        String message = renderMessage(sender.getUniqueId(), joinArgs(args, 1), "§7");
         Player recipient = target.get();
         friends.rememberName(sender.getUniqueId(), sender.getUsername());
         friends.rememberName(recipient.getUniqueId(), recipient.getUsername());
         String senderDisplay = formatRankedName(sender.getUniqueId(), sender.getUsername());
         String recipientDisplay = formatRankedName(recipient.getUniqueId(), recipient.getUsername());
-        sender.sendMessage(Components.friendPrivateMessage(true, recipientDisplay, message));
-        recipient.sendMessage(Components.friendPrivateMessage(false, senderDisplay, message));
+        sender.sendMessage(Components.friendPrivateMessage(true, recipientDisplay, BOOP_MESSAGE, "§d§l"));
+        recipient.sendMessage(Components.friendPrivateMessage(false, senderDisplay, BOOP_MESSAGE, "§d§l"));
         if (replies != null) {
             replies.rememberConversation(sender.getUniqueId(), recipient.getUniqueId());
         }
-    }
-
-    private void sendInvalidUsage(Player sender) {
-        sender.sendMessage(Component.text(
-                "Invalid usage! Use: /msg <player> <message>",
-                NamedTextColor.RED));
     }
 
     private UUID resolveUuid(String name) {
@@ -129,34 +123,6 @@ public class FriendMessageCommand implements SimpleCommand {
             return fallbackName == null ? "" : fallbackName;
         }
         return rankResolver.formatNameWithRank(uuid, fallbackName);
-    }
-
-    private String renderMessage(UUID senderId, String message, String restoreColor) {
-        if (senderId == null || rankResolver == null) {
-            return message == null ? "" : message;
-        }
-        boolean canUseMvpPlusPlusEmotes = rankResolver.hasAtLeast(senderId, "MVP_PLUS_PLUS");
-        boolean canUseRankGiftingEmotes = rankResolver.hasGiftedRank(senderId);
-        if (!canUseMvpPlusPlusEmotes && !canUseRankGiftingEmotes) {
-            return message == null ? "" : message;
-        }
-        return ChatEmoteUtil.replaceEmotes(
-                message,
-                canUseMvpPlusPlusEmotes,
-                canUseRankGiftingEmotes,
-                restoreColor
-        );
-    }
-
-    private String joinArgs(String[] args, int start) {
-        StringBuilder builder = new StringBuilder();
-        for (int i = start; i < args.length; i++) {
-            if (builder.length() > 0) {
-                builder.append(' ');
-            }
-            builder.append(args[i]);
-        }
-        return builder.toString();
     }
 
     private void sendMuteMessage(Player player) {

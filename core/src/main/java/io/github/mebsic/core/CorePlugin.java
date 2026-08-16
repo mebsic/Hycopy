@@ -6,6 +6,7 @@ import io.github.mebsic.core.command.ClearCommand;
 import io.github.mebsic.core.command.ClearEffectCommand;
 import io.github.mebsic.core.command.DisplayEndCreditsCommand;
 import io.github.mebsic.core.command.EffectCommand;
+import io.github.mebsic.core.command.EmotesCommand;
 import io.github.mebsic.core.command.FindCommand;
 import io.github.mebsic.core.command.FlyCommand;
 import io.github.mebsic.core.command.FireworkCommand;
@@ -290,6 +291,9 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
         }
         if (getCommand("map") != null) {
             getCommand("map").setExecutor(new MapCommand(this));
+        }
+        if (getCommand("emotes") != null) {
+            getCommand("emotes").setExecutor(new EmotesCommand());
         }
         if (serverType != null && serverType.isHub()) {
             String group = getConfig().getString("server.group", "");

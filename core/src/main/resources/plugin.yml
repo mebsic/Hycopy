@@ -69,3 +69,6 @@ commands:
   map:
     usage: /map
     aliases: [wtfmap]
+  emotes:
+    usage: /emotes
+    aliases: [emojis]

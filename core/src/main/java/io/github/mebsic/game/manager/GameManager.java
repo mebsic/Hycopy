@@ -1122,10 +1122,10 @@ public class GameManager {
         appendPostGameSummaryHeader(player, gamePlayer, lines);
         appendPostGameSummaryLines(player, gamePlayer, lines);
         appendPostGameRewardSummary(player, gamePlayer, lines);
-        appendPostGameMysteryDustRewardLine(gamePlayer, lines);
         if (lines.isEmpty()) {
             return;
         }
+        String mysteryDustRewardLine = getPostGameMysteryDustRewardLine(gamePlayer);
         String frameLine = getPostGameFrameLine();
         player.sendMessage("");
         if (!frameLine.isEmpty()) {
@@ -1136,6 +1136,9 @@ public class GameManager {
         }
         if (!frameLine.isEmpty()) {
             player.sendMessage(frameLine);
+        }
+        if (!mysteryDustRewardLine.isEmpty()) {
+            player.sendMessage(mysteryDustRewardLine);
         }
         sendQueuedPostGameLevelUpMessage(player);
         if (showQueuedTransferSummaryLine) {
@@ -1903,16 +1906,16 @@ public class GameManager {
         );
     }
 
-    private void appendPostGameMysteryDustRewardLine(GamePlayer gamePlayer, List<String> lines) {
-        if (gamePlayer == null || lines == null) {
-            return;
+    private String getPostGameMysteryDustRewardLine(GamePlayer gamePlayer) {
+        if (gamePlayer == null) {
+            return "";
         }
         int amount = Math.max(0, roundMysteryDustRewards.getOrDefault(gamePlayer.getUuid(), 0));
         if (amount <= 0) {
-            return;
+            return "";
         }
-        lines.add(ChatColor.AQUA + "✦ " + ChatColor.GRAY + "You earned " + ChatColor.AQUA + amount
-                + ChatColor.GRAY + " Mystery Dust!");
+        return ChatColor.AQUA + "✦ " + ChatColor.GRAY + "You earned " + ChatColor.AQUA + amount
+                + ChatColor.GRAY + " Mystery Dust!";
     }
 
     protected CorePlugin getPlugin() {

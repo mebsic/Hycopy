@@ -1,10 +1,14 @@
 package io.github.mebsic.proxy.command;
 
 import io.github.mebsic.core.server.ServerType;
+import io.github.mebsic.core.util.ChatEmoteUtil;
 import io.github.mebsic.core.util.CommonMessages;
 import io.github.mebsic.core.util.MojangApi;
 import io.github.mebsic.proxy.service.BlockService;
+import io.github.mebsic.proxy.service.ChatRestrictionService;
 import io.github.mebsic.proxy.service.FriendService;
+import io.github.mebsic.proxy.service.PrivateMessageReplyService;
+import io.github.mebsic.proxy.service.RankResolver;
 import io.github.mebsic.proxy.util.Components;
 import io.github.mebsic.proxy.util.FriendComponents;
 import com.velocitypowered.api.command.SimpleCommand;
@@ -47,18 +51,51 @@ public class FriendCommand implements SimpleCommand {
     private final ProxyServer proxy;
     private final FriendService friends;
     private final BlockService blocks;
+    private final ChatRestrictionService chatRestrictions;
+    private final RankResolver rankResolver;
+    private final PrivateMessageReplyService replies;
     private final String commandRoot;
     private final Map<UUID, Long> notificationToggleCooldown = new ConcurrentHashMap<>();
     private final Set<UUID> removeAllConfirmations = ConcurrentHashMap.newKeySet();
 
     public FriendCommand(ProxyServer proxy, FriendService friends, BlockService blocks) {
-        this(proxy, friends, blocks, "friend");
+        this(proxy, friends, blocks, null, "friend");
     }
 
     public FriendCommand(ProxyServer proxy, FriendService friends, BlockService blocks, String commandRoot) {
+        this(proxy, friends, blocks, null, commandRoot);
+    }
+
+    public FriendCommand(ProxyServer proxy,
+                         FriendService friends,
+                         BlockService blocks,
+                         RankResolver rankResolver,
+                         String commandRoot) {
+        this(proxy, friends, blocks, rankResolver, null, commandRoot);
+    }
+
+    public FriendCommand(ProxyServer proxy,
+                         FriendService friends,
+                         BlockService blocks,
+                         RankResolver rankResolver,
+                         PrivateMessageReplyService replies,
+                         String commandRoot) {
+        this(proxy, friends, blocks, null, rankResolver, replies, commandRoot);
+    }
+
+    public FriendCommand(ProxyServer proxy,
+                         FriendService friends,
+                         BlockService blocks,
+                         ChatRestrictionService chatRestrictions,
+                         RankResolver rankResolver,
+                         PrivateMessageReplyService replies,
+                         String commandRoot) {
         this.proxy = proxy;
         this.friends = friends;
         this.blocks = blocks;
+        this.chatRestrictions = chatRestrictions;
+        this.rankResolver = rankResolver;
+        this.replies = replies;
         String safeRoot = commandRoot == null ? "" : commandRoot.trim().toLowerCase(Locale.ROOT);
         this.commandRoot = safeRoot.isEmpty() ? "friend" : safeRoot;
     }
@@ -562,7 +599,23 @@ public class FriendCommand implements SimpleCommand {
             sendInvalidUsage(player, cmd("msg <player> <message>"));
             return;
         }
+        if (chatRestrictions != null && chatRestrictions.isMuted(player.getUniqueId())) {
+            sendMuteMessage(player);
+            return;
+        }
         sendFriendMessage(player, args[1], joinArgs(args, 2));
+    }
+
+    private void sendMuteMessage(Player player) {
+        if (player == null) {
+            return;
+        }
+        String message = chatRestrictions == null ? null : chatRestrictions.formatActiveMuteMessage(player.getUniqueId());
+        if (message == null || message.trim().isEmpty()) {
+            sendFramed(player, Component.text("You are currently muted!", NamedTextColor.RED));
+            return;
+        }
+        player.sendMessage(LEGACY.deserialize(message));
     }
 
     private void sendFriendMessage(Player sender, String targetName, String message) {
@@ -584,9 +637,30 @@ public class FriendCommand implements SimpleCommand {
             friends.rememberName(target.getUniqueId(), target.getUsername());
             String senderDisplay = friends.formatNameWithRank(sender.getUniqueId());
             String targetDisplay = friends.formatNameWithRank(target.getUniqueId());
-            sender.sendMessage(Components.friendPrivateMessage(true, targetDisplay, message));
-            target.sendMessage(Components.friendPrivateMessage(false, senderDisplay, message));
+            String renderedMessage = renderMessage(sender.getUniqueId(), message, "§7");
+            sender.sendMessage(Components.friendPrivateMessage(true, targetDisplay, renderedMessage));
+            target.sendMessage(Components.friendPrivateMessage(false, senderDisplay, renderedMessage));
+            if (replies != null) {
+                replies.rememberConversation(sender.getUniqueId(), target.getUniqueId());
+            }
         }, () -> sendFramed(sender, Component.text("That player is offline!", NamedTextColor.RED)));
+    }
+
+    private String renderMessage(UUID senderId, String message, String restoreColor) {
+        if (senderId == null || rankResolver == null) {
+            return message == null ? "" : message;
+        }
+        boolean canUseMvpPlusPlusEmotes = rankResolver.hasAtLeast(senderId, "MVP_PLUS_PLUS");
+        boolean canUseRankGiftingEmotes = rankResolver.hasGiftedRank(senderId);
+        if (!canUseMvpPlusPlusEmotes && !canUseRankGiftingEmotes) {
+            return message == null ? "" : message;
+        }
+        return ChatEmoteUtil.replaceEmotes(
+                message,
+                canUseMvpPlusPlusEmotes,
+                canUseRankGiftingEmotes,
+                restoreColor
+        );
     }
 
     private UUID resolveUuid(String name) {

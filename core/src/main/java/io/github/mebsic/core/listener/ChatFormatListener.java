@@ -9,6 +9,7 @@ import io.github.mebsic.core.model.Rank;
 import io.github.mebsic.core.server.ServerType;
 import io.github.mebsic.core.service.CoreApi;
 import io.github.mebsic.core.service.PrefixCosmeticCatalog;
+import io.github.mebsic.core.util.ChatEmoteUtil;
 import io.github.mebsic.core.util.RankFormatUtil;
 import io.github.mebsic.game.model.GameState;
 import net.md_5.bungee.api.chat.BaseComponent;
@@ -81,10 +82,21 @@ public class ChatFormatListener implements Listener {
             String prefix = RankFormatUtil.buildPrefix(rank, networkLevel, plusColor, mvpPlusPlusPrefixColor);
             style = new ChatRenderStyle(prefix, nameColor, ChatColor.WHITE, ChatColor.WHITE);
         }
+        Profile profile = coreApi.getProfile(uuid);
+        boolean canUseMvpPlusPlusEmotes = rank != null && rank.isAtLeast(Rank.MVP_PLUS_PLUS);
+        boolean canUseRankGiftingEmotes = profile != null && profile.getRanksGifted() >= 1;
         boolean highlightGoodGame = shouldHighlightGoodGame(rank);
         event.setCancelled(true);
 
-        Runnable dispatch = () -> deliverChat(player, rawMessage, recipients, style, highlightGoodGame);
+        Runnable dispatch = () -> deliverChat(
+                player,
+                rawMessage,
+                recipients,
+                style,
+                canUseMvpPlusPlusEmotes,
+                canUseRankGiftingEmotes,
+                highlightGoodGame
+        );
         if (event.isAsynchronous()) {
             Bukkit.getScheduler().runTask(plugin, dispatch);
         } else {
@@ -96,11 +108,21 @@ public class ChatFormatListener implements Listener {
                              String message,
                              Set<Player> recipients,
                              ChatRenderStyle style,
+                             boolean canUseMvpPlusPlusEmotes,
+                             boolean canUseRankGiftingEmotes,
                              boolean highlightGoodGame) {
         if (sender == null) {
             return;
         }
-        String baseMessage = highlightGoodGame ? highlightGgPhrases(message, style.messageColor) : message;
+        String renderedMessage = canUseMvpPlusPlusEmotes || canUseRankGiftingEmotes
+                ? ChatEmoteUtil.replaceEmotes(
+                        message,
+                        canUseMvpPlusPlusEmotes,
+                        canUseRankGiftingEmotes,
+                        style.messageColor.toString()
+                )
+                : message;
+        String baseMessage = highlightGoodGame ? highlightGgPhrases(renderedMessage, style.messageColor) : renderedMessage;
         MurderMysteryWinsPrefix winsPrefix = buildMurderMysteryWinsPrefix(sender, style);
         String prefixText = winsPrefix == null ? "" : winsPrefix.visibleText;
         String header = prefixText

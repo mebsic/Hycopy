@@ -3,9 +3,8 @@ package io.github.mebsic.proxy.command;
 import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
-import io.github.mebsic.core.util.CommonMessages;
 import io.github.mebsic.core.util.ChatEmoteUtil;
-import io.github.mebsic.core.util.MojangApi;
+import io.github.mebsic.core.util.CommonMessages;
 import io.github.mebsic.proxy.service.BlockService;
 import io.github.mebsic.proxy.service.ChatRestrictionService;
 import io.github.mebsic.proxy.service.FriendService;
@@ -19,7 +18,7 @@ import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import java.util.Optional;
 import java.util.UUID;
 
-public class FriendMessageCommand implements SimpleCommand {
+public class ReplyCommand implements SimpleCommand {
     private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacySection();
     private final ProxyServer proxy;
     private final FriendService friends;
@@ -28,16 +27,12 @@ public class FriendMessageCommand implements SimpleCommand {
     private final RankResolver rankResolver;
     private final PrivateMessageReplyService replies;
 
-    public FriendMessageCommand(ProxyServer proxy, FriendService friends, BlockService blocks, RankResolver rankResolver) {
-        this(proxy, friends, blocks, null, rankResolver, null);
-    }
-
-    public FriendMessageCommand(ProxyServer proxy,
-                                FriendService friends,
-                                BlockService blocks,
-                                ChatRestrictionService chatRestrictions,
-                                RankResolver rankResolver,
-                                PrivateMessageReplyService replies) {
+    public ReplyCommand(ProxyServer proxy,
+                        FriendService friends,
+                        BlockService blocks,
+                        ChatRestrictionService chatRestrictions,
+                        RankResolver rankResolver,
+                        PrivateMessageReplyService replies) {
         this.proxy = proxy;
         this.friends = friends;
         this.blocks = blocks;
@@ -54,22 +49,17 @@ public class FriendMessageCommand implements SimpleCommand {
         }
         Player sender = (Player) invocation.source();
         String[] args = invocation.arguments();
-        if (args.length < 2) {
-            sendInvalidUsage(sender);
+        if (args.length == 0) {
+            sender.sendMessage(Component.text("Invalid usage! Use: /reply <message>", NamedTextColor.RED));
             return;
         }
         if (chatRestrictions != null && chatRestrictions.isMuted(sender.getUniqueId())) {
             sendMuteMessage(sender);
             return;
         }
-        String targetInput = args[0];
-        UUID targetId = resolveUuid(targetInput);
+        UUID targetId = replies == null ? null : replies.getReplyTarget(sender.getUniqueId());
         if (targetId == null) {
-            sender.sendMessage(Component.text("No player found with name " + targetInput + "!", NamedTextColor.RED));
-            return;
-        }
-        if (targetId.equals(sender.getUniqueId())) {
-            sender.sendMessage(Component.text("You cannot message yourself!", NamedTextColor.RED));
+            sender.sendMessage(Component.text("Nobody has messaged you in the past 5 minutes!", NamedTextColor.RED));
             return;
         }
         if (!friends.areFriends(sender.getUniqueId(), targetId)) {
@@ -85,7 +75,7 @@ public class FriendMessageCommand implements SimpleCommand {
             sender.sendMessage(Component.text("That player is offline!", NamedTextColor.RED));
             return;
         }
-        String message = renderMessage(sender.getUniqueId(), joinArgs(args, 1), "§7");
+        String message = renderMessage(sender.getUniqueId(), joinArgs(args), "§7");
         Player recipient = target.get();
         friends.rememberName(sender.getUniqueId(), sender.getUsername());
         friends.rememberName(recipient.getUniqueId(), recipient.getUsername());
@@ -96,39 +86,6 @@ public class FriendMessageCommand implements SimpleCommand {
         if (replies != null) {
             replies.rememberConversation(sender.getUniqueId(), recipient.getUniqueId());
         }
-    }
-
-    private void sendInvalidUsage(Player sender) {
-        sender.sendMessage(Component.text(
-                "Invalid usage! Use: /msg <player> <message>",
-                NamedTextColor.RED));
-    }
-
-    private UUID resolveUuid(String name) {
-        if (name == null) {
-            return null;
-        }
-        UUID online = proxy.getPlayer(name).map(Player::getUniqueId).orElse(null);
-        if (online != null) {
-            proxy.getPlayer(online).ifPresent(player -> friends.rememberName(online, player.getUsername()));
-            return online;
-        }
-        UUID cached = friends.resolveByName(name);
-        if (cached != null) {
-            return cached;
-        }
-        UUID mojang = MojangApi.lookupUuid(name);
-        if (mojang != null) {
-            friends.rememberName(mojang, name);
-        }
-        return mojang;
-    }
-
-    private String formatRankedName(UUID uuid, String fallbackName) {
-        if (rankResolver == null) {
-            return fallbackName == null ? "" : fallbackName;
-        }
-        return rankResolver.formatNameWithRank(uuid, fallbackName);
     }
 
     private String renderMessage(UUID senderId, String message, String restoreColor) {
@@ -148,13 +105,20 @@ public class FriendMessageCommand implements SimpleCommand {
         );
     }
 
-    private String joinArgs(String[] args, int start) {
+    private String formatRankedName(UUID uuid, String fallbackName) {
+        if (rankResolver == null) {
+            return fallbackName == null ? "" : fallbackName;
+        }
+        return rankResolver.formatNameWithRank(uuid, fallbackName);
+    }
+
+    private String joinArgs(String[] args) {
         StringBuilder builder = new StringBuilder();
-        for (int i = start; i < args.length; i++) {
+        for (String arg : args) {
             if (builder.length() > 0) {
                 builder.append(' ');
             }
-            builder.append(args[i]);
+            builder.append(arg);
         }
         return builder.toString();
     }

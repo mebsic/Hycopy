@@ -76,9 +76,9 @@ public class MurderMysteryListener implements Listener {
     private static final long GLASS_PANE_BREAK_RESET_SECONDS = 5L;
     private static final long MURDERER_KNIFE_DRIP_PARTICLE_INTERVAL_TICKS = 3L;
     private static final double MURDERER_KNIFE_DRIP_PARTICLE_CHANCE = 0.35D;
-    private static final double MURDERER_KNIFE_DRIP_HAND_HEIGHT = 1.05D;
-    private static final double MURDERER_KNIFE_DRIP_HAND_FORWARD_OFFSET = 0.32D;
-    private static final double MURDERER_KNIFE_DRIP_HAND_SIDE_OFFSET = -0.28D;
+    private static final double MURDERER_KNIFE_DRIP_HAND_HEIGHT = 0.95D;
+    private static final double MURDERER_KNIFE_DRIP_HAND_FORWARD_OFFSET = 0.30D;
+    private static final double MURDERER_KNIFE_DRIP_HAND_SIDE_OFFSET = 0.26D;
     private static final double MURDERER_KNIFE_DRIP_HAND_JITTER = 0.03D;
     private static final float MURDERER_KNIFE_DRIP_RED = 1.0F;
     private static final float MURDERER_KNIFE_DRIP_GREEN = 0.0F;
