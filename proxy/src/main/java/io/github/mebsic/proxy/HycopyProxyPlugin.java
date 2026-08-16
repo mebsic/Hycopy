@@ -66,6 +66,7 @@ import com.velocitypowered.api.event.proxy.ProxyPingEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.event.player.KickedFromServerEvent;
 import com.velocitypowered.api.event.player.ServerPreConnectEvent;
+import com.velocitypowered.api.network.ProtocolVersion;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.Player;
@@ -83,7 +84,9 @@ import org.slf4j.Logger;
 
 import java.io.IOException;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -123,6 +126,8 @@ public class HycopyProxyPlugin {
     private static final long PLAY_AGAIN_INTENT_WINDOW_MILLIS = 7_500L;
     private static final MinecraftChannelIdentifier PLAY_AGAIN_INTENT_CHANNEL =
             MinecraftChannelIdentifier.from("hycopy:playagain");
+    private static final MinecraftChannelIdentifier PROTOCOL_VERSION_CHANNEL =
+            MinecraftChannelIdentifier.from(NetworkConstants.PROTOCOL_VERSION_CHANNEL);
     private static final Pattern LEGACY_CODE = Pattern.compile("(?i)§[0-9A-FK-OR]");
     private final ProxyServer proxy;
     private final Logger logger;
@@ -326,6 +331,7 @@ public class HycopyProxyPlugin {
             registerCommand(commands, "staffchat", staffChatCommand);
             registerCommand(commands, "sc", staffChatCommand);
             proxy.getChannelRegistrar().register(PLAY_AGAIN_INTENT_CHANNEL);
+            proxy.getChannelRegistrar().register(PROTOCOL_VERSION_CHANNEL);
             int refresh = config == null ? 1 : Math.max(1, config.getRegistryRefreshSeconds());
             proxy.getScheduler().buildTask(this, () -> {
                 if (registryService != null) {
@@ -730,6 +736,7 @@ public class HycopyProxyPlugin {
     public void onShutdown(ProxyShutdownEvent event) {
         infrastructureFailure.set(true);
         proxy.getChannelRegistrar().unregister(PLAY_AGAIN_INTENT_CHANNEL);
+        proxy.getChannelRegistrar().unregister(PROTOCOL_VERSION_CHANNEL);
         recentPlayAgainIntents.clear();
         if (queueOrchestrator != null) {
             queueOrchestrator.stop();
@@ -782,6 +789,7 @@ public class HycopyProxyPlugin {
     public void onServerConnected(ServerConnectedEvent event) {
         UUID playerId = event.getPlayer().getUniqueId();
         recentPlayAgainIntents.remove(playerId);
+        sendProtocolVersion(event);
         String connectedServerName = event.getServer() == null
                 ? null
                 : event.getServer().getServerInfo().getName();
@@ -796,6 +804,23 @@ public class HycopyProxyPlugin {
         }
         if (partyService != null) {
             autoFollowPartyOnGameJoin(event.getPlayer(), connectedServerName, false);
+        }
+    }
+
+    private void sendProtocolVersion(ServerConnectedEvent event) {
+        if (event == null || event.getServer() == null || event.getPlayer() == null) {
+            return;
+        }
+        try {
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            try (DataOutputStream out = new DataOutputStream(bytes)) {
+                Player player = event.getPlayer();
+                ProtocolVersion protocolVersion = player.getProtocolVersion();
+                out.writeUTF(player.getUniqueId().toString());
+                out.writeInt(protocolVersion == null ? -1 : protocolVersion.getProtocol());
+            }
+            event.getServer().sendPluginMessage(PROTOCOL_VERSION_CHANNEL, bytes.toByteArray());
+        } catch (Exception ignored) {
         }
     }
 

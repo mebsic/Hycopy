@@ -2,6 +2,7 @@ package io.github.mebsic.core.util;
 
 public final class NetworkConstants {
     public static final String DEFAULT_DOMAIN = "example.net";
+    public static final String PROTOCOL_VERSION_CHANNEL = "hycopy:protocol";
     public static volatile String DOMAIN = DEFAULT_DOMAIN;
     public static volatile String WEBSITE = "www." + DEFAULT_DOMAIN;
 

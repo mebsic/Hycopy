@@ -182,7 +182,7 @@ public class GameManager {
     private int defaultMinPlayers() {
         ServerType type = plugin == null ? ServerType.UNKNOWN : plugin.getServerType();
         if (type == ServerType.MURDER_MYSTERY) {
-            return 4;
+            return 2;
         }
         return 4;
     }
@@ -190,7 +190,7 @@ public class GameManager {
     private int minAllowedPlayers() {
         ServerType type = plugin == null ? ServerType.UNKNOWN : plugin.getServerType();
         if (type == ServerType.MURDER_MYSTERY) {
-            return 4;
+            return 2;
         }
         return 1;
     }

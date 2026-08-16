@@ -138,7 +138,12 @@ public class ChatFormatListener implements Listener {
             }
             UUID recipientId = recipient.getUniqueId();
             if (recipientId.equals(senderId)) {
-                sendChatLine(recipient, winsPrefix, headerWithoutWinsPrefix + baseMessage);
+                sendChatLine(
+                        recipient,
+                        winsPrefix,
+                        headerWithoutWinsPrefix + baseMessage,
+                        isLegacyChatRecipient(recipient)
+                );
                 senderSent = true;
                 continue;
             }
@@ -146,13 +151,18 @@ public class ChatFormatListener implements Listener {
                 continue;
             }
             String highlighted = highlightExactIgnMentions(baseMessage, recipient.getName(), style.messageColor);
-            sendChatLine(recipient, winsPrefix, headerWithoutWinsPrefix + highlighted);
+            sendChatLine(
+                    recipient,
+                    winsPrefix,
+                    headerWithoutWinsPrefix + highlighted,
+                    isLegacyChatRecipient(recipient)
+            );
             if (!baseMessage.equals(highlighted)) {
                 recipient.playSound(recipient.getLocation(), MENTION_DING_SOUND, 1.0f, 1.0f);
             }
         }
         if (!senderSent && sender.isOnline()) {
-            sendChatLine(sender, winsPrefix, headerWithoutWinsPrefix + baseMessage);
+            sendChatLine(sender, winsPrefix, headerWithoutWinsPrefix + baseMessage, isLegacyChatRecipient(sender));
         }
         Bukkit.getConsoleSender().sendMessage(ChatColor.stripColor(normalLine));
     }
@@ -196,12 +206,25 @@ public class ChatFormatListener implements Listener {
         return new HoverEvent(HoverEvent.Action.SHOW_TEXT, hover);
     }
 
-    private void sendChatLine(Player recipient, MurderMysteryWinsPrefix winsPrefix, String restOfLine) {
+    private boolean isLegacyChatRecipient(Player recipient) {
+        return corePlugin != null
+                && recipient != null
+                && corePlugin.isLegacyChatRecipient(recipient.getUniqueId());
+    }
+
+    private void sendChatLine(Player recipient,
+                              MurderMysteryWinsPrefix winsPrefix,
+                              String restOfLine,
+                              boolean legacyRecipient) {
         if (recipient == null) {
             return;
         }
         if (winsPrefix == null) {
             recipient.sendMessage(restOfLine == null ? "" : restOfLine);
+            return;
+        }
+        if (legacyRecipient) {
+            recipient.sendMessage(winsPrefix.visibleText + (restOfLine == null ? "" : restOfLine));
             return;
         }
         TextComponent root = new TextComponent("");

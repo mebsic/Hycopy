@@ -96,6 +96,7 @@ import org.bukkit.event.world.WorldLoadEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.plugin.messaging.PluginMessageListener;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitTask;
@@ -123,9 +124,10 @@ import com.mongodb.client.model.UpdateOptions;
 
 import static com.mongodb.client.model.Filters.eq;
 
-public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
+public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginMessageListener {
     private static final String FRIEND_VISIBILITY_UPDATE_CHANNEL = "friend_visibility_update";
     private static final String PLAY_AGAIN_INTENT_CHANNEL = "hycopy:playagain";
+    private static final int MINECRAFT_1_8_PROTOCOL = 47;
     private static final long BLOCKED_CACHE_TTL_MILLIS = 5_000L;
     private static final int HOTBAR_SLOT_ONE_INDEX = 0;
     private static final int RANK_COLOR_GIFTED_RANKS_REQUIRED = 100;
@@ -163,6 +165,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
     private final Map<UUID, Set<Integer>> buildModeWarningsSent = new ConcurrentHashMap<>();
     private final Map<UUID, Long> buildModeRestoreNoticeExpiresAt = new ConcurrentHashMap<>();
     private final Map<UUID, Integer> queuedPostGameNetworkLevelUps = new ConcurrentHashMap<>();
+    private final Map<UUID, Integer> protocolVersionByPlayer = new ConcurrentHashMap<>();
 
     @Override
     public void onEnable() {
@@ -176,6 +179,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
         this.serverType = ServerTypeResolver.resolve(getConfig(), ServerType.MURDER_MYSTERY);
         getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
         getServer().getMessenger().registerOutgoingPluginChannel(this, PLAY_AGAIN_INTENT_CHANNEL);
+        getServer().getMessenger().registerIncomingPluginChannel(this, NetworkConstants.PROTOCOL_VERSION_CHANNEL, this);
         applyWorldDefaults();
         getServer().getServicesManager().register(CoreApi.class, this, this, ServicePriority.Normal);
         getServer().getPluginManager().registerEvents(this, this);
@@ -575,7 +579,32 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
         buildModeWarningsSent.clear();
         buildModeRestoreNoticeExpiresAt.clear();
         queuedPostGameNetworkLevelUps.clear();
+        protocolVersionByPlayer.clear();
         getServer().getMessenger().unregisterOutgoingPluginChannel(this);
+        getServer().getMessenger().unregisterIncomingPluginChannel(this);
+    }
+
+    @Override
+    public void onPluginMessageReceived(String channel, Player player, byte[] message) {
+        if (!NetworkConstants.PROTOCOL_VERSION_CHANNEL.equals(channel) || message == null) {
+            return;
+        }
+        try (java.io.DataInputStream in = new java.io.DataInputStream(new java.io.ByteArrayInputStream(message))) {
+            UUID playerId = UUID.fromString(in.readUTF());
+            int protocolVersion = in.readInt();
+            protocolVersionByPlayer.put(playerId, protocolVersion);
+        } catch (Exception ignored) {
+        }
+    }
+
+    public boolean isLegacyChatRecipient(UUID playerId) {
+        if (playerId == null) {
+            return false;
+        }
+        Integer protocolVersion = protocolVersionByPlayer.get(playerId);
+        return protocolVersion != null
+                && protocolVersion.intValue() > 0
+                && protocolVersion.intValue() <= MINECRAFT_1_8_PROTOCOL;
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -625,6 +654,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener {
         buildModeWarningsSent.remove(playerUuid);
         buildModeRestoreNoticeExpiresAt.remove(playerUuid);
         queuedPostGameNetworkLevelUps.remove(playerUuid);
+        protocolVersionByPlayer.remove(playerUuid);
         cancelPendingGiftRequests(playerUuid);
     }
 

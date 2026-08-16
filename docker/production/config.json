@@ -16,7 +16,7 @@
   },
   "server": {
     "heartbeatSeconds": 1,
-    "minPlayers": 4
+    "minPlayers": 2
   },
   "menus": {
     "registryDataRefreshTicks": 2,

@@ -290,6 +290,8 @@ public class MapConfigStore {
         section.add("serverTypes", serverTypes);
 
         if (includeRewards) {
+            section.addProperty("minPlayers", 2);
+
             JsonObject rewards = new JsonObject();
             rewards.addProperty("goldPickupTokens", 10);
             rewards.addProperty("survive30SecondsTokens", 50);

@@ -28,6 +28,7 @@ public final class MapConfigResolver {
 
         boolean changed = false;
         changed |= setServerTypeRules(config, root, gameSection);
+        changed |= setInt(config, "minPlayers", readInt(gameSection, "minPlayers"));
         changed |= setInt(config, "murdermystery.rewards.goldPickupTokens", readInt(gameRewards, "goldPickupTokens"));
         changed |= setInt(config, "murdermystery.rewards.survive30SecondsTokens", readInt(gameRewards, "survive30SecondsTokens"));
         changed |= setInt(config, "murdermystery.rewards.murdererKillTokens", readInt(gameRewards, "murdererKillTokens"));
