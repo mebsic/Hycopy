@@ -50,6 +50,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class MurderMysteryListener implements Listener {
     private static final String KNIFE_NAME = "Knife";
@@ -66,7 +67,7 @@ public class MurderMysteryListener implements Listener {
     private static final double MURDERER_THROW_SLOWNESS_SECONDS = MURDERER_KNIFE_THROWING_SECONDS;
     private static final int MURDERER_THROW_SLOWNESS_AMPLIFIER = 1; // Slowness II
     private static final double THROWN_KNIFE_SPEED_BLOCKS_PER_TICK = 0.55D;
-    private static final double THROWN_KNIFE_LAUNCH_HEIGHT = 0.6D;
+    private static final double THROWN_KNIFE_LAUNCH_HEIGHT = 0.5D;
     private static final double THROWN_KNIFE_SPAWN_FORWARD_OFFSET = 0.7D;
     private static final double THROWN_KNIFE_HIT_RADIUS = 0.9D;
     private static final double THROWN_KNIFE_ARROW_COLLISION_RADIUS = 0.65D;
@@ -84,6 +85,23 @@ public class MurderMysteryListener implements Listener {
     private static final float MURDERER_KNIFE_DRIP_GREEN = 0.0F;
     private static final float MURDERER_KNIFE_DRIP_BLUE = 0.0F;
     private static final int MURDERER_KNIFE_DRIP_PARTICLE_RADIUS = 64;
+    private static final long PROJECTILE_TRAIL_INTERVAL_TICKS = 1L;
+    private static final int PROJECTILE_TRAIL_PARTICLE_COUNT = 1;
+    private static final int PROJECTILE_TRAIL_PARTICLE_RADIUS = 64;
+    private static final float PROJECTILE_TRAIL_PARTICLE_SPREAD = 0.02F;
+    private static final float PROJECTILE_TRAIL_PARTICLE_SPEED = 0.0F;
+    private static final ProjectileTrailStyle[] PROJECTILE_TRAIL_STYLES = {
+            new ProjectileTrailStyle("CRIT", 0.0F, 0.0F, 0.0F),
+            new ProjectileTrailStyle("MAGIC_CRIT", 0.0F, 0.0F, 0.0F),
+            new ProjectileTrailStyle("FIREWORKS_SPARK", 0.0F, 0.0F, 0.0F),
+            new ProjectileTrailStyle("SPELL", 0.0F, 0.0F, 0.0F),
+            new ProjectileTrailStyle("INSTANT_SPELL", 0.0F, 0.0F, 0.0F),
+            new ProjectileTrailStyle("HAPPY_VILLAGER", 0.0F, 0.0F, 0.0F),
+            new ProjectileTrailStyle("COLOURED_DUST", 1.0F, 0.0F, 0.0F),
+            new ProjectileTrailStyle("COLOURED_DUST", 0.0F, 0.4F, 1.0F),
+            new ProjectileTrailStyle("COLOURED_DUST", 0.2F, 1.0F, 0.2F),
+            new ProjectileTrailStyle("COLOURED_DUST", 1.0F, 0.85F, 0.0F)
+    };
     private static final Sound GLASS_SHATTER_SOUND = resolveCompatibleSound("GLASS", "BLOCK_GLASS_BREAK");
     private static final Sound ARROW_KNIFE_CLANK_SOUND = resolveCompatibleSound("ITEM_BREAK", "ENTITY_ITEM_BREAK");
     private static final float ARROW_KNIFE_CLANK_VOLUME = 1.0F;
@@ -102,6 +120,7 @@ public class MurderMysteryListener implements Listener {
     private final QueueService queueService;
     private final Map<UUID, ThrownKnife> activeThrownKnives;
     private final Map<UUID, BukkitTask> pendingKnifeLaunches;
+    private final Map<UUID, BukkitTask> activeArrowTrailTasks;
     private final Map<String, BukkitTask> paneBreakResetTasks;
 
     public MurderMysteryListener(MurderMysteryPlugin plugin, MurderMysteryGameManager gameManager, QueueService queueService) {
@@ -110,6 +129,7 @@ public class MurderMysteryListener implements Listener {
         this.queueService = queueService;
         this.activeThrownKnives = new HashMap<>();
         this.pendingKnifeLaunches = new HashMap<>();
+        this.activeArrowTrailTasks = new HashMap<>();
         this.paneBreakResetTasks = new HashMap<>();
         plugin.getServer().getScheduler().runTaskTimer(
                 plugin,
@@ -498,6 +518,7 @@ public class MurderMysteryListener implements Listener {
             launchedArrow.setVelocity(launchedArrow.getVelocity());
             setProjectileLaunchMetadata(launchedArrow, player);
             gameManager.trackRoundArrow(launchedArrow);
+            startArrowTrail(launchedArrow);
             if (bowSnapshot != null) {
                 plugin.getServer().getScheduler().runTask(plugin, () -> {
                     if (!gameManager.isInGame(player) || gameManager.getState() != GameState.IN_GAME) {
@@ -579,6 +600,98 @@ public class MurderMysteryListener implements Listener {
             );
         } catch (Throwable ignored) {
             location.getWorld().playEffect(location, Effect.COLOURED_DUST, 0);
+        }
+    }
+
+    private void startArrowTrail(Arrow arrow) {
+        if (arrow == null) {
+            return;
+        }
+        ProjectileTrailStyle style = randomProjectileTrailStyle();
+        if (style == null || style.effect == null) {
+            return;
+        }
+        UUID arrowUuid = arrow.getUniqueId();
+        cancelArrowTrail(arrowUuid);
+        BukkitTask task = plugin.getServer().getScheduler().runTaskTimer(
+                plugin,
+                () -> tickArrowTrail(arrowUuid, arrow, style),
+                1L,
+                PROJECTILE_TRAIL_INTERVAL_TICKS
+        );
+        activeArrowTrailTasks.put(arrowUuid, task);
+    }
+
+    private ProjectileTrailStyle randomProjectileTrailStyle() {
+        if (PROJECTILE_TRAIL_STYLES.length == 0) {
+            return null;
+        }
+        int startIndex = ThreadLocalRandom.current().nextInt(PROJECTILE_TRAIL_STYLES.length);
+        for (int offset = 0; offset < PROJECTILE_TRAIL_STYLES.length; offset++) {
+            ProjectileTrailStyle style = PROJECTILE_TRAIL_STYLES[(startIndex + offset) % PROJECTILE_TRAIL_STYLES.length];
+            if (style != null && style.effect != null) {
+                return style;
+            }
+        }
+        return null;
+    }
+
+    private void tickArrowTrail(UUID arrowUuid, Arrow arrow, ProjectileTrailStyle style) {
+        if (arrowUuid == null || arrow == null || style == null || style.effect == null) {
+            cancelArrowTrail(arrowUuid);
+            return;
+        }
+        if (!arrow.isValid() || arrow.isDead() || arrow.getWorld() == null) {
+            cancelArrowTrail(arrowUuid);
+            return;
+        }
+        if (arrow.getVelocity() == null || arrow.getVelocity().lengthSquared() <= 0.000001D) {
+            cancelArrowTrail(arrowUuid);
+            return;
+        }
+        if (gameManager.getState() != GameState.IN_GAME) {
+            cancelArrowTrail(arrowUuid);
+            return;
+        }
+        spawnProjectileTrailParticle(arrow.getLocation(), style);
+    }
+
+    private void spawnProjectileTrailParticle(Location location, ProjectileTrailStyle style) {
+        if (location == null || location.getWorld() == null || style == null || style.effect == null) {
+            return;
+        }
+        try {
+            location.getWorld().spigot().playEffect(
+                    location,
+                    style.effect,
+                    0,
+                    0,
+                    style.offsetX,
+                    style.offsetY,
+                    style.offsetZ,
+                    PROJECTILE_TRAIL_PARTICLE_SPEED,
+                    PROJECTILE_TRAIL_PARTICLE_COUNT,
+                    PROJECTILE_TRAIL_PARTICLE_RADIUS
+            );
+        } catch (Throwable ignored) {
+            location.getWorld().playEffect(location, style.effect, 0);
+        }
+    }
+
+    private void spawnThrownKnifeTrailParticle(Location location, ThrownKnife knife) {
+        if (knife == null || knife.trailStyle == null) {
+            return;
+        }
+        spawnProjectileTrailParticle(location, knife.trailStyle);
+    }
+
+    private void cancelArrowTrail(UUID arrowUuid) {
+        if (arrowUuid == null) {
+            return;
+        }
+        BukkitTask task = activeArrowTrailTasks.remove(arrowUuid);
+        if (task != null) {
+            task.cancel();
         }
     }
 
@@ -681,7 +794,11 @@ public class MurderMysteryListener implements Listener {
     }
 
     private void removeProjectileEntity(Entity projectile) {
-        if (projectile == null || !projectile.isValid() || projectile.isDead()) {
+        if (projectile == null) {
+            return;
+        }
+        cancelArrowTrail(projectile.getUniqueId());
+        if (!projectile.isValid() || projectile.isDead()) {
             return;
         }
         projectile.remove();
@@ -789,7 +906,8 @@ public class MurderMysteryListener implements Listener {
                 display,
                 velocity,
                 launchLocation.clone(),
-                System.currentTimeMillis() + secondsToMillis(lifetimeSeconds)
+                System.currentTimeMillis() + secondsToMillis(lifetimeSeconds),
+                randomProjectileTrailStyle()
         );
         BukkitTask task = plugin.getServer().getScheduler().runTaskTimer(
                 plugin,
@@ -850,6 +968,7 @@ public class MurderMysteryListener implements Listener {
             despawnThrownKnife(shooterUuid);
             return;
         }
+        spawnThrownKnifeTrailParticle(from, knife);
         Location blockCollision = firstThrownKnifeBlockCollision(from, to);
         Location hitScanEnd = blockCollision == null ? to : blockCollision;
         shatterGlassPanesAlongPath(from, hitScanEnd, knife);
@@ -1385,6 +1504,17 @@ public class MurderMysteryListener implements Listener {
         return null;
     }
 
+    private static Effect resolveCompatibleEffect(String effectName) {
+        if (effectName == null || effectName.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            return Effect.valueOf(effectName.trim());
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
+    }
+
     private void resyncDamagedItemSlots(Player player, ItemStack damagedItem) {
         if (player == null || damagedItem == null || damagedItem.getType() == Material.AIR) {
             return;
@@ -1552,17 +1682,20 @@ public class MurderMysteryListener implements Listener {
         private final Vector velocity;
         private final Location launchLocation;
         private final long expiresAtMillis;
+        private final ProjectileTrailStyle trailStyle;
         private final Set<String> shatteredPaneKeys;
         private BukkitTask task;
 
         private ThrownKnife(ArmorStand display,
                             Vector velocity,
                             Location launchLocation,
-                            long expiresAtMillis) {
+                            long expiresAtMillis,
+                            ProjectileTrailStyle trailStyle) {
             this.display = display;
             this.velocity = velocity == null ? new Vector(0.0D, 0.0D, 0.0D) : velocity.clone();
             this.launchLocation = launchLocation == null ? null : launchLocation.clone();
             this.expiresAtMillis = expiresAtMillis;
+            this.trailStyle = trailStyle;
             this.shatteredPaneKeys = new HashSet<>();
         }
 
@@ -1574,6 +1707,26 @@ public class MurderMysteryListener implements Listener {
             if (task != null) {
                 task.cancel();
                 task = null;
+            }
+        }
+    }
+
+    private static class ProjectileTrailStyle {
+        private final Effect effect;
+        private final float offsetX;
+        private final float offsetY;
+        private final float offsetZ;
+
+        private ProjectileTrailStyle(String effectName, float offsetX, float offsetY, float offsetZ) {
+            this.effect = resolveCompatibleEffect(effectName);
+            if ("COLOURED_DUST".equals(effectName)) {
+                this.offsetX = offsetX;
+                this.offsetY = offsetY;
+                this.offsetZ = offsetZ;
+            } else {
+                this.offsetX = PROJECTILE_TRAIL_PARTICLE_SPREAD;
+                this.offsetY = PROJECTILE_TRAIL_PARTICLE_SPREAD;
+                this.offsetZ = PROJECTILE_TRAIL_PARTICLE_SPREAD;
             }
         }
     }
