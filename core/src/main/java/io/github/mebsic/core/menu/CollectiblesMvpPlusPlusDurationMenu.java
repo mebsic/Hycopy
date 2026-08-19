@@ -15,14 +15,13 @@ import java.util.Locale;
 
 public class CollectiblesMvpPlusPlusDurationMenu extends Menu {
     public static final String TITLE = "MVP++ Duration";
-    private static final int SIZE = 45;
+    private static final int SIZE = 36;
     private static final int DAYS_30_SLOT = 10;
     private static final int DAYS_90_SLOT = 12;
     private static final int DAYS_180_SLOT = 14;
     private static final int DAYS_365_SLOT = 16;
-    private static final int RESET_SLOT = 31;
-    private static final int BACK_SLOT = 39;
-    private static final int COLLECTIBLES_SLOT = 40;
+    private static final int BACK_SLOT = 30;
+    private static final int COLLECTIBLES_SLOT = 31;
 
     private final CoreApi coreApi;
     private final CollectiblesRanksMenu parent;
@@ -46,7 +45,6 @@ public class CollectiblesMvpPlusPlusDurationMenu extends Menu {
         set(inventory, DAYS_90_SLOT, durationItem(90, profile));
         set(inventory, DAYS_180_SLOT, durationItem(180, profile));
         set(inventory, DAYS_365_SLOT, durationItem(365, profile));
-        set(inventory, RESET_SLOT, item(Material.BARRIER, ChatColor.RED + "Click to reset!"));
         set(inventory, BACK_SLOT, item(Material.ARROW, ChatColor.GREEN + "Go Back", ChatColor.GRAY + "To Ranks"));
         set(inventory, COLLECTIBLES_SLOT, item(
                 Material.CHEST,
@@ -64,10 +62,6 @@ public class CollectiblesMvpPlusPlusDurationMenu extends Menu {
         int slot = click.getRawSlot();
         if (slot == BACK_SLOT) {
             openParent(player);
-            return;
-        }
-        if (slot == RESET_SLOT) {
-            resetRank(player);
             return;
         }
         if (slot == COLLECTIBLES_SLOT) {
@@ -157,24 +151,6 @@ public class CollectiblesMvpPlusPlusDurationMenu extends Menu {
             return 365;
         }
         return 0;
-    }
-
-    private void resetRank(Player player) {
-        if (coreApi == null || player == null) {
-            return;
-        }
-        Profile profile = coreApi.getProfile(player.getUniqueId());
-        if (profile == null) {
-            player.sendMessage(ChatColor.RED + CommonMessages.PROFILE_LOADING);
-            return;
-        }
-        if (CollectiblesRankSupport.isSelected(profile, Rank.DEFAULT)) {
-            player.sendMessage(ChatColor.RED + "You already have that selected!");
-            return;
-        }
-        coreApi.setRank(player.getUniqueId(), Rank.DEFAULT, true);
-        player.sendMessage(ChatColor.GREEN + "You are now DEFAULT");
-        open(player);
     }
 
     private void openParent(Player player) {

@@ -58,7 +58,7 @@ public class GiftSelectMenu extends Menu {
         set(inventory, VIP_PLUS_SLOT, buildRankItem(Rank.VIP_PLUS, true, vipPlusCost(), walletGold, targetRank));
         set(inventory, MVP_SLOT, buildRankItem(Rank.MVP, false, mvpCost(), walletGold, targetRank));
         set(inventory, MVP_PLUS_SLOT, buildRankItem(Rank.MVP_PLUS, true, mvpPlusCost(), walletGold, targetRank));
-        set(inventory, MVP_PLUS_PLUS_SLOT, buildMvpPlusPlusItem());
+        set(inventory, MVP_PLUS_PLUS_SLOT, buildMvpPlusPlusItem(targetRank));
         set(inventory, BACK_SLOT, item(Material.ARROW, ChatColor.GREEN + "Go Back"));
         set(inventory, CLOSE_SLOT, item(Material.BARRIER, ChatColor.RED + "Close"));
         set(inventory, WALLET_SLOT, GiftSupport.buildWalletItem(walletGold));
@@ -91,6 +91,15 @@ public class GiftSelectMenu extends Menu {
             Player target = resolveTargetOrMessage(sender);
             if (target == null) {
                 sender.closeInventory();
+                return;
+            }
+            Profile targetProfile = plugin == null ? null : plugin.getProfile(target.getUniqueId());
+            if (targetProfile == null) {
+                sender.sendMessage(GiftSupport.PROFILE_LOADING_TARGET_MESSAGE);
+                return;
+            }
+            Rank targetRank = GiftSupport.safeRank(targetProfile.getRank());
+            if (targetRank.isAtLeast(Rank.MVP_PLUS_PLUS) && targetRank != Rank.MVP_PLUS_PLUS) {
                 return;
             }
             new GiftMvpPlusPlusMenu(plugin, target).open(sender);
@@ -239,7 +248,9 @@ public class GiftSelectMenu extends Menu {
         return lore;
     }
 
-    private ItemStack buildMvpPlusPlusItem() {
+    private ItemStack buildMvpPlusPlusItem(Rank targetRank) {
+        Rank safeTargetRank = GiftSupport.safeRank(targetRank);
+        boolean alreadyOwned = safeTargetRank.isAtLeast(Rank.MVP_PLUS_PLUS) && safeTargetRank != Rank.MVP_PLUS_PLUS;
         List<String> lore = new ArrayList<String>();
         lore.add(ChatColor.GRAY + "MVP++ is an exclusive Rank Upgrade");
         lore.add(ChatColor.GRAY + "to your existing MVP++ Rank. MVP++");
@@ -249,7 +260,11 @@ public class GiftSelectMenu extends Menu {
         lore.add(ChatColor.GRAY + "Purchased days will accumulate; If");
         lore.add(ChatColor.GRAY + "you buy 30 days, then 90 days, you");
         lore.add(ChatColor.GRAY + "would have a total of 120 days.");
-        lore.add(ChatColor.YELLOW + "Click to browse perks and durations!");
+        if (alreadyOwned) {
+            lore.add(ChatColor.RED + "Already owned!");
+        } else {
+            lore.add(ChatColor.YELLOW + "Click to browse perks and durations!");
+        }
         return GiftSupport.addGlow(item(Material.GOLD_INGOT, ChatColor.GOLD + "MVP" + ChatColor.RED + "++", lore));
     }
 

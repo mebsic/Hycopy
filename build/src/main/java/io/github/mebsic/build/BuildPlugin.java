@@ -7,6 +7,9 @@ import io.github.mebsic.build.service.BuildAccessService;
 import io.github.mebsic.build.service.BuildLobbyRedirectService;
 import io.github.mebsic.build.service.BuildMapConfigService;
 import io.github.mebsic.core.CorePlugin;
+import io.github.mebsic.core.listener.ImageListener;
+import io.github.mebsic.core.listener.ItemFrameListener;
+import io.github.mebsic.core.server.ServerType;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.command.TabCompleter;
@@ -20,6 +23,8 @@ public class BuildPlugin extends JavaPlugin {
     private BuildAccessService accessService;
     private BuildMapConfigService mapConfigService;
     private BuildLobbyRedirectService lobbyRedirectService;
+    private ImageListener hubImageDisplayListener;
+    private ItemFrameListener itemFrameListener;
 
     @Override
     public void onEnable() {
@@ -41,6 +46,8 @@ public class BuildPlugin extends JavaPlugin {
         this.mapConfigService = new BuildMapConfigService(corePlugin);
         this.lobbyRedirectService = new BuildLobbyRedirectService(this, corePlugin, accessService, registryStaleSeconds);
         this.lobbyRedirectService.subscribeToRankSync();
+        this.hubImageDisplayListener = new ImageListener(this, corePlugin, ServerType.MURDER_MYSTERY_HUB);
+        this.itemFrameListener = new ItemFrameListener(ServerType.MURDER_MYSTERY_HUB, hubImageDisplayListener);
 
         registerCommands();
         getServer().getPluginManager().registerEvents(
@@ -48,6 +55,9 @@ public class BuildPlugin extends JavaPlugin {
                 this
         );
         getServer().getPluginManager().registerEvents(new BuildHubFeatureListener(mapConfigService), this);
+        getServer().getPluginManager().registerEvents(hubImageDisplayListener, this);
+        getServer().getPluginManager().registerEvents(itemFrameListener, this);
+        hubImageDisplayListener.start();
 
         for (Player player : getServer().getOnlinePlayers()) {
             lobbyRedirectService.validateStaffAccess(player, 0);
@@ -64,6 +74,11 @@ public class BuildPlugin extends JavaPlugin {
             lobbyRedirectService.shutdown();
             lobbyRedirectService = null;
         }
+        if (hubImageDisplayListener != null) {
+            hubImageDisplayListener.shutdown();
+            hubImageDisplayListener = null;
+        }
+        itemFrameListener = null;
         if (registryService != null) {
             registryService.stop();
             registryService = null;

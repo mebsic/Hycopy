@@ -555,6 +555,10 @@ public class BuildMapConfigService {
     }
 
     public boolean setHubImageDisplayFromMenu(Player player, ServerType gameType, String worldDirectory) {
+        return setHubImageDisplayFromMenu(player, gameType, worldDirectory, false);
+    }
+
+    public boolean setHubImageDisplayFromMenu(Player player, ServerType gameType, String worldDirectory, boolean resetRequested) {
         if (player == null || gameType == null || gameType == ServerType.UNKNOWN) {
             return true;
         }
@@ -577,15 +581,12 @@ public class BuildMapConfigService {
             return true;
         }
         Location savedLocation = null;
-        boolean reset = false;
         try {
             synchronized (mapConfigLock) {
                 JsonObject root = loadMapConfigRoot(store, gameKey);
                 JsonObject gameSection = getOrCreateGameSection(root, gameKey);
-                JsonObject existingDisplay = resolveHubInformationImageDisplay(gameSection, gameType);
-                if (existingDisplay != null) {
+                if (resetRequested) {
                     clearHubInformationImageDisplay(gameSection, gameType);
-                    reset = true;
                     saveMapConfigRoot(store, gameKey, root);
                 } else {
                     JsonArray maps = getOrCreateArray(gameSection, "maps");
@@ -610,7 +611,7 @@ public class BuildMapConfigService {
                     saveMapConfigRoot(store, gameKey, root);
                 }
             }
-            if (reset) {
+            if (resetRequested) {
                 player.sendMessage(ChatColor.GREEN + CommonMessages.DONE);
             } else {
                 sendDone(player, savedLocation, null);

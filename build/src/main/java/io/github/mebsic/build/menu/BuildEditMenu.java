@@ -180,7 +180,7 @@ public class BuildEditMenu extends Menu {
         }
         if (slot == BOTTOM_MIDDLE_SLOT) {
             if (mapConfigService != null) {
-                mapConfigService.setHubImageDisplayFromMenu(player, gameType, worldDirectory);
+                mapConfigService.setHubImageDisplayFromMenu(player, gameType, worldDirectory, click.isRightClick());
             }
             player.closeInventory();
             return;
@@ -394,16 +394,15 @@ public class BuildEditMenu extends Menu {
 
     private ItemStack hubImageDisplayItem(Player player) {
         boolean configured = hasHubImageDisplayConfigured(player);
-        return item(
-                Material.MAP,
-                ChatColor.GREEN + "Information",
-                ChatColor.GRAY + "This will add an image which",
-                ChatColor.GRAY + "displays in the hub.",
-                "",
-                configured
-                        ? ChatColor.YELLOW + "Click to reset!"
-                        : ChatColor.YELLOW + "Click to add!"
-        );
+        List<String> lore = new ArrayList<String>();
+        lore.add(ChatColor.GRAY + "This will add an image which");
+        lore.add(ChatColor.GRAY + "displays in the hub.");
+        lore.add("");
+        lore.add(configured ? ChatColor.YELLOW + "Click to move!" : ChatColor.YELLOW + "Click to add!");
+        if (configured) {
+            lore.add(ChatColor.DARK_GRAY + "Right-click to reset!");
+        }
+        return item(Material.MAP, ChatColor.GREEN + "Information", lore);
     }
 
     private String leaderboardTypeLabel(String metric) {

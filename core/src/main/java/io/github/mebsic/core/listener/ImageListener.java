@@ -16,7 +16,9 @@ import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.ItemFrame;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.world.WorldLoadEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.map.MapCanvas;
 import org.bukkit.map.MapRenderer;
@@ -85,6 +87,9 @@ public class ImageListener implements Listener {
         this.cachedImageSource = "";
         this.cachedImage = null;
         this.mapTileGrid = null;
+    }
+
+    public void start() {
         refreshDisplay();
     }
 
@@ -92,10 +97,6 @@ public class ImageListener implements Listener {
         despawnRuntimeImage();
         mapTiles.clear();
         mapTileGrid = null;
-    }
-
-    public void refreshNow() {
-        refreshDisplay();
     }
 
     private void refreshDisplay() {
@@ -173,7 +174,9 @@ public class ImageListener implements Listener {
         if (facing == null || facing == BlockFace.SELF || facing == BlockFace.UP || facing == BlockFace.DOWN) {
             facing = BlockFace.SOUTH;
         }
+        ensureImageAreaChunksLoaded(world, config.location, facing, IMAGE_GRID_WIDTH, IMAGE_GRID_HEIGHT);
         facing = resolveFacingWithOppositeFallback(world, config.location, facing);
+        ensureImageAreaChunksLoaded(world, config.location, facing, IMAGE_GRID_WIDTH, IMAGE_GRID_HEIGHT);
 
         ImageGrid grid = resolveImageGrid(world, config.location, facing);
         ensureMapTiles(world, grid);
@@ -405,6 +408,9 @@ public class ImageListener implements Listener {
                 if (tileLocation == null) {
                     continue;
                 }
+                if (!hasSupportForTile(tileLocation, facing)) {
+                    continue;
+                }
 
                 ItemFrame frame = index < previous.size() ? resolveFrame(previous.get(index)) : null;
                 if (frame != null && !matchesFramePlacement(frame, tileLocation, facing)) {
@@ -412,11 +418,7 @@ public class ImageListener implements Listener {
                     frame = null;
                 }
                 if (frame == null) {
-                    try {
-                        frame = world.spawn(tileLocation, ItemFrame.class);
-                    } catch (Exception ignored) {
-                        frame = null;
-                    }
+                    frame = spawnItemFrame(world, tileLocation, facing);
                 }
                 if (frame == null) {
                     continue;
@@ -426,7 +428,10 @@ public class ImageListener implements Listener {
                     // unsupported/floating placements before runtimeImage is updated.
                     pendingRuntimeFrameUuids.add(frame.getUniqueId());
                 }
-                applyFrameFacing(frame, facing);
+                if (!applyFrameFacing(frame, facing)) {
+                    frame.remove();
+                    continue;
+                }
 
                 MapTile tile = mapTiles.get(index);
                 if (tile != null && tile.mapView != null) {
@@ -457,6 +462,144 @@ public class ImageListener implements Listener {
         runtime.frameUuids = next;
         runtimeImage = runtime;
         pendingRuntimeFrameUuids.clear();
+    }
+
+    private boolean hasSupportForTile(Location tileLocation, BlockFace facing) {
+        if (tileLocation == null || facing == null) {
+            return false;
+        }
+        Block support = tileLocation.getBlock().getRelative(facing.getOppositeFace());
+        return isSolidSupport(support == null ? null : support.getType());
+    }
+
+    private ItemFrame spawnItemFrame(World world, Location tileLocation, BlockFace facing) {
+        ItemFrame frame = spawnItemFrameWithNativeFacing(world, tileLocation, facing);
+        if (frame != null) {
+            return frame;
+        }
+        try {
+            return world.spawn(spawnLocationForFacing(tileLocation, facing), ItemFrame.class);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private ItemFrame spawnItemFrameWithNativeFacing(World world, Location tileLocation, BlockFace facing) {
+        if (world == null || tileLocation == null || facing == null) {
+            return null;
+        }
+        String version = craftBukkitVersion();
+        if (version.isEmpty()) {
+            return null;
+        }
+        try {
+            Class<?> craftWorldClass = Class.forName("org.bukkit.craftbukkit." + version + ".CraftWorld");
+            if (!craftWorldClass.isInstance(world)) {
+                return null;
+            }
+            Object worldHandle = craftWorldClass.getMethod("getHandle").invoke(world);
+            Class<?> nmsWorldClass = Class.forName("net.minecraft.server." + version + ".World");
+            Class<?> nmsEntityClass = Class.forName("net.minecraft.server." + version + ".Entity");
+            Class<?> blockPositionClass = Class.forName("net.minecraft.server." + version + ".BlockPosition");
+            Class<?> enumDirectionClass = Class.forName("net.minecraft.server." + version + ".EnumDirection");
+            Class<?> entityItemFrameClass = Class.forName("net.minecraft.server." + version + ".EntityItemFrame");
+            Object blockPosition = blockPositionClass
+                    .getConstructor(int.class, int.class, int.class)
+                    .newInstance(tileLocation.getBlockX(), tileLocation.getBlockY(), tileLocation.getBlockZ());
+            Object direction = Enum.valueOf((Class) enumDirectionClass, nmsDirectionName(facing));
+            Object nmsFrame = entityItemFrameClass
+                    .getConstructor(nmsWorldClass, blockPositionClass, enumDirectionClass)
+                    .newInstance(worldHandle, blockPosition, direction);
+            Object added = worldHandle.getClass()
+                    .getMethod("addEntity", nmsEntityClass)
+                    .invoke(worldHandle, nmsFrame);
+            if (added instanceof Boolean && !((Boolean) added)) {
+                return null;
+            }
+            Object bukkitEntity = entityItemFrameClass.getMethod("getBukkitEntity").invoke(nmsFrame);
+            return bukkitEntity instanceof ItemFrame ? (ItemFrame) bukkitEntity : null;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private String craftBukkitVersion() {
+        if (Bukkit.getServer() == null || Bukkit.getServer().getClass() == null) {
+            return "";
+        }
+        Package serverPackage = Bukkit.getServer().getClass().getPackage();
+        String packageName = serverPackage == null ? "" : safeText(serverPackage.getName());
+        int lastDot = packageName.lastIndexOf('.');
+        if (lastDot < 0 || lastDot >= packageName.length() - 1) {
+            return "";
+        }
+        String version = packageName.substring(lastDot + 1);
+        return version.startsWith("v") ? version : "";
+    }
+
+    private String nmsDirectionName(BlockFace facing) {
+        if (facing == BlockFace.NORTH) {
+            return "NORTH";
+        }
+        if (facing == BlockFace.EAST) {
+            return "EAST";
+        }
+        if (facing == BlockFace.WEST) {
+            return "WEST";
+        }
+        return "SOUTH";
+    }
+
+    private void ensureImageAreaChunksLoaded(World world,
+                                             ImageLocation location,
+                                             BlockFace facing,
+                                             int width,
+                                             int height) {
+        if (world == null || location == null || facing == null) {
+            return;
+        }
+        BlockFace supportFace = facing.getOppositeFace();
+        int scanWidth = Math.max(1, Math.min(IMAGE_GRID_WIDTH, width));
+        int scanHeight = Math.max(1, Math.min(IMAGE_GRID_HEIGHT, height));
+        for (int yOffset = 0; yOffset < scanHeight; yOffset++) {
+            for (int col = 0; col < scanWidth; col++) {
+                Location tile = tileLocationFromBottom(world, location, facing, col, yOffset);
+                ensureLocationChunkLoaded(tile);
+                if (tile == null) {
+                    continue;
+                }
+                Block support = tile.getBlock().getRelative(supportFace);
+                ensureBlockChunkLoaded(support);
+            }
+        }
+    }
+
+    private void ensureLocationChunkLoaded(Location location) {
+        if (location == null || location.getWorld() == null) {
+            return;
+        }
+        ensureChunkLoaded(location.getWorld(), location.getBlockX() >> 4, location.getBlockZ() >> 4);
+    }
+
+    private void ensureBlockChunkLoaded(Block block) {
+        if (block == null || block.getWorld() == null) {
+            return;
+        }
+        ensureChunkLoaded(block.getWorld(), block.getX() >> 4, block.getZ() >> 4);
+    }
+
+    private void ensureChunkLoaded(World world, int chunkX, int chunkZ) {
+        if (world == null) {
+            return;
+        }
+        try {
+            if (!world.isChunkLoaded(chunkX, chunkZ)) {
+                world.loadChunk(chunkX, chunkZ, false);
+            }
+        } catch (Exception ignored) {
+            // Keep the renderer best-effort if the world rejects a chunk load.
+        }
     }
 
     private void removeConflictingFramesNearGrid(World world,
@@ -546,22 +689,37 @@ public class ImageListener implements Listener {
         return new int[] {-1, 0};
     }
 
-    private void applyFrameFacing(ItemFrame frame, BlockFace facing) {
+    private Location spawnLocationForFacing(Location tileLocation, BlockFace facing) {
+        Location spawnLocation = tileLocation == null ? null : tileLocation.clone();
+        if (spawnLocation == null) {
+            return null;
+        }
+        spawnLocation.setYaw(yawForFacing(facing));
+        spawnLocation.setPitch(0.0f);
+        return spawnLocation;
+    }
+
+    private float yawForFacing(BlockFace facing) {
+        if (facing == BlockFace.NORTH) {
+            return 180.0f;
+        }
+        if (facing == BlockFace.WEST) {
+            return 90.0f;
+        }
+        if (facing == BlockFace.EAST) {
+            return 270.0f;
+        }
+        return 0.0f;
+    }
+
+    private boolean applyFrameFacing(ItemFrame frame, BlockFace facing) {
         if (frame == null || facing == null) {
-            return;
+            return false;
         }
         try {
-            frame.setFacingDirection(facing, true);
-            return;
-        } catch (NoSuchMethodError ignored) {
-            // 1.8 API fallback.
+            return frame.setFacingDirection(facing, false);
         } catch (Exception ignored) {
-            // 1.8 API fallback.
-        }
-        try {
-            frame.setFacingDirection(facing);
-        } catch (Exception ignored) {
-            // Best effort.
+            return false;
         }
     }
 
@@ -747,6 +905,14 @@ public class ImageListener implements Listener {
             }
         }
         return false;
+    }
+
+    @EventHandler
+    public void onWorldLoad(WorldLoadEvent event) {
+        if (event == null || event.getWorld() == null) {
+            return;
+        }
+        refreshDisplay();
     }
 
     private ResolvedImageConfig resolveImageConfig() {

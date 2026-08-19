@@ -404,6 +404,7 @@ public class MurderMysteryPlugin extends JavaPlugin implements HubContext {
         getServer().getPluginManager().registerEvents(hubLeaderboardListener, this);
         getServer().getPluginManager().registerEvents(hubImageDisplayListener, this);
         getServer().getPluginManager().registerEvents(itemFrameListener, this);
+        hubImageDisplayListener.start();
         subscribeToHubMapConfigUpdates();
         this.tablistTask = getServer().getScheduler().runTaskTimer(this, tablistService::updateAll, 20L, 20L);
         this.hubScoreboardTask = getServer().getScheduler().runTaskTimer(this,
@@ -459,9 +460,6 @@ public class MurderMysteryPlugin extends JavaPlugin implements HubContext {
         }
         getServer().getScheduler().runTask(this, () -> {
             reloadHubSpawnFromMapConfig();
-            if (hubImageDisplayListener != null) {
-                hubImageDisplayListener.refreshNow();
-            }
         });
     }
 

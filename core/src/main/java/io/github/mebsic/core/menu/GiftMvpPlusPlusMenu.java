@@ -49,10 +49,12 @@ public class GiftMvpPlusPlusMenu extends Menu {
         }
         inventory.clear();
         int walletGold = resolveWalletGold(player);
-        set(inventory, DAYS_30_SLOT, buildDurationItem(30, cost30Days(), walletGold));
-        set(inventory, DAYS_90_SLOT, buildDurationItem(90, cost90Days(), walletGold));
-        set(inventory, DAYS_180_SLOT, buildDurationItem(180, cost180Days(), walletGold));
-        set(inventory, DAYS_365_SLOT, buildDurationItem(365, cost365Days(), walletGold));
+        Profile targetProfile = plugin == null || targetUuid == null ? null : plugin.getProfile(targetUuid);
+        Rank targetRank = targetProfile == null ? Rank.DEFAULT : GiftSupport.safeRank(targetProfile.getRank());
+        set(inventory, DAYS_30_SLOT, buildDurationItem(30, cost30Days(), walletGold, targetRank));
+        set(inventory, DAYS_90_SLOT, buildDurationItem(90, cost90Days(), walletGold, targetRank));
+        set(inventory, DAYS_180_SLOT, buildDurationItem(180, cost180Days(), walletGold, targetRank));
+        set(inventory, DAYS_365_SLOT, buildDurationItem(365, cost365Days(), walletGold, targetRank));
         set(inventory, BACK_SLOT, item(Material.ARROW, ChatColor.GREEN + "Go Back"));
         set(inventory, CLOSE_SLOT, item(Material.BARRIER, ChatColor.RED + "Close"));
         set(inventory, WALLET_SLOT, GiftSupport.buildWalletItem(walletGold));
@@ -129,6 +131,9 @@ public class GiftMvpPlusPlusMenu extends Menu {
         }
 
         Rank previousRank = GiftSupport.safeRank(targetProfile.getRank());
+        if (hasHigherThanMvpPlusPlus(previousRank)) {
+            return;
+        }
         boolean eligible = previousRank == Rank.MVP_PLUS || previousRank == Rank.MVP_PLUS_PLUS;
         if (!eligible) {
             sender.sendMessage(ChatColor.RED + "That player must be "
@@ -147,10 +152,11 @@ public class GiftMvpPlusPlusMenu extends Menu {
         new GiftConfirmMenu(plugin, target, days, safeCost).open(sender);
     }
 
-    private ItemStack buildDurationItem(int days, int costGold, int walletGold) {
+    private ItemStack buildDurationItem(int days, int costGold, int walletGold, Rank targetRank) {
         Material material = Material.GOLD_INGOT;
         int safeCost = Math.max(0, costGold);
         boolean canAfford = Math.max(0, walletGold) >= safeCost;
+        boolean alreadyOwned = hasHigherThanMvpPlusPlus(GiftSupport.safeRank(targetRank));
         ChatColor titleColor = canAfford ? ChatColor.GREEN : ChatColor.RED;
         String title = GiftSupport.buildGiftRankText(Rank.MVP_PLUS_PLUS, null)
                 + titleColor + " " + days + " DAYS" + saveSuffix(days);
@@ -170,8 +176,17 @@ public class GiftMvpPlusPlusMenu extends Menu {
         lore.add("");
         lore.add(ChatColor.GRAY + "Cost: " + ChatColor.GREEN + GiftSupport.formatGold(safeCost) + " Gold");
         lore.add("");
-        lore.add(GiftSupport.giftActionLine(canAfford));
+        if (alreadyOwned) {
+            lore.add(ChatColor.RED + "Already owned!");
+        } else {
+            lore.add(GiftSupport.giftActionLine(canAfford));
+        }
         return GiftSupport.addGlow(item(material, title, lore));
+    }
+
+    private boolean hasHigherThanMvpPlusPlus(Rank rank) {
+        Rank safeRank = GiftSupport.safeRank(rank);
+        return safeRank.isAtLeast(Rank.MVP_PLUS_PLUS) && safeRank != Rank.MVP_PLUS_PLUS;
     }
 
     private Player resolveTargetOrMessage(Player sender) {

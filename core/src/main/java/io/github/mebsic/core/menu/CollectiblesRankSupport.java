@@ -102,6 +102,9 @@ final class CollectiblesRankSupport {
         if (profile == null || rank == null || rank == Rank.DEFAULT) {
             return false;
         }
+        if (hasHigherCurrentRank(profile, rank)) {
+            return true;
+        }
         if (rank == Rank.MVP_PLUS_PLUS && !hasActiveMvpPlusPlusSubscription(profile)) {
             return false;
         }

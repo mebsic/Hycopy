@@ -209,6 +209,9 @@ public class GiftConfirmMenu extends Menu {
         }
 
         Rank previousRank = GiftSupport.safeRank(targetProfile.getRank());
+        if (previousRank.isAtLeast(Rank.MVP_PLUS_PLUS) && previousRank != Rank.MVP_PLUS_PLUS) {
+            return;
+        }
         boolean eligible = previousRank == Rank.MVP_PLUS || previousRank == Rank.MVP_PLUS_PLUS;
         if (!eligible) {
             sender.sendMessage(ChatColor.RED + "That player must be "
