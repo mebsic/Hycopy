@@ -87,12 +87,15 @@ public class CollectiblesRanksMenu extends Menu {
         if (rank == null) {
             return;
         }
+        Profile profile = coreApi == null ? null : coreApi.getProfile(player.getUniqueId());
+        if (profile == null) {
+            player.sendMessage(ChatColor.RED + CommonMessages.PROFILE_LOADING);
+            return;
+        }
+        if (CollectiblesRankSupport.hasHigherCurrentRank(profile, rank)) {
+            return;
+        }
         if (rank == Rank.MVP_PLUS_PLUS) {
-            Profile profile = coreApi == null ? null : coreApi.getProfile(player.getUniqueId());
-            if (profile == null) {
-                player.sendMessage(ChatColor.RED + CommonMessages.PROFILE_LOADING);
-                return;
-            }
             if (!CollectiblesRankSupport.hasMvpPlusBase(profile)) {
                 player.sendMessage(CollectiblesRankSupport.mvpPlusRequirementMessage());
                 return;
@@ -110,6 +113,9 @@ public class CollectiblesRanksMenu extends Menu {
         Profile profile = coreApi.getProfile(player.getUniqueId());
         if (profile == null) {
             player.sendMessage(ChatColor.RED + CommonMessages.PROFILE_LOADING);
+            return;
+        }
+        if (CollectiblesRankSupport.hasHigherCurrentRank(profile, rank)) {
             return;
         }
         if (CollectiblesRankSupport.isUnlocked(profile, rank)) {
@@ -148,11 +154,14 @@ public class CollectiblesRanksMenu extends Menu {
     private ItemStack rankItem(Rank rank, Profile profile) {
         boolean unlocked = CollectiblesRankSupport.isUnlocked(profile, rank);
         boolean selected = CollectiblesRankSupport.isSelected(profile, rank);
+        boolean alreadyOwned = CollectiblesRankSupport.hasHigherCurrentRank(profile, rank);
         int cost = CollectiblesRankSupport.rankCost(rank);
         List<String> lore = CollectiblesRankSupport.rankDescription(rank);
         lore.add("");
         if (selected) {
             lore.add(ChatColor.GREEN + "Currently selected!");
+        } else if (alreadyOwned) {
+            lore.add(ChatColor.RED + "Already owned!");
         } else if (unlocked) {
             lore.add(ChatColor.YELLOW + "Click to select!");
         } else if (rank == Rank.MVP_PLUS_PLUS) {

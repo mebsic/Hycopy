@@ -113,6 +113,11 @@ final class CollectiblesRankSupport {
         return currentRank(profile).isAtLeast(rank);
     }
 
+    static boolean hasHigherCurrentRank(Profile profile, Rank rank) {
+        Rank currentRank = currentRank(profile);
+        return rank != null && currentRank.isAtLeast(rank) && currentRank != rank;
+    }
+
     static boolean isSelected(Profile profile, Rank rank) {
         return rank != null && currentRank(profile) == rank;
     }

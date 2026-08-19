@@ -82,6 +82,9 @@ public class CollectiblesMvpPlusPlusDurationMenu extends Menu {
             player.sendMessage(ChatColor.RED + CommonMessages.PROFILE_LOADING);
             return;
         }
+        if (CollectiblesRankSupport.hasHigherCurrentRank(profile, Rank.MVP_PLUS_PLUS)) {
+            return;
+        }
         if (!CollectiblesRankSupport.hasMvpPlusBase(profile)) {
             player.sendMessage(CollectiblesRankSupport.mvpPlusRequirementMessage());
             return;
@@ -104,6 +107,7 @@ public class CollectiblesMvpPlusPlusDurationMenu extends Menu {
         int cost = CollectiblesRankSupport.mvpPlusPlusDurationCost(days);
         boolean unlocked = CollectiblesRankSupport.isUnlocked(profile, Rank.MVP_PLUS_PLUS);
         boolean selected = CollectiblesRankSupport.isSelected(profile, Rank.MVP_PLUS_PLUS);
+        boolean alreadyOwned = CollectiblesRankSupport.hasHigherCurrentRank(profile, Rank.MVP_PLUS_PLUS);
         boolean hasMvpPlusBase = CollectiblesRankSupport.hasMvpPlusBase(profile);
         java.util.List<String> lore = new java.util.ArrayList<String>();
         lore.add(ChatColor.YELLOW + "This purchases " + days + " days of "
@@ -118,6 +122,8 @@ public class CollectiblesMvpPlusPlusDurationMenu extends Menu {
         lore.add("");
         if (selected) {
             lore.add(ChatColor.GREEN + "Currently selected!");
+        } else if (alreadyOwned) {
+            lore.add(ChatColor.RED + "Already owned!");
         } else if (unlocked) {
             lore.add(ChatColor.YELLOW + "Click to select!");
         } else if (!hasMvpPlusBase) {
