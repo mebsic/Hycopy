@@ -208,6 +208,7 @@ public class HubNpcListener implements Listener {
             }
             hideOtherProfileNpcsFromViewer(online);
             spawnProfileNpcsForPlayer(online);
+            refreshProfileNpcSkinsForViewer(online);
         });
         plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
             Player online = viewerUuid == null ? null : Bukkit.getPlayer(viewerUuid);
@@ -719,6 +720,36 @@ public class HubNpcListener implements Listener {
             profileNpcsByViewer.put(viewerUuid, created);
         }
         return created.size();
+    }
+
+    private void refreshProfileNpcSkinsForViewer(Player viewer) {
+        if (!citizensEnabled || viewer == null || !viewer.isOnline() || viewer.getUniqueId() == null) {
+            return;
+        }
+        UUID viewerUuid = viewer.getUniqueId();
+        List<RuntimeNpc> runtimes = profileNpcsByViewer.get(viewerUuid);
+        if (runtimes == null || runtimes.isEmpty()) {
+            return;
+        }
+        String owner = resolveProfileSkinOwner(viewer, safeText(viewer.getName()));
+        List<RuntimeNpc> snapshot = new ArrayList<RuntimeNpc>(runtimes);
+        for (RuntimeNpc runtime : snapshot) {
+            if (runtime == null || runtime.kind != NpcKind.PROFILE) {
+                continue;
+            }
+            if (runtime.profileViewerUuid != null && !runtime.profileViewerUuid.equals(viewerUuid)) {
+                continue;
+            }
+            runtime.skinOwner = owner;
+            NPC npc = runtime.npc;
+            if (npc == null && runtime.npcId > 0) {
+                npc = resolveNpcById(runtime.npcId);
+                runtime.npc = npc;
+            }
+            if (npc != null) {
+                applyCitizensSkin(npc, NpcKind.PROFILE, owner);
+            }
+        }
     }
 
     private void refreshProfileNpcsForViewer(Player viewer) {

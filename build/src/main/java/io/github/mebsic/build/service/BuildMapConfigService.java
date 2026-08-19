@@ -22,11 +22,13 @@ import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.util.BlockIterator;
 
 import java.io.File;
 import java.io.IOException;
@@ -62,6 +64,7 @@ public class BuildMapConfigService {
     private static final double PROFILE_NPC_HOLOGRAM_BOTTOM_Y_OFFSET = 2.60d;
     private static final double LEGACY_PARKOUR_HOLOGRAM_BASE_Y_OFFSET = 0.72d;
     private static final double PARKOUR_HOLOGRAM_BASE_Y_OFFSET = 2.0d;
+    private static final int IMAGE_TARGET_BLOCK_RANGE = 8;
     private static final String MAP_CONFIG_UPDATE_CHANNEL = "map_config_update";
     private static final String MAP_CONFIG_UPDATE_PREFIX = "maps:";
     // Build is editor-only: runtime NPC/hologram rendering belongs on hub servers.
@@ -573,7 +576,7 @@ public class BuildMapConfigService {
             player.sendMessage(ChatColor.RED + "MongoDB map config store is unavailable!");
             return true;
         }
-        Location location = player.getLocation();
+        Location savedLocation = null;
         boolean reset = false;
         try {
             synchronized (mapConfigLock) {
@@ -588,15 +591,19 @@ public class BuildMapConfigService {
                     JsonArray maps = getOrCreateArray(gameSection, "maps");
                     JsonObject map = findOrCreateMapByWorldDirectory(maps, mapWorld);
                     String resolvedMapName = mapWorldDirectoryOf(map, mapWorld);
+                    BlockFace imageFacing = resolveImageFacing(player);
+                    Location location = resolveImageFrameLocation(player, imageFacing);
+                    if (location == null) {
+                        player.sendMessage(ChatColor.RED + "Look at the bottom-left solid backing block for the image!");
+                        return true;
+                    }
+                    savedLocation = location;
 
                     JsonObject serverTypeSection = getOrCreateServerTypeSection(gameSection, gameType);
                     JsonObject information = getOrCreateObject(serverTypeSection, MongoManager.MAP_INFORMATION_KEY);
                     JsonObject imageDisplay = toLocationJson(location, System.currentTimeMillis());
                     imageDisplay.addProperty("pitch", 0.0f);
-                    imageDisplay.addProperty(
-                            "imageFacing",
-                            oppositeCardinalFacing(cardinalFacingFromYaw(location == null ? 0.0f : location.getYaw()))
-                    );
+                    imageDisplay.addProperty("imageFacing", imageFacing.name());
                     information.add(MongoManager.MAP_INFORMATION_IMAGE_DISPLAY_KEY, imageDisplay);
 
                     applyMapRotationDefaults(gameSection, resolvedMapName);
@@ -606,7 +613,7 @@ public class BuildMapConfigService {
             if (reset) {
                 player.sendMessage(ChatColor.GREEN + CommonMessages.DONE);
             } else {
-                sendDone(player, null, null);
+                sendDone(player, savedLocation, null);
             }
         } catch (Exception ex) {
             player.sendMessage(ChatColor.RED + "Failed to update map config in MongoDB!\n" + ex.getMessage());
@@ -2761,6 +2768,62 @@ public class BuildMapConfigService {
         json.addProperty("pitch", pitch);
         json.addProperty(MongoManager.MAP_CREATED_AT_KEY, createdAt <= 0L ? System.currentTimeMillis() : createdAt);
         return json;
+    }
+
+    private BlockFace resolveImageFacing(Player player) {
+        Location location = player.getLocation();
+        String facing = oppositeCardinalFacing(cardinalFacingFromYaw(location.getYaw()));
+        return BlockFace.valueOf(facing);
+    }
+
+    private Location resolveImageFrameLocation(Player player, BlockFace facing) {
+        if (player == null || facing == null) {
+            return null;
+        }
+        Block backingBlock = resolveTargetSolidBlock(player);
+        if (backingBlock == null) {
+            return null;
+        }
+        Block frameBlock = backingBlock.getRelative(facing);
+        if (frameBlock == null || !isAir(frameBlock.getType())) {
+            return null;
+        }
+        Location location = frameBlock.getLocation();
+        Location playerLocation = player.getLocation();
+        if (playerLocation != null) {
+            location.setYaw(playerLocation.getYaw());
+        }
+        location.setPitch(0.0f);
+        return location;
+    }
+
+    private Block resolveTargetSolidBlock(Player player) {
+        if (player == null) {
+            return null;
+        }
+        try {
+            BlockIterator iterator = new BlockIterator(player, IMAGE_TARGET_BLOCK_RANGE);
+            while (iterator.hasNext()) {
+                Block block = iterator.next();
+                if (block != null && isSolidBlock(block.getType())) {
+                    return block;
+                }
+            }
+        } catch (Exception ignored) {
+            return null;
+        }
+        return null;
+    }
+
+    private boolean isSolidBlock(Material type) {
+        if (type == null || type == Material.AIR) {
+            return false;
+        }
+        try {
+            return type.isSolid();
+        } catch (Exception ignored) {
+            return type != Material.AIR;
+        }
     }
 
     private String cardinalFacingFromYaw(float yaw) {
