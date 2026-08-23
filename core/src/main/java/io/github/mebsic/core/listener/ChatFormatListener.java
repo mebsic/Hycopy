@@ -183,7 +183,7 @@ public class ChatFormatListener implements Listener {
         boolean plainStarPrefix = totalWins == 0
                 || PrefixCosmeticCatalog.isNoneSchemeId(scheme == null ? null : scheme.getId());
         String actualPrefix = plainStarPrefix
-                ? ChatColor.GRAY + "✪"
+                ? ChatColor.GRAY + symbol
                 : colorMurderMysteryWinsPrefix(scheme, "[" + formatMurderMysteryWins(totalWins) + symbol + "]");
         String visiblePrefix = profile.isMurderMysteryWinsChatEnabled()
                 ? actualPrefix

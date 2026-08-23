@@ -179,8 +179,6 @@ public class PrefixOptionsMenu extends Menu {
                     ? Material.ENDER_CHEST
                     : Material.CHEST;
             List<String> lore = new ArrayList<String>();
-            lore.add(ChatColor.DARK_GRAY + typeLabel());
-            lore.add("");
             lore.add(randomSpecialLore(entry.specialId));
             lore.add("");
             lore.add(selected ? ChatColor.GREEN + "SELECTED!" : ChatColor.YELLOW + "Click to select!");
@@ -202,14 +200,15 @@ public class PrefixOptionsMenu extends Menu {
             itemName = ChatColor.GOLD + "✯ " + ChatColor.GREEN + definition.getDisplayName();
         }
         List<String> lore = new ArrayList<String>();
-        lore.add(ChatColor.DARK_GRAY + typeLabel());
-        lore.add("");
         if (isNoneSchemeDefinition(definition)) {
             lore.add(ChatColor.GRAY + "Remove any Prefix Scheme displaying");
             lore.add(ChatColor.GRAY + "next to your name.");
+            lore.add("");
             lore.add(selected ? ChatColor.GREEN + "SELECTED!" : ChatColor.YELLOW + "Click to select!");
             return definitionItem(definition, itemName, lore);
         }
+        lore.add(ChatColor.DARK_GRAY + typeLabel());
+        lore.add("");
         if (type != CosmeticType.PREFIX_SCHEME) {
             lore.add(ChatColor.GRAY + "Selects the " + definition.getDisplayName() + " " + typeLabel() + ".");
             lore.add("");
@@ -326,7 +325,7 @@ public class PrefixOptionsMenu extends Menu {
         boolean plainStarPrefix = wins == 0
                 || PrefixCosmeticCatalog.isNoneSchemeId(scheme == null ? null : scheme.getId());
         String winsPrefix = plainStarPrefix
-                ? ChatColor.GRAY + "✪"
+                ? ChatColor.GRAY + symbol
                 : colorPrefix(scheme, "[" + formatMurderMysteryWins(wins) + symbol + "]");
         return winsPrefix + " " + rankedName(profile);
     }
@@ -447,7 +446,7 @@ public class PrefixOptionsMenu extends Menu {
             return ChatColor.GRAY + "Use a Random " + ChatColor.GOLD + "✯ Favorite"
                     + ChatColor.GRAY + " " + subject + "!";
         }
-        return ChatColor.GRAY + "Use a random " + subject + "!";
+        return ChatColor.GRAY + "Use a Random " + subject + "!";
     }
 
     private static String resolveTitle(CosmeticType type) {

@@ -249,7 +249,6 @@ public class KnifeSkinsMenu extends Menu {
             int cost = getCost(option);
             if (availableTokens < cost) {
                 int needed = Math.max(0, cost - availableTokens);
-                player.closeInventory();
                 sendNeedMoreTokensMessage(player, needed, displayName(entry));
                 return;
             }
@@ -975,7 +974,6 @@ public class KnifeSkinsMenu extends Menu {
             if (!unlocked.contains(knifeId) && !MurderMysteryStats.spendTokens(api, player.getUniqueId(), knifeCost)) {
                 int available = Math.max(0, MurderMysteryStats.getTokens(profile.getStats()));
                 int needed = Math.max(0, knifeCost - available);
-                player.closeInventory();
                 sendNeedMoreTokensMessage(player, needed, knifeName);
                 return;
             }
