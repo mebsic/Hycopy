@@ -612,7 +612,7 @@ public class FriendCommand implements SimpleCommand {
         }
         String message = chatRestrictions == null ? null : chatRestrictions.formatActiveMuteMessage(player.getUniqueId());
         if (message == null || message.trim().isEmpty()) {
-            sendFramed(player, Component.text("You are currently muted!", NamedTextColor.RED));
+            player.sendMessage(Component.text("You are currently muted!", NamedTextColor.RED));
             return;
         }
         player.sendMessage(LEGACY.deserialize(message));

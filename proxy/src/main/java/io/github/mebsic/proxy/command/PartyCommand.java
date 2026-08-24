@@ -829,7 +829,7 @@ public class PartyCommand implements SimpleCommand {
             return;
         }
         if (chatRestrictions != null && chatRestrictions.isMuted(player.getUniqueId())) {
-            sendFramed(player, Component.text("You are currently muted!", NamedTextColor.RED));
+            sendMuteMessage(player);
             return;
         }
         if (parties.isPartyChatMuted(player.getUniqueId())
@@ -924,6 +924,10 @@ public class PartyCommand implements SimpleCommand {
         UUID playerId = player.getUniqueId();
         if (!parties.isInParty(playerId)) {
             sendNotInParty(player);
+            return;
+        }
+        if (chatRestrictions != null && chatRestrictions.isMuted(playerId)) {
+            sendMuteMessage(player);
             return;
         }
         if (!parties.isLeader(playerId)) {
@@ -1202,6 +1206,18 @@ public class PartyCommand implements SimpleCommand {
                 ChatChannelService.ChatChannel.PARTY,
                 message
         );
+    }
+
+    private void sendMuteMessage(Player player) {
+        if (player == null) {
+            return;
+        }
+        String message = chatRestrictions == null ? null : chatRestrictions.formatActiveMuteMessage(player.getUniqueId());
+        if (message == null || message.trim().isEmpty()) {
+            player.sendMessage(Component.text("You are currently muted!", NamedTextColor.RED));
+            return;
+        }
+        player.sendMessage(LEGACY.deserialize(message));
     }
 
     private boolean isStaff(UUID uuid) {

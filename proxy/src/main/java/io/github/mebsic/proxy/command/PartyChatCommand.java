@@ -14,11 +14,13 @@ import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.proxy.Player;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
 import java.util.UUID;
 import java.util.regex.Pattern;
 
 public class PartyChatCommand implements SimpleCommand {
+    private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacySection();
     private static final Pattern LEGACY_CODE = Pattern.compile("(?i)§[0-9A-FK-OR]");
     private final PartyService parties;
     private final RankResolver rankResolver;
@@ -67,7 +69,7 @@ public class PartyChatCommand implements SimpleCommand {
             return;
         }
         if (chatRestrictions != null && chatRestrictions.isMuted(playerId)) {
-            sendFramed(player, Component.text("You are currently muted!", NamedTextColor.RED));
+            sendMuteMessage(player);
             return;
         }
         if (parties.isPartyChatMuted(playerId)
@@ -193,6 +195,18 @@ public class PartyChatCommand implements SimpleCommand {
         player.sendMessage(PartyComponents.longSeparator());
         player.sendMessage(Component.text("You are not in a party!", NamedTextColor.RED));
         player.sendMessage(PartyComponents.longSeparator());
+    }
+
+    private void sendMuteMessage(Player player) {
+        if (player == null) {
+            return;
+        }
+        String message = chatRestrictions == null ? null : chatRestrictions.formatActiveMuteMessage(player.getUniqueId());
+        if (message == null || message.trim().isEmpty()) {
+            player.sendMessage(Component.text("You are currently muted!", NamedTextColor.RED));
+            return;
+        }
+        player.sendMessage(LEGACY.deserialize(message));
     }
 
     private void sendFramed(Player player, Component line) {

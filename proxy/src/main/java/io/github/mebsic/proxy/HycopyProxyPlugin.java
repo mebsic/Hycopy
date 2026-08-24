@@ -633,7 +633,7 @@ public class HycopyProxyPlugin {
             return;
         }
         if (muted) {
-            sendPartyChatFramed(player, Component.text("You are currently muted!", NamedTextColor.RED));
+            sendMuteMessage(player);
             denyPlayerChat(event);
             return;
         }
@@ -1831,6 +1831,18 @@ public class HycopyProxyPlugin {
         player.sendMessage(PartyComponents.longSeparator());
         player.sendMessage(line == null ? Component.empty() : line);
         player.sendMessage(PartyComponents.longSeparator());
+    }
+
+    private void sendMuteMessage(Player player) {
+        if (player == null) {
+            return;
+        }
+        String message = chatRestrictionService == null ? null : chatRestrictionService.formatActiveMuteMessage(player.getUniqueId());
+        if (message == null || message.trim().isEmpty()) {
+            player.sendMessage(Component.text("You are currently muted!", NamedTextColor.RED));
+            return;
+        }
+        player.sendMessage(LegacyComponentSerializer.legacySection().deserialize(message));
     }
 
     private String firstCommandAlias(String command) {

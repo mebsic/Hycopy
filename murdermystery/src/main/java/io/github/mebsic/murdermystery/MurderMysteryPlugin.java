@@ -392,6 +392,7 @@ public class MurderMysteryPlugin extends JavaPlugin implements HubContext {
         this.hubLeaderboardListener = new HubLeaderboardListener(this, corePlugin, serverType);
         this.hubImageDisplayListener = new ImageListener(this, corePlugin, serverType);
         this.itemFrameListener = new ItemFrameListener(serverType, hubImageDisplayListener);
+        registerCommand("image", new ImageCommand(corePlugin, hubImageDisplayListener::refreshDisplay));
         corePlugin.setHubParkourCommandHandler(hubParkourListener);
         TablistService tablistService = new TablistService(coreApi, serverType);
         getServer().getPluginManager().registerEvents(new HubListener(this), this);

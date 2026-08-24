@@ -61,11 +61,15 @@ public class ImageListener implements Listener {
     private static final String IMAGE_FACING_KEY = "imageFacing";
     private static final String IMAGE_URL_KEY = "imageUrl";
     private static final String IMAGE_ENABLED_KEY = "imageEnabled";
+    private static final String MAP_CONFIG_UPDATE_CHANNEL = "map_config_update";
+    private static final String MAP_CONFIG_UPDATE_PREFIX = "maps:";
+    public static final String IMAGE_SETTINGS_UPDATE_CHANNEL = "murdermystery_image_update";
 
     private final Plugin plugin;
     private final CorePlugin corePlugin;
     private final ServerType serverType;
     private final AtomicBoolean refreshInFlight;
+    private final AtomicBoolean updateSubscriptionsStarted;
     private final AtomicBoolean runtimeSettingsDefaultsEnsured;
     private final List<MapTile> mapTiles;
     private final Set<UUID> pendingRuntimeFrameUuids;
@@ -80,6 +84,7 @@ public class ImageListener implements Listener {
         this.corePlugin = corePlugin;
         this.serverType = serverType == null ? ServerType.UNKNOWN : serverType;
         this.refreshInFlight = new AtomicBoolean(false);
+        this.updateSubscriptionsStarted = new AtomicBoolean(false);
         this.runtimeSettingsDefaultsEnsured = new AtomicBoolean(false);
         this.activeGameKey = MongoManager.MAP_CONFIG_DEFAULT_GAME_KEY;
         this.mapTiles = new ArrayList<MapTile>();
@@ -90,6 +95,7 @@ public class ImageListener implements Listener {
     }
 
     public void start() {
+        subscribeToUpdateNotifications();
         refreshDisplay();
     }
 
@@ -99,7 +105,7 @@ public class ImageListener implements Listener {
         mapTileGrid = null;
     }
 
-    private void refreshDisplay() {
+    public void refreshDisplay() {
         if (plugin == null || !supportsImageDisplayServerType()) {
             return;
         }
@@ -114,13 +120,14 @@ public class ImageListener implements Listener {
                 config = resolveImageConfig();
                 if (config != null && config.enabled && !config.imageSource.isEmpty()) {
                     String source = safeText(config.imageSource);
+                    String cacheKey = imageCacheKey(source, config.imageUpdatedAt);
                     BufferedImage cached = cachedImage;
-                    if (!source.isEmpty() && source.equals(cachedImageSource) && cached != null) {
+                    if (!source.isEmpty() && cacheKey.equals(cachedImageSource) && cached != null) {
                         image = cached;
                     } else {
                         BufferedImage loaded = loadImage(source);
                         if (loaded != null) {
-                            cachedImageSource = source;
+                            cachedImageSource = cacheKey;
                             cachedImage = loaded;
                             image = loaded;
                         }
@@ -146,6 +153,70 @@ public class ImageListener implements Listener {
                 plugin.getLogger().warning("Failed to apply hub image refresh!\n" + safeText(ex.getMessage()));
             }
         });
+    }
+
+    private void subscribeToUpdateNotifications() {
+        if (corePlugin == null || corePlugin.getPubSubService() == null) {
+            return;
+        }
+        if (!updateSubscriptionsStarted.compareAndSet(false, true)) {
+            return;
+        }
+        corePlugin.getPubSubService().subscribe(MAP_CONFIG_UPDATE_CHANNEL, this::handleMapConfigUpdateMessage);
+        corePlugin.getPubSubService().subscribe(IMAGE_SETTINGS_UPDATE_CHANNEL, this::handleImageSettingsUpdateMessage);
+    }
+
+    private void handleMapConfigUpdateMessage(String message) {
+        String updatedKey = parseMapConfigUpdatedGameKey(message);
+        if (updatedKey.isEmpty() || !shouldRefreshForGameKey(updatedKey)) {
+            return;
+        }
+        scheduleRefreshDisplay();
+    }
+
+    private void handleImageSettingsUpdateMessage(String message) {
+        String updatedKey = MapConfigStore.normalizeGameKey(message);
+        if (updatedKey.isEmpty() || !shouldRefreshForGameKey(updatedKey)) {
+            return;
+        }
+        scheduleRefreshDisplay();
+    }
+
+    private void scheduleRefreshDisplay() {
+        if (plugin == null || plugin.getServer() == null) {
+            return;
+        }
+        plugin.getServer().getScheduler().runTask(plugin, this::refreshDisplay);
+    }
+
+    private String parseMapConfigUpdatedGameKey(String message) {
+        String raw = safeText(message);
+        if (raw.isEmpty()) {
+            return "";
+        }
+        String lower = raw.toLowerCase(Locale.ROOT);
+        if (!lower.startsWith(MAP_CONFIG_UPDATE_PREFIX)) {
+            return "";
+        }
+        return MapConfigStore.normalizeGameKey(raw.substring(MAP_CONFIG_UPDATE_PREFIX.length()));
+    }
+
+    private boolean shouldRefreshForGameKey(String gameKey) {
+        String normalized = MapConfigStore.normalizeGameKey(gameKey);
+        if (normalized.isEmpty()) {
+            return false;
+        }
+        List<String> gameKeyCandidates = resolveGameKeyCandidates();
+        for (String candidate : gameKeyCandidates) {
+            if (candidate != null && normalized.equalsIgnoreCase(candidate.trim())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String imageCacheKey(String source, long updatedAt) {
+        return safeText(source) + "#" + Math.max(0L, updatedAt);
     }
 
     private void applyResolvedImage(ResolvedImageConfig config, BufferedImage image, String imageError) {
@@ -963,7 +1034,8 @@ public class ImageListener implements Listener {
                     parsed.location,
                     resolvedSource,
                     resolvedEnabled,
-                    resolvedFacing
+                    resolvedFacing,
+                    runtimeSettings.updatedAt
             );
         }
         return null;
@@ -1008,7 +1080,8 @@ public class ImageListener implements Listener {
         }
         String imageUrl = safeText(information.get(IMAGE_URL_KEY));
         Boolean enabled = readBoolean(information.get(IMAGE_ENABLED_KEY));
-        return new RuntimeImageSettings(imageUrl, enabled == null || enabled);
+        Long updatedAt = readLong(information.get("updatedAt"));
+        return new RuntimeImageSettings(imageUrl, enabled == null || enabled, updatedAt == null ? 0L : updatedAt);
     }
 
     private void ensureRuntimeImageSettingsDefaults(MongoCollection<Document> informationCollection) {
@@ -1081,6 +1154,24 @@ public class ImageListener implements Listener {
             }
         }
         return null;
+    }
+
+    private Long readLong(Object raw) {
+        if (raw == null) {
+            return null;
+        }
+        if (raw instanceof Number) {
+            return ((Number) raw).longValue();
+        }
+        String text = safeText(raw);
+        if (text.isEmpty()) {
+            return null;
+        }
+        try {
+            return Long.parseLong(text);
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private List<String> resolveGameKeyCandidates() {
@@ -1290,28 +1381,33 @@ public class ImageListener implements Listener {
         private final String imageSource;
         private final boolean enabled;
         private final String facingOverride;
+        private final long imageUpdatedAt;
 
         private ResolvedImageConfig(String gameKey,
                                     ImageLocation location,
                                     String imageSource,
                                     boolean enabled,
-                                    String facingOverride) {
+                                    String facingOverride,
+                                    long imageUpdatedAt) {
             this.gameKey = gameKey == null ? MongoManager.MAP_CONFIG_DEFAULT_GAME_KEY : gameKey;
             this.location = location;
             this.imageSource = imageSource == null ? "" : imageSource;
             this.enabled = enabled;
             this.facingOverride = facingOverride == null ? "" : facingOverride;
+            this.imageUpdatedAt = imageUpdatedAt;
         }
     }
 
     private static final class RuntimeImageSettings {
-        private static final RuntimeImageSettings DEFAULT = new RuntimeImageSettings("", true);
+        private static final RuntimeImageSettings DEFAULT = new RuntimeImageSettings("", true, 0L);
         private final String imageSource;
         private final boolean enabled;
+        private final long updatedAt;
 
-        private RuntimeImageSettings(String imageSource, boolean enabled) {
+        private RuntimeImageSettings(String imageSource, boolean enabled, long updatedAt) {
             this.imageSource = imageSource == null ? "" : imageSource;
             this.enabled = enabled;
+            this.updatedAt = updatedAt;
         }
     }
 

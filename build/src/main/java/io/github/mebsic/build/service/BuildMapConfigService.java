@@ -592,12 +592,13 @@ public class BuildMapConfigService {
                     JsonArray maps = getOrCreateArray(gameSection, "maps");
                     JsonObject map = findOrCreateMapByWorldDirectory(maps, mapWorld);
                     String resolvedMapName = mapWorldDirectoryOf(map, mapWorld);
-                    BlockFace imageFacing = resolveImageFacing(player);
-                    Location location = resolveImageFrameLocation(player, imageFacing);
-                    if (location == null) {
+                    ImageFrameTarget imageTarget = resolveImageFrameTarget(player);
+                    if (imageTarget == null || imageTarget.location == null || imageTarget.facing == null) {
                         player.sendMessage(ChatColor.RED + "Look at the bottom-left solid backing block for the image!");
                         return true;
                     }
+                    BlockFace imageFacing = imageTarget.facing;
+                    Location location = imageTarget.location;
                     savedLocation = location;
 
                     JsonObject serverTypeSection = getOrCreateServerTypeSection(gameSection, gameType);
@@ -2771,49 +2772,66 @@ public class BuildMapConfigService {
         return json;
     }
 
-    private BlockFace resolveImageFacing(Player player) {
-        Location location = player.getLocation();
-        String facing = oppositeCardinalFacing(cardinalFacingFromYaw(location.getYaw()));
-        return BlockFace.valueOf(facing);
-    }
-
-    private Location resolveImageFrameLocation(Player player, BlockFace facing) {
-        if (player == null || facing == null) {
-            return null;
-        }
-        Block backingBlock = resolveTargetSolidBlock(player);
-        if (backingBlock == null) {
-            return null;
-        }
-        Block frameBlock = backingBlock.getRelative(facing);
-        if (frameBlock == null || !isAir(frameBlock.getType())) {
-            return null;
-        }
-        Location location = frameBlock.getLocation();
-        Location playerLocation = player.getLocation();
-        if (playerLocation != null) {
-            location.setYaw(playerLocation.getYaw());
-        }
-        location.setPitch(0.0f);
-        return location;
-    }
-
-    private Block resolveTargetSolidBlock(Player player) {
+    private ImageFrameTarget resolveImageFrameTarget(Player player) {
         if (player == null) {
             return null;
         }
         try {
             BlockIterator iterator = new BlockIterator(player, IMAGE_TARGET_BLOCK_RANGE);
+            Block previousBlock = null;
             while (iterator.hasNext()) {
                 Block block = iterator.next();
                 if (block != null && isSolidBlock(block.getType())) {
-                    return block;
+                    if (previousBlock == null || !isAir(previousBlock.getType())) {
+                        return null;
+                    }
+                    BlockFace facing = facingFromAdjacentBlocks(block, previousBlock);
+                    if (!isWallImageFacing(facing)) {
+                        return null;
+                    }
+                    Location location = previousBlock.getLocation();
+                    Location playerLocation = player.getLocation();
+                    if (playerLocation != null) {
+                        location.setYaw(playerLocation.getYaw());
+                    }
+                    location.setPitch(0.0f);
+                    return new ImageFrameTarget(location, facing);
                 }
+                previousBlock = block;
             }
         } catch (Exception ignored) {
             return null;
         }
         return null;
+    }
+
+    private BlockFace facingFromAdjacentBlocks(Block backingBlock, Block frameBlock) {
+        if (backingBlock == null || frameBlock == null) {
+            return null;
+        }
+        int dx = frameBlock.getX() - backingBlock.getX();
+        int dy = frameBlock.getY() - backingBlock.getY();
+        int dz = frameBlock.getZ() - backingBlock.getZ();
+        if (dx == 1 && dy == 0 && dz == 0) {
+            return BlockFace.EAST;
+        }
+        if (dx == -1 && dy == 0 && dz == 0) {
+            return BlockFace.WEST;
+        }
+        if (dx == 0 && dy == 0 && dz == 1) {
+            return BlockFace.SOUTH;
+        }
+        if (dx == 0 && dy == 0 && dz == -1) {
+            return BlockFace.NORTH;
+        }
+        return null;
+    }
+
+    private boolean isWallImageFacing(BlockFace facing) {
+        return facing == BlockFace.NORTH
+                || facing == BlockFace.SOUTH
+                || facing == BlockFace.EAST
+                || facing == BlockFace.WEST;
     }
 
     private boolean isSolidBlock(Material type) {
@@ -2825,40 +2843,6 @@ public class BuildMapConfigService {
         } catch (Exception ignored) {
             return type != Material.AIR;
         }
-    }
-
-    private String cardinalFacingFromYaw(float yaw) {
-        float normalized = yaw % 360.0f;
-        if (normalized < 0.0f) {
-            normalized += 360.0f;
-        }
-        if (normalized >= 45.0f && normalized < 135.0f) {
-            return "WEST";
-        }
-        if (normalized >= 135.0f && normalized < 225.0f) {
-            return "NORTH";
-        }
-        if (normalized >= 225.0f && normalized < 315.0f) {
-            return "EAST";
-        }
-        return "SOUTH";
-    }
-
-    private String oppositeCardinalFacing(String facing) {
-        String normalized = safeString(facing).toUpperCase(Locale.ROOT);
-        if ("NORTH".equals(normalized)) {
-            return "SOUTH";
-        }
-        if ("SOUTH".equals(normalized)) {
-            return "NORTH";
-        }
-        if ("EAST".equals(normalized)) {
-            return "WEST";
-        }
-        if ("WEST".equals(normalized)) {
-            return "EAST";
-        }
-        return "SOUTH";
     }
 
     private void sendDone(Player player, Location location, String itemName) {
@@ -4641,6 +4625,16 @@ public class BuildMapConfigService {
             this.score = Math.max(0, score);
             this.nameColor = nameColor == null ? ChatColor.GRAY : nameColor;
             this.position = 0;
+        }
+    }
+
+    private static final class ImageFrameTarget {
+        private final Location location;
+        private final BlockFace facing;
+
+        private ImageFrameTarget(Location location, BlockFace facing) {
+            this.location = location;
+            this.facing = facing;
         }
     }
 
