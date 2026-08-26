@@ -25,17 +25,6 @@ public class BuildModeCommand implements CommandExecutor {
         }
 
         Player player = (Player) sender;
-        if (args.length > 0) {
-            player.sendMessage(ChatColor.RED + "Invalid usage! Correct usage:");
-            player.sendMessage(ChatColor.RED + "/buildmode");
-            return true;
-        }
-
-        if (plugin.getServerType() == null || !plugin.getServerType().isHub()) {
-            player.sendMessage(ChatColor.RED + CommonMessages.LOBBY_ONLY_COMMAND);
-            return true;
-        }
-
         Profile profile = plugin.getProfile(player.getUniqueId());
         if (profile == null) {
             player.sendMessage(ChatColor.RED + CommonMessages.PROFILE_LOADING);
@@ -45,6 +34,15 @@ public class BuildModeCommand implements CommandExecutor {
         Rank rank = profile.getRank() == null ? Rank.DEFAULT : profile.getRank();
         if (!rank.isAtLeast(Rank.STAFF)) {
             player.sendMessage(ChatColor.RED + CommonMessages.NO_PERMISSION_COMMAND);
+            return true;
+        }
+        if (plugin.getServerType() == null || !plugin.getServerType().isHub()) {
+            player.sendMessage(ChatColor.RED + CommonMessages.LOBBY_ONLY_COMMAND);
+            return true;
+        }
+        if (args.length > 0) {
+            player.sendMessage(ChatColor.RED + "Invalid usage! Correct usage:");
+            player.sendMessage(ChatColor.RED + "/buildmode");
             return true;
         }
 

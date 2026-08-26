@@ -10,6 +10,8 @@ commands:
     usage: /token <player> <amount>
   image:
     usage: /image <URL>
+  clearimage:
+    usage: /clearimage
   togglehints:
     usage: /togglehints
   whoismurderer:

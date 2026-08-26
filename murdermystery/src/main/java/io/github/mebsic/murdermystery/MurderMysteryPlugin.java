@@ -30,6 +30,7 @@ import io.github.mebsic.hub.service.KnifeMenuStateService;
 import io.github.mebsic.hub.service.ServerRegistryService;
 import io.github.mebsic.hub.service.HubScoreboardService;
 import io.github.mebsic.hub.util.LocationUtil;
+import io.github.mebsic.murdermystery.command.ClearImageCommand;
 import io.github.mebsic.murdermystery.command.TokenCommand;
 import io.github.mebsic.murdermystery.command.ToggleHintsCommand;
 import io.github.mebsic.murdermystery.command.WhoIsRoleCommand;
@@ -122,6 +123,7 @@ public class MurderMysteryPlugin extends JavaPlugin implements HubContext {
         this.corePlugin.ensureServerIdentity();
         registerCommand("token", new TokenCommand(corePlugin));
         registerCommand("image", new ImageCommand(corePlugin));
+        registerCommand("clearimage", new ClearImageCommand(corePlugin));
         try {
             if (serverType != null && serverType.isHub()) {
                 setupHub(corePlugin);
@@ -393,6 +395,7 @@ public class MurderMysteryPlugin extends JavaPlugin implements HubContext {
         this.hubImageDisplayListener = new ImageListener(this, corePlugin, serverType);
         this.itemFrameListener = new ItemFrameListener(serverType, hubImageDisplayListener);
         registerCommand("image", new ImageCommand(corePlugin, hubImageDisplayListener::refreshDisplay));
+        registerCommand("clearimage", new ClearImageCommand(corePlugin, hubImageDisplayListener::refreshDisplay));
         corePlugin.setHubParkourCommandHandler(hubParkourListener);
         TablistService tablistService = new TablistService(coreApi, serverType);
         getServer().getPluginManager().registerEvents(new HubListener(this), this);

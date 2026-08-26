@@ -22,13 +22,11 @@ import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
 import org.bukkit.block.Block;
-import org.bukkit.block.BlockFace;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.util.BlockIterator;
 
 import java.io.File;
 import java.io.IOException;
@@ -64,7 +62,6 @@ public class BuildMapConfigService {
     private static final double PROFILE_NPC_HOLOGRAM_BOTTOM_Y_OFFSET = 2.60d;
     private static final double LEGACY_PARKOUR_HOLOGRAM_BASE_Y_OFFSET = 0.72d;
     private static final double PARKOUR_HOLOGRAM_BASE_Y_OFFSET = 2.0d;
-    private static final int IMAGE_TARGET_BLOCK_RANGE = 8;
     private static final String MAP_CONFIG_UPDATE_CHANNEL = "map_config_update";
     private static final String MAP_CONFIG_UPDATE_PREFIX = "maps:";
     // Build is editor-only: runtime NPC/hologram rendering belongs on hub servers.
@@ -562,6 +559,10 @@ public class BuildMapConfigService {
         if (player == null || gameType == null || gameType == ServerType.UNKNOWN) {
             return true;
         }
+        ServerType hubType = gameType.toHubType();
+        if (hubType != ServerType.MURDER_MYSTERY_HUB) {
+            return true;
+        }
         String mapWorld = safeString(worldDirectory);
         if (mapWorld.isEmpty() && player.getWorld() != null) {
             mapWorld = safeString(player.getWorld().getName());
@@ -583,29 +584,26 @@ public class BuildMapConfigService {
         Location savedLocation = null;
         try {
             synchronized (mapConfigLock) {
-                JsonObject root = loadMapConfigRoot(store, gameKey);
-                JsonObject gameSection = getOrCreateGameSection(root, gameKey);
+                JsonObject root = loadExactMapConfigRoot(store, gameKey);
+                JsonObject gameSection = getOrCreateExactGameSection(root, gameKey);
                 if (resetRequested) {
-                    clearHubInformationImageDisplay(gameSection, gameType);
+                    clearHubInformationImageDisplay(gameSection, hubType);
                     saveMapConfigRoot(store, gameKey, root);
                 } else {
                     JsonArray maps = getOrCreateArray(gameSection, "maps");
                     JsonObject map = findOrCreateMapByWorldDirectory(maps, mapWorld);
                     String resolvedMapName = mapWorldDirectoryOf(map, mapWorld);
-                    ImageFrameTarget imageTarget = resolveImageFrameTarget(player);
-                    if (imageTarget == null || imageTarget.location == null || imageTarget.facing == null) {
-                        player.sendMessage(ChatColor.RED + "Look at the bottom-left solid backing block for the image!");
+                    Location location = resolveImageFrameLocation(player);
+                    if (location == null) {
+                        player.sendMessage(ChatColor.RED + "Failed to resolve your image display location!");
                         return true;
                     }
-                    BlockFace imageFacing = imageTarget.facing;
-                    Location location = imageTarget.location;
                     savedLocation = location;
 
-                    JsonObject serverTypeSection = getOrCreateServerTypeSection(gameSection, gameType);
+                    JsonObject serverTypeSection = getOrCreateServerTypeSection(gameSection, hubType);
                     JsonObject information = getOrCreateObject(serverTypeSection, MongoManager.MAP_INFORMATION_KEY);
                     JsonObject imageDisplay = toLocationJson(location, System.currentTimeMillis());
                     imageDisplay.addProperty("pitch", 0.0f);
-                    imageDisplay.addProperty("imageFacing", imageFacing.name());
                     information.add(MongoManager.MAP_INFORMATION_IMAGE_DISPLAY_KEY, imageDisplay);
 
                     applyMapRotationDefaults(gameSection, resolvedMapName);
@@ -627,7 +625,11 @@ public class BuildMapConfigService {
         if (gameType == null || gameType == ServerType.UNKNOWN) {
             return false;
         }
-        List<MapLocationEntry> locations = loadMapLocations(gameType, worldDirectory);
+        ServerType hubType = gameType.toHubType();
+        if (hubType != ServerType.MURDER_MYSTERY_HUB) {
+            return false;
+        }
+        List<MapLocationEntry> locations = loadMapLocations(hubType, worldDirectory);
         if (locations == null || locations.isEmpty()) {
             return false;
         }
@@ -2079,6 +2081,15 @@ public class BuildMapConfigService {
         return root == null ? new JsonObject() : root;
     }
 
+    private JsonObject loadExactMapConfigRoot(MapConfigStore store, String gameKey) {
+        if (store == null) {
+            return new JsonObject();
+        }
+        store.ensureDefaults(gameKey);
+        JsonObject root = store.loadRoot(gameKey);
+        return root == null ? new JsonObject() : root;
+    }
+
     private void saveMapConfigRoot(MapConfigStore store, String gameKey, JsonObject root) {
         if (store == null) {
             throw new IllegalStateException("MongoDB map config store is unavailable.");
@@ -2144,6 +2155,24 @@ public class BuildMapConfigService {
             return legacy;
         }
 
+        JsonObject created = new JsonObject();
+        gameTypes.add(key, created);
+        return created;
+    }
+
+    private JsonObject getOrCreateExactGameSection(JsonObject root, String gameKey) {
+        if (root == null) {
+            return new JsonObject();
+        }
+        String key = MapConfigStore.normalizeGameKey(gameKey);
+        if (key.isEmpty()) {
+            return new JsonObject();
+        }
+        JsonObject gameTypes = getOrCreateObject(root, "gameTypes");
+        JsonObject section = child(gameTypes, key);
+        if (section != null) {
+            return section;
+        }
         JsonObject created = new JsonObject();
         gameTypes.add(key, created);
         return created;
@@ -2772,77 +2801,17 @@ public class BuildMapConfigService {
         return json;
     }
 
-    private ImageFrameTarget resolveImageFrameTarget(Player player) {
+    private Location resolveImageFrameLocation(Player player) {
         if (player == null) {
             return null;
         }
-        try {
-            BlockIterator iterator = new BlockIterator(player, IMAGE_TARGET_BLOCK_RANGE);
-            Block previousBlock = null;
-            while (iterator.hasNext()) {
-                Block block = iterator.next();
-                if (block != null && isSolidBlock(block.getType())) {
-                    if (previousBlock == null || !isAir(previousBlock.getType())) {
-                        return null;
-                    }
-                    BlockFace facing = facingFromAdjacentBlocks(block, previousBlock);
-                    if (!isWallImageFacing(facing)) {
-                        return null;
-                    }
-                    Location location = previousBlock.getLocation();
-                    Location playerLocation = player.getLocation();
-                    if (playerLocation != null) {
-                        location.setYaw(playerLocation.getYaw());
-                    }
-                    location.setPitch(0.0f);
-                    return new ImageFrameTarget(location, facing);
-                }
-                previousBlock = block;
-            }
-        } catch (Exception ignored) {
+        Location location = player.getLocation();
+        if (location == null) {
             return null;
         }
-        return null;
-    }
-
-    private BlockFace facingFromAdjacentBlocks(Block backingBlock, Block frameBlock) {
-        if (backingBlock == null || frameBlock == null) {
-            return null;
-        }
-        int dx = frameBlock.getX() - backingBlock.getX();
-        int dy = frameBlock.getY() - backingBlock.getY();
-        int dz = frameBlock.getZ() - backingBlock.getZ();
-        if (dx == 1 && dy == 0 && dz == 0) {
-            return BlockFace.EAST;
-        }
-        if (dx == -1 && dy == 0 && dz == 0) {
-            return BlockFace.WEST;
-        }
-        if (dx == 0 && dy == 0 && dz == 1) {
-            return BlockFace.SOUTH;
-        }
-        if (dx == 0 && dy == 0 && dz == -1) {
-            return BlockFace.NORTH;
-        }
-        return null;
-    }
-
-    private boolean isWallImageFacing(BlockFace facing) {
-        return facing == BlockFace.NORTH
-                || facing == BlockFace.SOUTH
-                || facing == BlockFace.EAST
-                || facing == BlockFace.WEST;
-    }
-
-    private boolean isSolidBlock(Material type) {
-        if (type == null || type == Material.AIR) {
-            return false;
-        }
-        try {
-            return type.isSolid();
-        } catch (Exception ignored) {
-            return type != Material.AIR;
-        }
+        Location saved = location.clone();
+        saved.setPitch(0.0f);
+        return saved;
     }
 
     private void sendDone(Player player, Location location, String itemName) {
@@ -4625,16 +4594,6 @@ public class BuildMapConfigService {
             this.score = Math.max(0, score);
             this.nameColor = nameColor == null ? ChatColor.GRAY : nameColor;
             this.position = 0;
-        }
-    }
-
-    private static final class ImageFrameTarget {
-        private final Location location;
-        private final BlockFace facing;
-
-        private ImageFrameTarget(Location location, BlockFace facing) {
-            this.location = location;
-            this.facing = facing;
         }
     }
 

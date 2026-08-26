@@ -16,22 +16,18 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.util.Locale;
-
-public class ImageCommand implements CommandExecutor {
+public class ClearImageCommand implements CommandExecutor {
     private static final String IMAGE_URL_KEY = "imageUrl";
     private static final String IMAGE_ENABLED_KEY = "imageEnabled";
 
     private final CorePlugin corePlugin;
     private final Runnable refreshCallback;
 
-    public ImageCommand(CorePlugin corePlugin) {
+    public ClearImageCommand(CorePlugin corePlugin) {
         this(corePlugin, null);
     }
 
-    public ImageCommand(CorePlugin corePlugin, Runnable refreshCallback) {
+    public ClearImageCommand(CorePlugin corePlugin, Runnable refreshCallback) {
         this.corePlugin = corePlugin;
         this.refreshCallback = refreshCallback;
     }
@@ -54,15 +50,9 @@ public class ImageCommand implements CommandExecutor {
             player.sendMessage(ChatColor.RED + CommonMessages.LOBBY_ONLY_COMMAND);
             return true;
         }
-        if (args == null || args.length != 1) {
+        if (args != null && args.length > 0) {
             player.sendMessage(ChatColor.RED + "Invalid usage! Correct usage:");
-            player.sendMessage(ChatColor.RED + "/image <URL>");
-            return true;
-        }
-
-        String imageUrl = safe(args[0]);
-        if (!isSupportedImageUrl(imageUrl)) {
-            player.sendMessage(ChatColor.RED + "Invalid image URL!");
+            player.sendMessage(ChatColor.RED + "/clearimage");
             return true;
         }
         if (!corePlugin.isMongoEnabled() || corePlugin.getMongoManager() == null) {
@@ -80,8 +70,8 @@ public class ImageCommand implements CommandExecutor {
             }
 
             long now = System.currentTimeMillis();
-            Document fields = new Document(IMAGE_URL_KEY, imageUrl)
-                    .append(IMAGE_ENABLED_KEY, true)
+            Document fields = new Document(IMAGE_URL_KEY, "")
+                    .append(IMAGE_ENABLED_KEY, false)
                     .append("updatedAt", now);
             collection.updateOne(
                     new Document("_id", MongoManager.MURDER_MYSTERY_INFORMATION_DOCUMENT_ID),
@@ -93,7 +83,7 @@ public class ImageCommand implements CommandExecutor {
             refreshLocalDisplay();
             player.sendMessage(ChatColor.GREEN + CommonMessages.DONE);
         } catch (Exception ex) {
-            player.sendMessage(ChatColor.RED + "Failed to update lobby image!\n" + ex.getMessage());
+            player.sendMessage(ChatColor.RED + "Failed to clear lobby image!\n" + ex.getMessage());
         }
         return true;
     }
@@ -126,36 +116,5 @@ public class ImageCommand implements CommandExecutor {
     private boolean isLobby() {
         ServerType serverType = corePlugin.getServerType();
         return serverType != null && serverType.isHub();
-    }
-
-    private boolean isSupportedImageUrl(String value) {
-        if (value == null || value.trim().isEmpty()) {
-            return false;
-        }
-        try {
-            URI uri = new URI(value.trim());
-            String scheme = safe(uri.getScheme()).toLowerCase(Locale.ROOT);
-            String host = safe(uri.getHost());
-            return ("http".equals(scheme) || "https".equals(scheme))
-                    && !host.isEmpty()
-                    && hasSupportedImageExtension(uri.getPath());
-        } catch (URISyntaxException ex) {
-            return false;
-        }
-    }
-
-    private boolean hasSupportedImageExtension(String path) {
-        String normalized = safe(path).toLowerCase(Locale.ROOT);
-        return normalized.endsWith(".png")
-                || normalized.endsWith(".jpg")
-                || normalized.endsWith(".jpeg");
-    }
-
-    private String safe(String value) {
-        if (value == null) {
-            return "";
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? "" : trimmed;
     }
 }

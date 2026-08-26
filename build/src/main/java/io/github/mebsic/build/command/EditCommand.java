@@ -69,6 +69,9 @@ public class EditCommand implements CommandExecutor, TabCompleter {
         if (mapConfigService == null || args == null) {
             return Collections.emptyList();
         }
+        if (!(sender instanceof Player) || accessService == null || !accessService.isStaff((Player) sender)) {
+            return Collections.emptyList();
+        }
         if (args.length == 1) {
             return mapConfigService.completeGameTypes(args[0]);
         }

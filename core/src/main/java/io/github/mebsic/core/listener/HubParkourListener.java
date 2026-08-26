@@ -25,6 +25,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerToggleFlightEvent;
@@ -34,6 +35,7 @@ import org.bukkit.plugin.Plugin;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
+import java.lang.reflect.Method;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -87,6 +89,8 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
     private final Map<UUID, Long> startTouchSuppressUntilByPlayer;
     private final List<ParkourMarkerBlock> markerBlocks;
     private final List<UUID> markerHologramUuids;
+    private final List<ParkourStartMarker> startMarkers;
+    private final Map<UUID, List<UUID>> personalBestHologramUuidsByPlayer;
     private final String bestTimeCounterKey;
     private final String lastTimeCounterKey;
     private final String completionCounterKey;
@@ -101,6 +105,8 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
         this.startTouchSuppressUntilByPlayer = new ConcurrentHashMap<UUID, Long>();
         this.markerBlocks = new ArrayList<ParkourMarkerBlock>();
         this.markerHologramUuids = new ArrayList<UUID>();
+        this.startMarkers = new ArrayList<ParkourStartMarker>();
+        this.personalBestHologramUuidsByPlayer = new ConcurrentHashMap<UUID, List<UUID>>();
 
         String typeKey = this.serverType.name().toLowerCase(Locale.ROOT);
         this.bestTimeCounterKey = MongoManager.PARKOUR_BEST_COUNTER_PREFIX + typeKey;
@@ -156,13 +162,40 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
             if (route == null) {
                 continue;
             }
-            spawnMarker(route.start, parkourStartHologramLines(route), false);
+            spawnStartMarker(route);
             for (int i = 0; i < route.checkpoints.size(); i++) {
                 ParkourPoint checkpoint = route.checkpoints.get(i);
                 spawnMarker(checkpoint, parkourCheckpointHologramLines(route, i + 1), true);
             }
             spawnMarker(route.end, parkourEndHologramLines(route), false);
         }
+        refreshPersonalBestHologramsForOnlinePlayers();
+    }
+
+    private void spawnStartMarker(ParkourRoute route) {
+        if (route == null || route.start == null) {
+            return;
+        }
+        World world = resolveWorldForPoint(route.start);
+        if (world == null) {
+            return;
+        }
+        Location blockLocation = new Location(world, route.start.blockX, route.start.blockY, route.start.blockZ);
+        blockLocation.getBlock().setType(pressurePlateMaterial(false));
+        markerBlocks.add(new ParkourMarkerBlock(world.getName(), route.start.blockX, route.start.blockY, route.start.blockZ));
+
+        Location titleLocation = startHologramLineLocation(blockLocation, 0);
+        UUID titleUuid = spawnHologramLine(titleLocation, route.titleColor.toString() + ChatColor.BOLD + "Parkour Challenge");
+        if (titleUuid != null) {
+            markerHologramUuids.add(titleUuid);
+        }
+        String startLine = route.startColor.toString() + ChatColor.BOLD + "Start";
+        Location startLocation = startHologramLineLocation(blockLocation, 1);
+        UUID startUuid = spawnHologramLine(startLocation, startLine);
+        if (startUuid != null) {
+            markerHologramUuids.add(startUuid);
+        }
+        startMarkers.add(new ParkourStartMarker(blockLocation, startUuid, startLine));
     }
 
     private void spawnMarker(ParkourPoint point, List<String> hologramLines, boolean checkpoint) {
@@ -189,6 +222,8 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
     }
 
     private void despawnVisualMarkers() {
+        clearPersonalBestHolograms();
+        startMarkers.clear();
         for (UUID hologramUuid : new ArrayList<UUID>(markerHologramUuids)) {
             removeEntity(hologramUuid);
         }
@@ -224,9 +259,32 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
         return stand.getUniqueId();
     }
 
+    private UUID spawnViewerHologramLine(Player viewer, Location location, String line) {
+        if (viewer == null || location == null || location.getWorld() == null) {
+            return null;
+        }
+        UUID uuid = spawnHologramLine(location, line);
+        Entity entity = resolveEntity(uuid);
+        if (entity != null) {
+            hideEntityFromNonViewer(viewer.getUniqueId(), entity);
+        }
+        return uuid;
+    }
+
     private void removeEntity(UUID uuid) {
         if (uuid == null) {
             return;
+        }
+        Entity resolved = resolveEntity(uuid);
+        if (resolved != null) {
+            resolved.remove();
+            return;
+        }
+    }
+
+    private Entity resolveEntity(UUID uuid) {
+        if (uuid == null) {
+            return null;
         }
         for (World world : Bukkit.getWorlds()) {
             if (world == null) {
@@ -237,11 +295,11 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
                     continue;
                 }
                 if (uuid.equals(entity.getUniqueId())) {
-                    entity.remove();
-                    return;
+                    return entity;
                 }
             }
         }
+        return null;
     }
 
     private World resolveWorldForPoint(ParkourPoint point) {
@@ -285,13 +343,137 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
         return null;
     }
 
-    private List<String> parkourStartHologramLines(ParkourRoute route) {
-        List<String> lines = new ArrayList<String>(2);
-        ChatColor titleColor = route == null ? ChatColor.YELLOW : route.titleColor;
-        ChatColor startColor = route == null ? ChatColor.GREEN : route.startColor;
-        lines.add(titleColor.toString() + ChatColor.BOLD + "Parkour Challenge");
-        lines.add(startColor.toString() + ChatColor.BOLD + "Start");
-        return lines;
+    private Location startHologramLineLocation(Location blockLocation, int lineIndex) {
+        Location current = blockLocation.clone().add(0.5d, PARKOUR_HOLOGRAM_BASE_Y_OFFSET, 0.5d);
+        current.subtract(0.0d, HOLOGRAM_LINE_SPACING * Math.max(0, lineIndex), 0.0d);
+        return current;
+    }
+
+    private void refreshPersonalBestHologramsForOnlinePlayers() {
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            refreshPersonalBestHolograms(player);
+        }
+    }
+
+    private void refreshPersonalBestHolograms(Player player) {
+        if (player == null || !player.isOnline() || player.getUniqueId() == null) {
+            return;
+        }
+        UUID uuid = player.getUniqueId();
+        clearPersonalBestHolograms(uuid);
+        if (serverType != ServerType.MURDER_MYSTERY_HUB || startMarkers.isEmpty()) {
+            return;
+        }
+        Profile profile = corePlugin == null ? null : corePlugin.getProfile(uuid);
+        int bestMillis = profile == null ? 0 : profile.getStats().getCustomCounter(bestTimeCounterKey);
+        if (bestMillis <= 0) {
+            return;
+        }
+
+        List<UUID> spawned = new ArrayList<UUID>();
+        String bestLine = ChatColor.GOLD.toString() + ChatColor.BOLD + "Your best time: "
+                + ChatColor.YELLOW + ChatColor.BOLD + formatDuration(bestMillis);
+        for (ParkourStartMarker marker : startMarkers) {
+            if (marker == null || marker.blockLocation == null) {
+                continue;
+            }
+            Entity globalStartLine = resolveEntity(marker.globalStartLineUuid);
+            if (globalStartLine != null) {
+                hideEntityFromViewer(player, globalStartLine);
+            }
+            UUID bestUuid = spawnViewerHologramLine(player, startHologramLineLocation(marker.blockLocation, 1), bestLine);
+            if (bestUuid != null) {
+                spawned.add(bestUuid);
+            }
+            UUID startUuid = spawnViewerHologramLine(player, startHologramLineLocation(marker.blockLocation, 2), marker.startLine);
+            if (startUuid != null) {
+                spawned.add(startUuid);
+            }
+        }
+        if (!spawned.isEmpty()) {
+            personalBestHologramUuidsByPlayer.put(uuid, spawned);
+        }
+    }
+
+    private void clearPersonalBestHolograms() {
+        for (UUID playerUuid : new ArrayList<UUID>(personalBestHologramUuidsByPlayer.keySet())) {
+            clearPersonalBestHolograms(playerUuid);
+        }
+    }
+
+    private void clearPersonalBestHolograms(UUID playerUuid) {
+        if (playerUuid == null) {
+            return;
+        }
+        List<UUID> hologramUuids = personalBestHologramUuidsByPlayer.remove(playerUuid);
+        if (hologramUuids == null || hologramUuids.isEmpty()) {
+            return;
+        }
+        for (UUID hologramUuid : new ArrayList<UUID>(hologramUuids)) {
+            removeEntity(hologramUuid);
+        }
+    }
+
+    private void hideEntityFromNonViewer(UUID viewerUuid, Entity entity) {
+        if (viewerUuid == null || entity == null) {
+            return;
+        }
+        for (Player online : Bukkit.getOnlinePlayers()) {
+            if (online == null || !online.isOnline() || online.getUniqueId() == null) {
+                continue;
+            }
+            if (viewerUuid.equals(online.getUniqueId())) {
+                continue;
+            }
+            hideEntityFromViewer(online, entity);
+        }
+    }
+
+    private boolean hideEntityFromViewer(Player viewer, Entity entity) {
+        if (viewer == null || entity == null) {
+            return false;
+        }
+        int entityId = entity.getEntityId();
+        if (entityId <= 0) {
+            return false;
+        }
+        String version = resolveNmsVersion();
+        if (version.isEmpty()) {
+            return false;
+        }
+        try {
+            Class<?> craftPlayerClass = Class.forName("org.bukkit.craftbukkit." + version + ".entity.CraftPlayer");
+            Class<?> packetClass = Class.forName("net.minecraft.server." + version + ".Packet");
+            Class<?> destroyPacketClass = Class.forName("net.minecraft.server." + version + ".PacketPlayOutEntityDestroy");
+            Object craftPlayer = craftPlayerClass.cast(viewer);
+            Method getHandle = craftPlayerClass.getMethod("getHandle");
+            Object handle = getHandle.invoke(craftPlayer);
+            if (handle == null) {
+                return false;
+            }
+            Object connection = handle.getClass().getField("playerConnection").get(handle);
+            if (connection == null) {
+                return false;
+            }
+            Object packet = destroyPacketClass.getConstructor(int[].class).newInstance(new int[]{entityId});
+            Method sendPacket = connection.getClass().getMethod("sendPacket", packetClass);
+            sendPacket.invoke(connection, packet);
+            return true;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private String resolveNmsVersion() {
+        String packageName = safeText(Bukkit.getServer() == null ? null : Bukkit.getServer().getClass().getPackage().getName());
+        if (packageName.isEmpty()) {
+            return "";
+        }
+        int lastDot = packageName.lastIndexOf('.');
+        if (lastDot < 0 || lastDot + 1 >= packageName.length()) {
+            return "";
+        }
+        return packageName.substring(lastDot + 1);
     }
 
     private List<String> parkourCheckpointHologramLines(ParkourRoute route, int checkpointNumber) {
@@ -472,6 +654,23 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
         completeRun(player, active);
     }
 
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onJoin(PlayerJoinEvent event) {
+        if (event == null || event.getPlayer() == null || plugin == null || !serverType.isHub()) {
+            return;
+        }
+        UUID uuid = event.getPlayer().getUniqueId();
+        for (long delay : new long[]{20L, 60L, 120L}) {
+            plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+                Player online = uuid == null ? null : Bukkit.getPlayer(uuid);
+                if (online == null || !online.isOnline()) {
+                    return;
+                }
+                refreshPersonalBestHolograms(online);
+            }, delay);
+        }
+    }
+
     @EventHandler(priority = EventPriority.LOWEST)
     public void onQuit(PlayerQuitEvent event) {
         if (event == null || event.getPlayer() == null) {
@@ -482,6 +681,7 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
         ActiveRun run = activeRuns.remove(uuid);
         finishLineHintAtByPlayer.remove(uuid);
         startTouchSuppressUntilByPlayer.remove(uuid);
+        clearPersonalBestHolograms(uuid);
         restorePostRunState(player, uuid, run);
     }
 
@@ -622,6 +822,7 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
             stats.addCustomCounter(completionCounterKey, 1);
             corePlugin.saveProfile(profile);
             persisted = true;
+            refreshPersonalBestHolograms(player);
         }
 
         player.sendMessage(ChatColor.GREEN.toString() + ChatColor.BOLD + "Congratulations on completing the parkour!");
@@ -1800,6 +2001,18 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
             this.x = x;
             this.y = y;
             this.z = z;
+        }
+    }
+
+    private static final class ParkourStartMarker {
+        private final Location blockLocation;
+        private final UUID globalStartLineUuid;
+        private final String startLine;
+
+        private ParkourStartMarker(Location blockLocation, UUID globalStartLineUuid, String startLine) {
+            this.blockLocation = blockLocation == null ? null : blockLocation.clone();
+            this.globalStartLineUuid = globalStartLineUuid;
+            this.startLine = startLine == null ? "" : startLine;
         }
     }
 
