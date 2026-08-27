@@ -60,7 +60,7 @@ public class ImageListener implements Listener {
     private static final int IMAGE_GRID_HEIGHT = 6;
     private static final int IMAGE_TILE_SIZE = 128;
     private static final int IMAGE_ANCHOR_SEARCH_BLOCKS = 8;
-    private static final int IMAGE_MAP_SENDS_PER_TICK = 12;
+    private static final int IMAGE_MAP_SENDS_PER_TICK = 20;
     private static final String IMAGE_URL_KEY = "imageUrl";
     private static final String IMAGE_ENABLED_KEY = "imageEnabled";
     private static final String MAP_CONFIG_UPDATE_CHANNEL = "map_config_update";
