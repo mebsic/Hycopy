@@ -1,4 +1,4 @@
-name: Release Build
+name: Plugin Build
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   build-release:
-    name: Build and publish plugin jars
+    name: Build and publish plugins
     runs-on: ubuntu-latest
 
     steps:
@@ -46,24 +46,39 @@ jobs:
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: hycopy-plugin-release-${{ github.sha }}
+          name: hycopy-plugins
           path: release-artifacts/*
           if-no-files-found: error
 
-      - name: Publish GitHub prerelease
+      - name: Publish latest build
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
 
-          tag="build-${GITHUB_SHA}"
-          short_sha="${GITHUB_SHA::7}"
-          title="Build ${short_sha}"
-          notes="Automated release build for commit ${GITHUB_SHA} on ${GITHUB_REF_NAME}."
+          tag="latest-build"
+          title="Latest Build"
+          notes="Automated plugin build from ${GITHUB_REF_NAME} at commit ${GITHUB_SHA}."
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f "${tag}" "${GITHUB_SHA}"
+          git push --force origin "refs/tags/${tag}"
 
           if gh release view "${tag}" >/dev/null 2>&1; then
-            gh release upload "${tag}" release-artifacts/* --clobber
+            gh release edit "${tag}" \
+              --title "${title}" \
+              --notes "${notes}" \
+              --prerelease
+
+            gh release view "${tag}" --json assets --jq '.assets[].name' | while IFS= read -r asset_name; do
+              if [[ -n "${asset_name}" ]]; then
+                gh release delete-asset "${tag}" "${asset_name}" --yes
+              fi
+            done
+
+            gh release upload "${tag}" release-artifacts/*
           else
             gh release create "${tag}" release-artifacts/* \
               --target "${GITHUB_SHA}" \
