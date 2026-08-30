@@ -17,6 +17,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -61,12 +63,20 @@ jobs:
           title="Latest Build"
           notes="Automated plugin build from ${GITHUB_REF_NAME} at commit ${GITHUB_SHA}."
 
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f "${tag}" "${GITHUB_SHA}"
+          git push --force origin "refs/tags/${tag}"
+
           if gh release view "${tag}" >/dev/null 2>&1; then
-            gh release edit "${tag}" \
-              --title "${title}" \
-              --notes "${notes}" \
-              --prerelease \
-              --latest
+            release_id="$(gh release view "${tag}" --json databaseId --jq '.databaseId')"
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${release_id}" \
+              -f name="${title}" \
+              -f body="${notes}" \
+              -f target_commitish="${GITHUB_SHA}" \
+              -F draft=false \
+              -F prerelease=false \
+              -f make_latest=true
 
             gh release view "${tag}" --json assets --jq '.assets[].name' | while IFS= read -r asset_name; do
               if [[ -n "${asset_name}" ]]; then
@@ -80,6 +90,5 @@ jobs:
               --target "${GITHUB_SHA}" \
               --title "${title}" \
               --notes "${notes}" \
-              --prerelease \
               --latest
           fi
