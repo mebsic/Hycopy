@@ -34,7 +34,7 @@ This builds shaded plugin artifacts and copies runtime `.jar` files into `docker
 
 ## Stack
 
-- Java (Paper modules target Java 8, proxy targets Java 17)
+- Java (Paper modules target Java 8, proxy targets Java 25)
 - Gradle (Kotlin DSL + Shadow)
 - Paper
 - Velocity
