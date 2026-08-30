@@ -11,28 +11,15 @@ public enum MuteReasonType {
     INAPPROPRIATE_CONTENT_LVL1("Using adult concepts in public chat on the server", "IC1"),
     DISCRIMINATION("Discrimination of a player or group of people", "DI"),
     EXCESSIVE_SWEARING("Excessive use of swearing in chat", "ES"),
-    UN_INTENTIONALLY_CAUSING_DISTRESS(
-            "intentionally or unintentionally causing distress",
-            "UI",
-            "Unintentionally/Intentionally Causing distress"
-    ),
+    UN_INTENTIONALLY_CAUSING_DISTRESS("intentionally or unintentionally causing distress", "UI", "Unintentionally/Intentionally Causing distress"),
     ENCOURAGING_CHEATING_LVL1("Discussing or actively promoting cheating or breaking of rules on the server", "EC1"),
     MEDIA_ADVERTISING("Media Advertising", "MA"),
     PUBLIC_SHAMING("Publicly revealing information about a player", "PS"),
     RUDE("Being rude or inappropriate", "RU"),
     EXCESSIVE_SPAMMING("Repeatedly posting unnecessary messages or content", "SP"),
-    MISLEADING_INFORMATION(
-            "misleading other players into actions that disrupt their game",
-            "MI",
-            "Trolling",
-            "Misleading other players to carry out actions that disrupts their game"
-    ),
+    MISLEADING_INFORMATION("misleading other players into actions that disrupt their game", "MI", "Trolling", "Misleading other players to carry out actions that disrupts their game"),
     UNNECESSARY_SPOILERS("Giving spoilers, revealing important storylines of popular movies and tv shows", "US"),
-    ESCALATION(
-            "a chat offense that is currently under review",
-            "ESC",
-            "You have been muted for a chat offense and is currently under review"
-    );
+    ESCALATION("a chat offense that is currently under review", "ESC", "You have been muted for a chat offense and is currently under review");
 
     private final String description;
     private final String code;

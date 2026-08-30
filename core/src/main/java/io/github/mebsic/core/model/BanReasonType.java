@@ -6,13 +6,7 @@ import java.util.Locale;
 
 public enum BanReasonType {
     WATCHDOG("WATCHDOG CHEAT DETECTION - https://{website}/watchdog", "WATCHDOG"),
-    BLACKLISTED_MODIFICATIONS(
-            "Cheating through the use of unfair game advantages",
-            "BM",
-            "Blacklisted Modifications",
-            "Cheating/Unfair Advantage",
-            "Using unfair advantages in game"
-    ),
+    BLACKLISTED_MODIFICATIONS("Cheating through the use of unfair game advantages", "BM", "Blacklisted Modifications", "Cheating/Unfair Advantage", "Using unfair advantages in game"),
     CROSS_TEAMING("Cross teaming, you were found to be working with another team or player", "CT"),
     TEAM_GRIEFING("You were found to be negatively affecting your fellow team members", "TG"),
     INAPPROPRIATE_BUILD("Creating a build or drawing which is not appropriate on the server", "IB", "Inappropriate Build", "Inappropriate Drawing"),
@@ -29,12 +23,7 @@ public enum BanReasonType {
     FALSIFIED_INFORMATION("Making or sharing fake information", "FI"),
     CHARGEBACK("Chargeback: for more info and appeal, go to https://support.{domain}", "CHARGEBACK", "Chargeback"),
     ACCOUNT_SELLING("Attempting to sell Minecraft accounts", "AS"),
-    COMPROMISED_ACCOUNT(
-            "Your account has a security alert, please secure it and contact appeals",
-            "ACCOUNT_SECURITY_ALERT",
-            "Compromised Account",
-            "Account Security Alert"
-    ),
+    COMPROMISED_ACCOUNT("Your account has a security alert, please secure it and contact appeals", "ACCOUNT_SECURITY_ALERT", "Compromised Account", "Account Security Alert"),
     ACCOUNT_SECURITY_ALERT_SERVER_ADVERTISING("Your account has a security alert, please secure it and contact appeals", "CAS"),
     ACCOUNT_SECURITY_ALERT_BLACKLISTED("Your account has a security alert, please secure it and contact appeals", "CAB"),
     PHISHING_LINK("Attempting to gain access to other user's accounts/information", "PL"),
@@ -43,12 +32,7 @@ public enum BanReasonType {
     INAPPROPRIATE_CONTENT_LVL2("Talking or sharing inappropriate content with adult themes on the server", "IC2"),
     ACCOUNT_DELETION("Upon request, data for this user has been deleted. https://support.{domain}", "ACCOUNT_DELETION"),
     CREATOR_BAN("Please contact {creatorsEmail} for assistance", "CREATOR_BAN"),
-    CREATOR_ACCOUNT_SECURITY_ALERT(
-            "Your account has a security alert, please secure it and contact {creatorsEmail} for assistance",
-            "CREATOR_ACCOUNT_SECURITY_ALERT",
-            "Creator Compromised Account",
-            "Creator Account Security Alert"
-    );
+    CREATOR_ACCOUNT_SECURITY_ALERT("Your account has a security alert, please secure it and contact {creatorsEmail} for assistance", "CREATOR_ACCOUNT_SECURITY_ALERT", "Creator Compromised Account", "Creator Account Security Alert");
 
     private final String description;
     private final String code;
