@@ -41,10 +41,7 @@ jobs:
 
           if [[ -f docker/development/plugins/Citizens-2.0.30-b2924.jar ]]; then
             cp docker/development/plugins/Citizens-2.0.30-b2924.jar release-artifacts/
-            cp docker/development/plugins/Citizens-2.0.30-b2924.jar release-artifacts/Citizens.jar
           fi
-
-          (cd release-artifacts && zip -9 hycopy-plugin-release-${GITHUB_SHA}.zip *.jar)
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
