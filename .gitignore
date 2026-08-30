@@ -58,6 +58,8 @@ docker/development/maps/*
 
 ### Docker development plugins ###
 docker/development/plugins/*
+!docker/development/plugins/
+!docker/development/plugins/Citizens-2.0.30-b2924.jar
 
 ### Docker production maps ###
 docker/production/maps/*

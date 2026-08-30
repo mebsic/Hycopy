@@ -129,6 +129,26 @@ services:
             missing=1
           fi
         done
+
+        for jar in Citizens-2.0.30-b2924.jar; do
+          source="/workspace/docker/development/plugins/$${jar}"
+          target="/workspace/docker/production/plugins/$${jar}"
+
+          if [ -d "$${target}" ]; then
+            echo "Fixing plugin path type mismatch for $${jar}"
+            rm -rf "$${target}"
+          fi
+
+          if [ -d "$${source}" ]; then
+            echo "Source plugin path is a directory, expected file: $${source}" >&2
+          fi
+
+          if [ -f "$${source}" ]; then
+            echo "Copying optional $${jar} from docker/development/plugins into docker/production/plugins"
+            cp -f "$${source}" "$${target}"
+          fi
+        done
+
         [ "$${missing}" -eq 0 ] || exit "$${missing}"
         exec python3 /app/server.py
     healthcheck:

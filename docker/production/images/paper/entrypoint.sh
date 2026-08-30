@@ -213,6 +213,48 @@ stage_plugin() {
   return 1
 }
 
+stage_optional_plugin() {
+  local file_name="$1"
+  local runtime_target="${DATA_DIR}/plugins/${file_name}"
+  local file_base="${file_name%.jar}"
+  local source_target=""
+  local existing_candidate=""
+
+  if [[ -s "${runtime_target}" ]]; then
+    return 0
+  fi
+
+  if [[ -n "${PLUGIN_SOURCE_DIR}" && -d "${PLUGIN_SOURCE_DIR}" ]]; then
+    source_target="${PLUGIN_SOURCE_DIR}/${file_name}"
+    if [[ -f "${source_target}" ]]; then
+      cp -f "${source_target}" "${runtime_target}"
+      return 0
+    fi
+
+    shopt -s nullglob
+    for existing_candidate in "${PLUGIN_SOURCE_DIR}/${file_base}"-*.jar; do
+      if [[ -s "${existing_candidate}" ]]; then
+        cp -f "${existing_candidate}" "${runtime_target}"
+        shopt -u nullglob
+        return 0
+      fi
+    done
+    shopt -u nullglob
+  fi
+
+  shopt -s nullglob
+  for existing_candidate in "${DATA_DIR}/plugins/${file_base}"-*.jar; do
+    if [[ -s "${existing_candidate}" ]]; then
+      mv -f "${existing_candidate}" "${runtime_target}"
+      shopt -u nullglob
+      return 0
+    fi
+  done
+  shopt -u nullglob
+
+  return 1
+}
+
 stage_required_runtime_plugins() {
   local required_plugins=("Hycopy.jar")
   local plugin_file=""
@@ -589,26 +631,13 @@ download_build_plugin() {
   shift || true
   local plugin_urls=("$@")
   local target_file="${DATA_DIR}/plugins/${file_name}"
-  local file_base="${file_name%.jar}"
-  local existing_candidate=""
   if [[ "${#plugin_urls[@]}" -eq 0 ]]; then
     return 0
   fi
-  if [[ -s "${target_file}" ]]; then
+
+  if stage_optional_plugin "${file_name}"; then
     return 0
   fi
-
-  # Accept pre-provisioned version-suffixed jars (e.g. WorldEdit-6.1.9.jar)
-  # and normalize them to the expected runtime filename.
-  shopt -s nullglob
-  for existing_candidate in "${DATA_DIR}/plugins/${file_base}"-*.jar; do
-    if [[ -s "${existing_candidate}" ]]; then
-      mv -f "${existing_candidate}" "${target_file}"
-      shopt -u nullglob
-      return 0
-    fi
-  done
-  shopt -u nullglob
 
   echo "[bootstrap] Downloading ${file_name}..."
   local plugin_url

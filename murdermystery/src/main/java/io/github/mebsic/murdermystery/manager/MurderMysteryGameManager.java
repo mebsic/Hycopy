@@ -33,8 +33,11 @@ import org.bukkit.entity.Arrow;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.PotionMeta;
 import org.bukkit.material.Door;
 import org.bukkit.material.MaterialData;
 import org.bukkit.material.Openable;
@@ -98,10 +101,44 @@ public class MurderMysteryGameManager extends GameManager {
     private static final int GOLD_HOTBAR_SLOT = 8; // Last hotbar slot.
     private static final int MAP_GOLD_PICKUP_DELAY_TICKS = 10;
     private static final int GOLD_FOR_BOW = 10;
-    private static final long MYSTERY_POTION_COOLDOWN_MILLIS = 15000L;
-    private static final int MYSTERY_POTION_SHORT_DURATION_TICKS = 8 * 20;
-    private static final int MYSTERY_POTION_MEDIUM_DURATION_TICKS = 12 * 20;
-    private static final int MYSTERY_POTION_LONG_DURATION_TICKS = 20 * 20;
+    private static final int MYSTERY_POTION_COST_GOLD = 1;
+    private static final int MYSTERY_POTION_BLINDNESS_DURATION_SECONDS = 10;
+    private static final int MYSTERY_POTION_INVISIBILITY_DURATION_SECONDS = 14;
+    private static final int MYSTERY_POTION_RESISTANCE_DURATION_SECONDS = 20;
+    private static final int MYSTERY_POTION_SLOWNESS_DURATION_SECONDS = 10;
+    private static final int MYSTERY_POTION_SPEED_DURATION_SECONDS = 20;
+    private static final double MYSTERY_POTION_HOLOGRAM_XZ_OFFSET = 0.5D;
+    private static final double MYSTERY_POTION_HOLOGRAM_Y_OFFSET = 1.2D;
+    private static final double MYSTERY_POTION_RESISTANCE_PARTICLE_Y_OFFSET = 1.0D;
+    private static final float MYSTERY_POTION_RESISTANCE_PARTICLE_SPREAD = 0.45F;
+    private static final int MYSTERY_POTION_RESISTANCE_PARTICLE_COUNT = 8;
+    private static final int MYSTERY_POTION_RESISTANCE_PARTICLE_RADIUS = 64;
+    private static final long MILLIS_PER_SECOND = 1000L;
+    private static final String MYSTERY_POTION_HOLOGRAM_TEXT =
+            ChatColor.WHITE + "Mystery Potion - 1 " + ChatColor.GOLD + "Gold";
+    private static final String MYSTERY_POTION_ITEM_NAME = ChatColor.GREEN + "??? Mystery Potion ???";
+    private static final String MYSTERY_POTION_LORE_LINE_ONE =
+            ChatColor.GRAY + "This is a potion. You have no idea";
+    private static final String MYSTERY_POTION_LORE_LINE_TWO =
+            ChatColor.GRAY + "what effects you'll get from it.";
+    private static final String NOT_ENOUGH_MYSTERY_POTION_GOLD_MESSAGE =
+            ChatColor.RED + "You need at least " + ChatColor.GOLD + "1 Gold" + ChatColor.RED + " to use this!";
+    private static final String MYSTERY_POTION_NO_SPACE_MESSAGE =
+            ChatColor.RED + "You don't have enough inventory space!";
+    private static final MysteryPotionOption[] MYSTERY_POTION_OPTIONS = {
+            new MysteryPotionOption("speed", "Speed", "SPEED II",
+                    PotionEffectType.SPEED, MYSTERY_POTION_SPEED_DURATION_SECONDS, 1, true, false, (short) 1),
+            new MysteryPotionOption("invisibility", "Invisibility", "INVISIBILITY",
+                    PotionEffectType.INVISIBILITY, MYSTERY_POTION_INVISIBILITY_DURATION_SECONDS, 0, true, false, (short) 2),
+            new MysteryPotionOption("resistance", "Resistance", "RESISTANCE",
+                    null, MYSTERY_POTION_RESISTANCE_DURATION_SECONDS, 0, true, true, (short) 3),
+            new MysteryPotionOption("blindness", "Blindness", "BLINDNESS",
+                    PotionEffectType.BLINDNESS, MYSTERY_POTION_BLINDNESS_DURATION_SECONDS, 0, false, false, (short) 4),
+            new MysteryPotionOption("slowness", "Slowness", "SLOWNESS II",
+                    PotionEffectType.SLOW, MYSTERY_POTION_SLOWNESS_DURATION_SECONDS, 1, false, false, (short) 5)
+    };
+    private static final Effect MYSTERY_POTION_RESISTANCE_BLOCK_EFFECT =
+            resolveCompatibleEffect("VILLAGER_THUNDERCLOUD", "ANGRY_VILLAGER");
     private static final double DROPPED_BOW_PICKUP_RADIUS_SQUARED = 2.25D;
     private static final float DROPPED_BOW_ROTATION_DEGREES_PER_TICK = 8.0f;
     private static final double DROPPED_BOW_HEIGHT_OFFSET = 0.35D;
@@ -148,7 +185,10 @@ public class MurderMysteryGameManager extends GameManager {
     private BukkitTask droppedBowTask;
     private float droppedBowYaw;
     private final Map<Item, Integer> activeMapDropItems = new HashMap<>();
-    private final Map<UUID, Long> mysteryPotionCooldowns = new HashMap<>();
+    private final List<ArmorStand> mysteryPotionHolograms = new ArrayList<>();
+    private final Map<UUID, Set<String>> revealedMysteryPotionEffects = new HashMap<>();
+    private final Map<UUID, MysteryPotionOption> activeMysteryPotionEffects = new HashMap<>();
+    private final Map<UUID, Long> mysteryPotionResistanceExpiresAt = new HashMap<>();
     private final Set<Arrow> activeRoundArrows = new HashSet<>();
     private final Set<OpenableBlockRef> trackedOpenables = new HashSet<>();
     private UUID originalDetectiveUuid;
@@ -195,8 +235,9 @@ public class MurderMysteryGameManager extends GameManager {
         closeTrackedOpenables();
         clearActiveRoundArrows();
         clearActiveMapDropItems();
-        mysteryPotionCooldowns.clear();
         clearDroppedBowDisplay();
+        clearMysteryPotionRoundState();
+        spawnMysteryPotionHolograms(activeMap);
         getTablistService().setNameTagsHidden(true);
         getTablistService().setForcedNameColor(ChatColor.WHITE);
         assignRoles();
@@ -256,6 +297,7 @@ public class MurderMysteryGameManager extends GameManager {
         if (mmPlayer == null) {
             return;
         }
+        clearMysteryPotionPlayerState(player);
         if (mmPlayer.getRole() == MurderMysteryRole.MURDERER) {
             summaryMurdererUuid = mmPlayer.getUuid();
             summaryMurdererEliminated = true;
@@ -297,8 +339,9 @@ public class MurderMysteryGameManager extends GameManager {
         closeTrackedOpenables();
         clearActiveRoundArrows();
         clearActiveMapDropItems();
-        mysteryPotionCooldowns.clear();
         clearDroppedBowDisplay();
+        clearMysteryPotionHolograms();
+        clearMysteryPotionRoundState();
         forceOutcomeTitlesOnGameEnd();
         murdererSwordUnlocked = false;
         outcomeTitlesShown = true;
@@ -582,6 +625,7 @@ public class MurderMysteryGameManager extends GameManager {
             killerData.addBowKill();
         }
         victimData.setAlive(false);
+        clearMysteryPotionPlayerState(victim);
         if (victimWasMurderer
                 && killerData != null
                 && killerData.getRole() == MurderMysteryRole.DETECTIVE) {
@@ -982,23 +1026,75 @@ public class MurderMysteryGameManager extends GameManager {
             return false;
         }
         MurderMysteryGamePlayer mmPlayer = getMurderMysteryPlayer(player);
-        if (getState() != GameState.IN_GAME || mmPlayer == null || !mmPlayer.isAlive()) {
+        if (getState() != GameState.IN_GAME) {
             player.sendMessage(ChatColor.RED + "Mystery Potions are only available during active games!");
             return true;
         }
-        long now = System.currentTimeMillis();
-        Long nextAllowed = mysteryPotionCooldowns.get(player.getUniqueId());
-        if (nextAllowed != null && nextAllowed.longValue() > now) {
-            long remainingMillis = nextAllowed.longValue() - now;
-            long remainingSeconds = Math.max(1L, (remainingMillis + 999L) / 1000L);
-            player.sendMessage(ChatColor.RED + "You can drink another Mystery Potion in "
-                    + remainingSeconds
-                    + "s!");
+        if (mmPlayer == null || !mmPlayer.isAlive()) {
             return true;
         }
-        mysteryPotionCooldowns.put(player.getUniqueId(), now + MYSTERY_POTION_COOLDOWN_MILLIS);
-        applyRandomMysteryPotion(player);
+        if (mmPlayer.getGold() < MYSTERY_POTION_COST_GOLD) {
+            player.sendMessage(NOT_ENOUGH_MYSTERY_POTION_GOLD_MESSAGE);
+            return true;
+        }
+        int potionSlot = findUnusedMysteryPotionSlot(player, mmPlayer);
+        if (potionSlot < 0) {
+            player.sendMessage(MYSTERY_POTION_NO_SPACE_MESSAGE);
+            return true;
+        }
+        MysteryPotionOption option = randomMysteryPotionOption();
+        player.getInventory().setItem(
+                potionSlot,
+                createMysteryPotionItem(option, isMysteryPotionOptionRevealed(player.getUniqueId(), option))
+        );
+        mmPlayer.removeGold(MYSTERY_POTION_COST_GOLD);
+        syncGoldHotbarItem(player, mmPlayer);
         return true;
+    }
+
+    private int findUnusedMysteryPotionSlot(Player player, MurderMysteryGamePlayer mmPlayer) {
+        if (player == null) {
+            return -1;
+        }
+        PlayerInventory inventory = player.getInventory();
+        if (inventory == null) {
+            return -1;
+        }
+        int inventorySize = getMysteryPotionInventorySize(inventory);
+        for (int slot = 0; slot < inventorySize; slot++) {
+            if (isReservedLoadoutSlot(slot, mmPlayer)) {
+                continue;
+            }
+            ItemStack item = inventory.getItem(slot);
+            if (item == null || item.getType() == Material.AIR) {
+                return slot;
+            }
+        }
+        return -1;
+    }
+
+    private int getMysteryPotionInventorySize(PlayerInventory inventory) {
+        if (inventory == null) {
+            return 0;
+        }
+        ItemStack[] contents = inventory.getContents();
+        if (contents == null) {
+            return inventory.getSize();
+        }
+        return Math.min(contents.length, inventory.getSize());
+    }
+
+    private boolean isReservedLoadoutSlot(int slot, MurderMysteryGamePlayer mmPlayer) {
+        if (slot == HOTBAR_SLOT_ONE_INDEX || slot == GOLD_HOTBAR_SLOT) {
+            return true;
+        }
+        MurderMysteryRole role = mmPlayer == null ? MurderMysteryRole.INNOCENT : mmPlayer.getRole();
+        if (role == MurderMysteryRole.MURDERER) {
+            return slot == KNIFE_HOTBAR_SLOT
+                    || slot == MURDERER_BOW_HOTBAR_SLOT
+                    || slot == MURDERER_ARROW_HOTBAR_SLOT;
+        }
+        return slot == BOW_HOTBAR_SLOT || slot == ARROW_HOTBAR_SLOT;
     }
 
     private boolean isConfiguredMysteryPotionBlock(Block block) {
@@ -1029,51 +1125,359 @@ public class MurderMysteryGameManager extends GameManager {
                 && location.getBlockZ() == block.getZ();
     }
 
-    private void applyRandomMysteryPotion(Player player) {
+    public boolean isMysteryPotionItem(ItemStack item) {
+        if (item == null || item.getType() != Material.POTION || !item.hasItemMeta()) {
+            return false;
+        }
+        ItemMeta meta = item.getItemMeta();
+        return isHiddenMysteryPotionMeta(meta) || findRevealedMysteryPotionOption(meta) != null;
+    }
+
+    public ItemStack createRevealedMysteryPotionItem(ItemStack item) {
+        MysteryPotionOption option = resolveMysteryPotionOption(item);
+        if (option == null) {
+            option = randomMysteryPotionOption();
+        }
+        return createMysteryPotionItem(option, true);
+    }
+
+    public boolean handleMysteryPotionConsume(Player player, ItemStack item) {
+        if (player == null || item == null || item.getType() != Material.POTION) {
+            return false;
+        }
+        MurderMysteryGamePlayer mmPlayer = getMurderMysteryPlayer(player);
+        if (getState() != GameState.IN_GAME || mmPlayer == null || !mmPlayer.isAlive()) {
+            return false;
+        }
+        MysteryPotionOption option = resolveMysteryPotionOption(item);
+        if (option == null) {
+            return false;
+        }
+        applyMysteryPotionEffect(player, option);
+        revealMysteryPotionOption(player, option);
+        showMysteryPotionTitle(player, option);
+        playMysteryPotionSound(player.getLocation());
+        player.sendMessage(ChatColor.LIGHT_PURPLE + "Mystery Potion! "
+                + ChatColor.YELLOW + option.getName());
+        return true;
+    }
+
+    public void removeConsumedMysteryPotionItem(Player player, int slot, ItemStack originalItem, ItemStack revealedItem) {
         if (player == null) {
             return;
         }
-        int roll = (int) Math.floor(Math.random() * 8.0D);
-        String effectName;
-        PotionEffect effect;
-        switch (roll) {
-            case 0:
-                effectName = "Speed";
-                effect = new PotionEffect(PotionEffectType.SPEED, MYSTERY_POTION_LONG_DURATION_TICKS, 1, false, false);
-                break;
-            case 1:
-                effectName = "Jump Boost";
-                effect = new PotionEffect(PotionEffectType.JUMP, MYSTERY_POTION_LONG_DURATION_TICKS, 1, false, false);
-                break;
-            case 2:
-                effectName = "Invisibility";
-                effect = new PotionEffect(PotionEffectType.INVISIBILITY, MYSTERY_POTION_MEDIUM_DURATION_TICKS, 0, false, false);
-                break;
-            case 3:
-                effectName = "Regeneration";
-                effect = new PotionEffect(PotionEffectType.REGENERATION, MYSTERY_POTION_SHORT_DURATION_TICKS, 0, false, false);
-                break;
-            case 4:
-                effectName = "Haste";
-                effect = new PotionEffect(PotionEffectType.FAST_DIGGING, MYSTERY_POTION_LONG_DURATION_TICKS, 0, false, false);
-                break;
-            case 5:
-                effectName = "Blindness";
-                effect = new PotionEffect(PotionEffectType.BLINDNESS, MYSTERY_POTION_SHORT_DURATION_TICKS, 0, false, false);
-                break;
-            case 6:
-                effectName = "Slowness";
-                effect = new PotionEffect(PotionEffectType.SLOW, MYSTERY_POTION_MEDIUM_DURATION_TICKS, 0, false, false);
-                break;
-            default:
-                effectName = "Nausea";
-                effect = new PotionEffect(PotionEffectType.CONFUSION, MYSTERY_POTION_MEDIUM_DURATION_TICKS, 0, false, false);
-                break;
+        PlayerInventory inventory = player.getInventory();
+        if (inventory == null || slot < 0 || slot >= getMysteryPotionInventorySize(inventory)) {
+            return;
         }
-        player.addPotionEffect(effect, true);
-        playMysteryPotionSound(player.getLocation());
-        player.sendMessage(ChatColor.LIGHT_PURPLE + "Mystery Potion! "
-                + ChatColor.YELLOW + effectName);
+        ItemStack item = inventory.getItem(slot);
+        if (item == null) {
+            return;
+        }
+        if (item.getType() != Material.GLASS_BOTTLE) {
+            if (!isMysteryPotionItem(item) || !matchesConsumedMysteryPotionItem(item, originalItem, revealedItem)) {
+                return;
+            }
+        }
+        if (item.getAmount() > 1) {
+            item.setAmount(item.getAmount() - 1);
+            inventory.setItem(slot, item);
+        } else {
+            inventory.setItem(slot, null);
+        }
+        player.updateInventory();
+    }
+
+    private boolean matchesConsumedMysteryPotionItem(ItemStack currentItem, ItemStack originalItem, ItemStack revealedItem) {
+        return currentItem != null
+                && ((originalItem != null && currentItem.isSimilar(originalItem))
+                || (revealedItem != null && currentItem.isSimilar(revealedItem)));
+    }
+
+    public boolean blocksMysteryPotionResistanceWeaponDamage(Player player) {
+        if (!hasActiveMysteryPotionResistance(player)) {
+            return false;
+        }
+        MurderMysteryGamePlayer mmPlayer = getMurderMysteryPlayer(player);
+        if (mmPlayer == null || !mmPlayer.isAlive()) {
+            return false;
+        }
+        MurderMysteryRole role = mmPlayer.getRole();
+        return role == MurderMysteryRole.INNOCENT || role == MurderMysteryRole.DETECTIVE;
+    }
+
+    public void showMysteryPotionResistanceBlock(Player player) {
+        if (player == null || player.getWorld() == null || MYSTERY_POTION_RESISTANCE_BLOCK_EFFECT == null) {
+            return;
+        }
+        Location location = player.getLocation().clone().add(0.0D, MYSTERY_POTION_RESISTANCE_PARTICLE_Y_OFFSET, 0.0D);
+        try {
+            location.getWorld().spigot().playEffect(
+                    location,
+                    MYSTERY_POTION_RESISTANCE_BLOCK_EFFECT,
+                    0,
+                    0,
+                    MYSTERY_POTION_RESISTANCE_PARTICLE_SPREAD,
+                    MYSTERY_POTION_RESISTANCE_PARTICLE_SPREAD,
+                    MYSTERY_POTION_RESISTANCE_PARTICLE_SPREAD,
+                    0.0F,
+                    MYSTERY_POTION_RESISTANCE_PARTICLE_COUNT,
+                    MYSTERY_POTION_RESISTANCE_PARTICLE_RADIUS
+            );
+        } catch (Throwable ignored) {
+            location.getWorld().playEffect(location, MYSTERY_POTION_RESISTANCE_BLOCK_EFFECT, 0);
+        }
+    }
+
+    public void clearMysteryPotionPlayerState(Player player) {
+        if (player == null) {
+            return;
+        }
+        clearActiveMysteryPotionEffect(player);
+        revealedMysteryPotionEffects.remove(player.getUniqueId());
+    }
+
+    private ItemStack createMysteryPotionItem(MysteryPotionOption option, boolean revealed) {
+        if (option == null) {
+            option = randomMysteryPotionOption();
+        }
+        ItemStack item = new ItemStack(Material.POTION, 1, option.getItemDurability());
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) {
+            return item;
+        }
+        if (revealed) {
+            meta.setDisplayName(ChatColor.GREEN + option.getName() + " Potion");
+            List<String> lore = new ArrayList<>();
+            lore.add(ChatColor.GRAY + "This potion will give you " + option.getName() + "!");
+            meta.setLore(lore);
+        } else {
+            meta.setDisplayName(MYSTERY_POTION_ITEM_NAME);
+            List<String> lore = new ArrayList<>();
+            lore.add(MYSTERY_POTION_LORE_LINE_ONE);
+            lore.add(MYSTERY_POTION_LORE_LINE_TWO);
+            meta.setLore(lore);
+        }
+        meta.addItemFlags(ItemFlag.HIDE_POTION_EFFECTS);
+        if (meta instanceof PotionMeta) {
+            PotionMeta potionMeta = (PotionMeta) meta;
+            potionMeta.clearCustomEffects();
+            PotionEffect effect = option.createEffect();
+            if (effect != null) {
+                potionMeta.addCustomEffect(effect, true);
+            }
+        }
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    private MysteryPotionOption randomMysteryPotionOption() {
+        if (MYSTERY_POTION_OPTIONS.length == 0) {
+            return null;
+        }
+        int index = (int) Math.floor(Math.random() * MYSTERY_POTION_OPTIONS.length);
+        return MYSTERY_POTION_OPTIONS[index];
+    }
+
+    private MysteryPotionOption resolveMysteryPotionOption(ItemStack item) {
+        if (item == null || item.getType() != Material.POTION || !item.hasItemMeta()) {
+            return null;
+        }
+        ItemMeta meta = item.getItemMeta();
+        MysteryPotionOption revealedOption = findRevealedMysteryPotionOption(meta);
+        if (revealedOption != null) {
+            return revealedOption;
+        }
+        if (isHiddenMysteryPotionMeta(meta)) {
+            MysteryPotionOption option = findMysteryPotionOptionByDurability(item.getDurability());
+            if (option != null) {
+                return option;
+            }
+        }
+        if (!(meta instanceof PotionMeta)) {
+            return null;
+        }
+        PotionMeta potionMeta = (PotionMeta) meta;
+        if (!potionMeta.hasCustomEffects()) {
+            return null;
+        }
+        List<PotionEffect> effects = potionMeta.getCustomEffects();
+        if (effects == null || effects.isEmpty()) {
+            return null;
+        }
+        PotionEffect effect = effects.get(0);
+        MysteryPotionOption fallback = null;
+        for (MysteryPotionOption option : MYSTERY_POTION_OPTIONS) {
+            if (option.matches(effect)) {
+                return option;
+            }
+            if (fallback == null && option.matchesType(effect)) {
+                fallback = option;
+            }
+        }
+        return fallback;
+    }
+
+    private boolean isHiddenMysteryPotionMeta(ItemMeta meta) {
+        if (meta == null || !meta.hasDisplayName() || !MYSTERY_POTION_ITEM_NAME.equals(meta.getDisplayName())) {
+            return false;
+        }
+        if (!meta.hasLore()) {
+            return false;
+        }
+        List<String> lore = meta.getLore();
+        return lore != null
+                && lore.size() >= 2
+                && MYSTERY_POTION_LORE_LINE_ONE.equals(lore.get(0))
+                && MYSTERY_POTION_LORE_LINE_TWO.equals(lore.get(1));
+    }
+
+    private MysteryPotionOption findRevealedMysteryPotionOption(ItemMeta meta) {
+        if (meta == null || !meta.hasDisplayName() || !meta.hasLore()) {
+            return null;
+        }
+        List<String> lore = meta.getLore();
+        if (lore == null || lore.isEmpty()) {
+            return null;
+        }
+        for (MysteryPotionOption option : MYSTERY_POTION_OPTIONS) {
+            if ((ChatColor.GREEN + option.getName() + " Potion").equals(meta.getDisplayName())
+                    && (ChatColor.GRAY + "This potion will give you " + option.getName() + "!").equals(lore.get(0))) {
+                return option;
+            }
+        }
+        return null;
+    }
+
+    private MysteryPotionOption findMysteryPotionOptionByDurability(short durability) {
+        for (MysteryPotionOption option : MYSTERY_POTION_OPTIONS) {
+            if (option.getItemDurability() == durability) {
+                return option;
+            }
+        }
+        return null;
+    }
+
+    private boolean isMysteryPotionOptionRevealed(UUID playerUuid, MysteryPotionOption option) {
+        if (playerUuid == null || option == null) {
+            return false;
+        }
+        Set<String> revealed = revealedMysteryPotionEffects.get(playerUuid);
+        return revealed != null && revealed.contains(option.getKey());
+    }
+
+    private void revealMysteryPotionOption(Player player, MysteryPotionOption option) {
+        if (player == null || option == null) {
+            return;
+        }
+        UUID playerUuid = player.getUniqueId();
+        Set<String> revealed = revealedMysteryPotionEffects.get(playerUuid);
+        if (revealed == null) {
+            revealed = new HashSet<>();
+            revealedMysteryPotionEffects.put(playerUuid, revealed);
+        }
+        revealed.add(option.getKey());
+        revealMatchingMysteryPotions(player, option);
+    }
+
+    private void revealMatchingMysteryPotions(Player player, MysteryPotionOption option) {
+        PlayerInventory inventory = player.getInventory();
+        if (inventory == null) {
+            return;
+        }
+        boolean changed = false;
+        int inventorySize = getMysteryPotionInventorySize(inventory);
+        for (int slot = 0; slot < inventorySize; slot++) {
+            ItemStack item = inventory.getItem(slot);
+            if (item == null || !item.hasItemMeta() || !isHiddenMysteryPotionMeta(item.getItemMeta())) {
+                continue;
+            }
+            MysteryPotionOption itemOption = resolveMysteryPotionOption(item);
+            if (itemOption == null || !itemOption.getKey().equals(option.getKey())) {
+                continue;
+            }
+            inventory.setItem(slot, createMysteryPotionItem(option, true));
+            changed = true;
+        }
+        if (changed) {
+            player.updateInventory();
+        }
+    }
+
+    private void applyMysteryPotionEffect(Player player, MysteryPotionOption option) {
+        clearActiveMysteryPotionEffect(player);
+        UUID playerUuid = player.getUniqueId();
+        activeMysteryPotionEffects.put(playerUuid, option);
+        if (option.isResistance()) {
+            mysteryPotionResistanceExpiresAt.put(
+                    playerUuid,
+                    System.currentTimeMillis() + option.getDurationSeconds() * MILLIS_PER_SECOND
+            );
+            return;
+        }
+        PotionEffect effect = option.createEffect();
+        if (effect != null) {
+            player.addPotionEffect(effect, true);
+        }
+    }
+
+    private void clearActiveMysteryPotionEffect(Player player) {
+        if (player == null) {
+            return;
+        }
+        UUID playerUuid = player.getUniqueId();
+        MysteryPotionOption activeOption = activeMysteryPotionEffects.remove(playerUuid);
+        mysteryPotionResistanceExpiresAt.remove(playerUuid);
+        if (activeOption != null && activeOption.hasBukkitEffect()) {
+            player.removePotionEffect(activeOption.getType());
+        }
+    }
+
+    private void clearMysteryPotionRoundState() {
+        for (MurderMysteryGamePlayer mmPlayer : getMmPlayers()) {
+            Player player = Bukkit.getPlayer(mmPlayer.getUuid());
+            if (player != null && player.isOnline()) {
+                clearActiveMysteryPotionEffect(player);
+            }
+        }
+        activeMysteryPotionEffects.clear();
+        mysteryPotionResistanceExpiresAt.clear();
+        revealedMysteryPotionEffects.clear();
+    }
+
+    private boolean hasActiveMysteryPotionResistance(Player player) {
+        if (player == null) {
+            return false;
+        }
+        UUID playerUuid = player.getUniqueId();
+        Long expiresAt = mysteryPotionResistanceExpiresAt.get(playerUuid);
+        if (expiresAt == null) {
+            return false;
+        }
+        if (System.currentTimeMillis() >= expiresAt) {
+            mysteryPotionResistanceExpiresAt.remove(playerUuid);
+            MysteryPotionOption activeOption = activeMysteryPotionEffects.get(playerUuid);
+            if (activeOption != null && activeOption.isResistance()) {
+                activeMysteryPotionEffects.remove(playerUuid);
+            }
+            return false;
+        }
+        return true;
+    }
+
+    private void showMysteryPotionTitle(Player player, MysteryPotionOption option) {
+        if (player == null || option == null) {
+            return;
+        }
+        ChatColor color = option.isPositive() ? ChatColor.GREEN : ChatColor.RED;
+        getTitleService().send(
+                player,
+                color + Integer.toString(option.getDurationSeconds()) + "S OF " + option.getTitleName(),
+                "",
+                TITLE_FADE_IN_TICKS,
+                TITLE_STAY_TICKS,
+                TITLE_FADE_OUT_FAST_TICKS
+        );
     }
 
     private void playMysteryPotionSound(Location location) {
@@ -1993,12 +2397,69 @@ public class MurderMysteryGameManager extends GameManager {
         droppedBowYaw = 0.0f;
     }
 
+    private void spawnMysteryPotionHolograms(GameMap activeMap) {
+        clearMysteryPotionHolograms();
+        if (activeMap == null || activeMap.getMysteryPotionLocations().isEmpty()) {
+            return;
+        }
+        for (Location location : activeMap.getMysteryPotionLocations()) {
+            spawnMysteryPotionHologram(location);
+        }
+    }
+
+    private void spawnMysteryPotionHologram(Location location) {
+        if (location == null || location.getWorld() == null) {
+            return;
+        }
+        Location spawn = location.clone().add(
+                MYSTERY_POTION_HOLOGRAM_XZ_OFFSET,
+                MYSTERY_POTION_HOLOGRAM_Y_OFFSET,
+                MYSTERY_POTION_HOLOGRAM_XZ_OFFSET
+        );
+        spawn.getWorld().getChunkAt(spawn).load();
+        ArmorStand stand = spawn.getWorld().spawn(spawn, ArmorStand.class);
+        stand.setGravity(false);
+        stand.setVisible(false);
+        stand.setBasePlate(false);
+        stand.setSmall(true);
+        stand.setCanPickupItems(false);
+        stand.setCustomNameVisible(true);
+        stand.setCustomName(MYSTERY_POTION_HOLOGRAM_TEXT);
+        trySetArmorStandMarker(stand);
+        mysteryPotionHolograms.add(stand);
+    }
+
+    private void clearMysteryPotionHolograms() {
+        if (mysteryPotionHolograms.isEmpty()) {
+            return;
+        }
+        for (ArmorStand stand : new ArrayList<>(mysteryPotionHolograms)) {
+            if (stand != null && stand.isValid()) {
+                stand.remove();
+            }
+        }
+        mysteryPotionHolograms.clear();
+    }
+
+    private void trySetArmorStandMarker(ArmorStand armorStand) {
+        if (armorStand == null) {
+            return;
+        }
+        try {
+            Method setMarker = armorStand.getClass().getMethod("setMarker", boolean.class);
+            setMarker.invoke(armorStand, true);
+        } catch (Throwable ignored) {
+            // Legacy API does not support marker armor stands.
+        }
+    }
+
     public void cleanupTransientRoundEntitiesForShutdown() {
         closeTrackedOpenables();
         clearActiveRoundArrows();
         clearActiveMapDropItems();
-        mysteryPotionCooldowns.clear();
         clearDroppedBowDisplay();
+        clearMysteryPotionHolograms();
+        clearMysteryPotionRoundState();
     }
 
     public boolean isDroppedBowDisplay(Entity entity) {
@@ -2006,6 +2467,19 @@ public class MurderMysteryGameManager extends GameManager {
             return false;
         }
         return entity.getUniqueId().equals(droppedBowDisplay.getUniqueId());
+    }
+
+    public boolean isMysteryPotionHologram(Entity entity) {
+        if (entity == null || entity.getUniqueId() == null) {
+            return false;
+        }
+        UUID entityUuid = entity.getUniqueId();
+        for (ArmorStand stand : mysteryPotionHolograms) {
+            if (stand != null && entityUuid.equals(stand.getUniqueId())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private int getAliveCount(MurderMysteryRole role) {
@@ -2071,6 +2545,23 @@ public class MurderMysteryGameManager extends GameManager {
             }
             try {
                 return Sound.valueOf(name);
+            } catch (IllegalArgumentException ignored) {
+                // Try next enum constant.
+            }
+        }
+        return null;
+    }
+
+    private static Effect resolveCompatibleEffect(String... names) {
+        if (names == null) {
+            return null;
+        }
+        for (String name : names) {
+            if (name == null || name.trim().isEmpty()) {
+                continue;
+            }
+            try {
+                return Effect.valueOf(name.trim());
             } catch (IllegalArgumentException ignored) {
                 // Try next enum constant.
             }
@@ -2352,6 +2843,93 @@ public class MurderMysteryGameManager extends GameManager {
             return null;
         }
         return (MurderMysteryGamePlayer) gamePlayer;
+    }
+
+    private static final class MysteryPotionOption {
+        private final String key;
+        private final String name;
+        private final String titleName;
+        private final PotionEffectType type;
+        private final int durationSeconds;
+        private final int amplifier;
+        private final boolean positive;
+        private final boolean resistance;
+        private final short itemDurability;
+
+        private MysteryPotionOption(
+                String key,
+                String name,
+                String titleName,
+                PotionEffectType type,
+                int durationSeconds,
+                int amplifier,
+                boolean positive,
+                boolean resistance,
+                short itemDurability
+        ) {
+            this.key = key == null ? "" : key;
+            this.name = name == null ? "" : name;
+            this.titleName = titleName == null ? this.name.toUpperCase(Locale.US) : titleName;
+            this.type = type;
+            this.durationSeconds = Math.max(1, durationSeconds);
+            this.amplifier = Math.max(0, amplifier);
+            this.positive = positive;
+            this.resistance = resistance;
+            this.itemDurability = itemDurability;
+        }
+
+        private String getKey() {
+            return key;
+        }
+
+        private String getName() {
+            return name;
+        }
+
+        private String getTitleName() {
+            return titleName;
+        }
+
+        private PotionEffectType getType() {
+            return type;
+        }
+
+        private int getDurationSeconds() {
+            return durationSeconds;
+        }
+
+        private boolean isPositive() {
+            return positive;
+        }
+
+        private boolean isResistance() {
+            return resistance;
+        }
+
+        private boolean hasBukkitEffect() {
+            return type != null;
+        }
+
+        private short getItemDurability() {
+            return itemDurability;
+        }
+
+        private PotionEffect createEffect() {
+            if (type == null) {
+                return null;
+            }
+            return new PotionEffect(type, durationSeconds * 20, amplifier, false, false);
+        }
+
+        private boolean matches(PotionEffect effect) {
+            return matchesType(effect)
+                    && effect.getDuration() == durationSeconds * 20
+                    && effect.getAmplifier() == amplifier;
+        }
+
+        private boolean matchesType(PotionEffect effect) {
+            return effect != null && type != null && type.equals(effect.getType());
+        }
     }
 
     private static final class OpenableBlockRef {

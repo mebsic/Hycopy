@@ -17,6 +17,7 @@ import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Arrow;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
+import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -25,9 +26,11 @@ import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityShootBowEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.player.PlayerArmorStandManipulateEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerItemDamageEvent;
+import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerPickupItemEvent;
@@ -155,6 +158,7 @@ public class MurderMysteryListener implements Listener {
     public void onQuit(PlayerQuitEvent event) {
         cancelPendingKnifeLaunch(event.getPlayer().getUniqueId());
         despawnThrownKnife(event.getPlayer().getUniqueId());
+        gameManager.clearMysteryPotionPlayerState(event.getPlayer());
         if (queueService != null) {
             queueService.handleQuit(event.getPlayer());
         } else {
@@ -203,7 +207,7 @@ public class MurderMysteryListener implements Listener {
         Action action = event.getAction();
         if ((action == Action.LEFT_CLICK_BLOCK || action == Action.RIGHT_CLICK_BLOCK)
                 && gameManager.handleMysteryPotionInteract(player, event.getClickedBlock())) {
-            event.setCancelled(true);
+            cancelMysteryPotionInteraction(event);
             return;
         }
         if (action != Action.RIGHT_CLICK_AIR && action != Action.RIGHT_CLICK_BLOCK) {
@@ -217,10 +221,60 @@ public class MurderMysteryListener implements Listener {
         }
     }
 
+    private void cancelMysteryPotionInteraction(PlayerInteractEvent event) {
+        if (event == null) {
+            return;
+        }
+        event.setCancelled(true);
+        event.setUseInteractedBlock(Event.Result.DENY);
+        event.setUseItemInHand(Event.Result.DENY);
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onItemConsume(PlayerItemConsumeEvent event) {
+        Player player = event.getPlayer();
+        ItemStack item = event.getItem();
+        if (!gameManager.isMysteryPotionItem(item)) {
+            return;
+        }
+        ItemStack original = item.clone();
+        ItemStack revealed = gameManager.createRevealedMysteryPotionItem(original);
+        if (!gameManager.handleMysteryPotionConsume(player, revealed)) {
+            event.setCancelled(true);
+            return;
+        }
+        int consumedSlot = player.getInventory().getHeldItemSlot();
+        event.setItem(revealed);
+        event.setCancelled(true);
+        player.getInventory().setItem(consumedSlot, revealed);
+        ItemStack consumedOriginal = original.clone();
+        ItemStack consumedRevealed = revealed.clone();
+        plugin.getServer().getScheduler().runTask(
+                plugin,
+                () -> gameManager.removeConsumedMysteryPotionItem(
+                        player,
+                        consumedSlot,
+                        consumedOriginal,
+                        consumedRevealed
+                )
+        );
+    }
+
     @EventHandler
     public void onInteractEntity(PlayerInteractEntityEvent event) {
+        if (gameManager.isMysteryPotionHologram(event.getRightClicked())) {
+            event.setCancelled(true);
+            return;
+        }
         Player player = event.getPlayer();
         if (attemptMurdererKnifeThrow(player, player == null ? null : player.getItemInHand())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler
+    public void onArmorStandManipulate(PlayerArmorStandManipulateEvent event) {
+        if (gameManager.isMysteryPotionHologram(event.getRightClicked())) {
             event.setCancelled(true);
         }
     }
@@ -365,6 +419,10 @@ public class MurderMysteryListener implements Listener {
                     return;
                 }
                 event.setCancelled(true);
+                if (gameManager.blocksMysteryPotionResistanceWeaponDamage(victim)) {
+                    gameManager.showMysteryPotionResistanceBlock(victim);
+                    return;
+                }
                 attackerData.addKill();
                 setEliminatedHealth(victim);
                 gameManager.handleDeath(victim, attacker, null, MurderMysteryGameManager.KillType.KNIFE);
@@ -382,6 +440,11 @@ public class MurderMysteryListener implements Listener {
             MurderMysteryGamePlayer shooterData = gameManager.getMurderMysteryPlayer(shooter);
             if (shooterData == null || !shooterData.isAlive()) {
                 cancelArrowHit(event, arrow);
+                return;
+            }
+            if (gameManager.blocksMysteryPotionResistanceWeaponDamage(victim)) {
+                cancelArrowHit(event, arrow);
+                gameManager.showMysteryPotionResistanceBlock(victim);
                 return;
             }
             double distanceMeters = projectileDistanceMeters(arrow, shooter, victim);
@@ -425,7 +488,9 @@ public class MurderMysteryListener implements Listener {
     @EventHandler
     public void onAnyDamage(EntityDamageEvent event) {
         UUID thrownKnifeShooterUuid = findThrownKnifeShooterByDisplay(event.getEntity());
-        if (gameManager.isDroppedBowDisplay(event.getEntity()) || thrownKnifeShooterUuid != null) {
+        if (gameManager.isDroppedBowDisplay(event.getEntity())
+                || gameManager.isMysteryPotionHologram(event.getEntity())
+                || thrownKnifeShooterUuid != null) {
             event.setCancelled(true);
             if (event instanceof EntityDamageByEntityEvent) {
                 EntityDamageByEntityEvent byEntityEvent = (EntityDamageByEntityEvent) event;
@@ -455,14 +520,7 @@ public class MurderMysteryListener implements Listener {
             event.setCancelled(true);
             return;
         }
-        if (event.getCause() == EntityDamageEvent.DamageCause.DROWNING) {
-            event.setCancelled(true);
-            MurderMysteryGamePlayer mmPlayer = gameManager.getMurderMysteryPlayer(player);
-            if (mmPlayer == null || !mmPlayer.isAlive()) {
-                return;
-            }
-            player.setRemainingAir(player.getMaximumAir());
-            gameManager.handleDeath(player, null, "You drowned!");
+        if (handleLethalEnvironmentDamage(event, player)) {
             return;
         }
         if (event.getCause() == EntityDamageEvent.DamageCause.ENTITY_ATTACK
@@ -470,6 +528,31 @@ public class MurderMysteryListener implements Listener {
             return;
         }
         event.setCancelled(true);
+    }
+
+    private boolean handleLethalEnvironmentDamage(EntityDamageEvent event, Player player) {
+        if (event == null || player == null) {
+            return false;
+        }
+        String deathMessage = null;
+        if (event.getCause() == EntityDamageEvent.DamageCause.DROWNING) {
+            player.setRemainingAir(player.getMaximumAir());
+            deathMessage = "You drowned!";
+        } else if (event.getCause() == EntityDamageEvent.DamageCause.LAVA) {
+            deathMessage = "You fell into lava!";
+        } else if (event.getCause() == EntityDamageEvent.DamageCause.VOID) {
+            deathMessage = "You fell into the void!";
+        }
+        if (deathMessage == null) {
+            return false;
+        }
+        event.setCancelled(true);
+        MurderMysteryGamePlayer mmPlayer = gameManager.getMurderMysteryPlayer(player);
+        if (mmPlayer == null || !mmPlayer.isAlive()) {
+            return true;
+        }
+        gameManager.handleDeath(player, null, deathMessage);
+        return true;
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -1134,6 +1217,10 @@ public class MurderMysteryListener implements Listener {
             return;
         }
         if (shooterData.getRole() != MurderMysteryRole.MURDERER || victimData.getRole() == MurderMysteryRole.MURDERER) {
+            return;
+        }
+        if (gameManager.blocksMysteryPotionResistanceWeaponDamage(victim)) {
+            gameManager.showMysteryPotionResistanceBlock(victim);
             return;
         }
         shooterData.addKill();

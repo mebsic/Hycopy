@@ -1,0 +1,76 @@
+name: Release Build
+
+on:
+  push:
+    branches:
+      - "**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: Build and publish plugin jars
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: gradle
+
+      - name: Build shaded plugin jars
+        run: ./gradlew shadowAll --no-daemon
+
+      - name: Collect release artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p release-artifacts
+          cp docker/development/plugins/Hycopy.jar release-artifacts/
+          cp docker/development/plugins/MurderMystery.jar release-artifacts/
+          cp docker/development/plugins/HycopyBuild.jar release-artifacts/
+          cp docker/development/plugins/HycopyProxy.jar release-artifacts/
+
+          if [[ -f docker/development/plugins/Citizens-2.0.30-b2924.jar ]]; then
+            cp docker/development/plugins/Citizens-2.0.30-b2924.jar release-artifacts/
+            cp docker/development/plugins/Citizens-2.0.30-b2924.jar release-artifacts/Citizens.jar
+          fi
+
+          (cd release-artifacts && zip -9 hycopy-plugin-release-${GITHUB_SHA}.zip *.jar)
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hycopy-plugin-release-${{ github.sha }}
+          path: release-artifacts/*
+          if-no-files-found: error
+
+      - name: Publish GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag="build-${GITHUB_SHA}"
+          short_sha="${GITHUB_SHA::7}"
+          title="Build ${short_sha}"
+          notes="Automated release build for commit ${GITHUB_SHA} on ${GITHUB_REF_NAME}."
+
+          if gh release view "${tag}" >/dev/null 2>&1; then
+            gh release upload "${tag}" release-artifacts/* --clobber
+          else
+            gh release create "${tag}" release-artifacts/* \
+              --target "${GITHUB_SHA}" \
+              --title "${title}" \
+              --notes "${notes}" \
+              --prerelease
+          fi
