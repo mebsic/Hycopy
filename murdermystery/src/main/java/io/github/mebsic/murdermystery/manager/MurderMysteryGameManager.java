@@ -23,6 +23,7 @@ import io.github.mebsic.murdermystery.game.MurderMysteryGameResult;
 import io.github.mebsic.murdermystery.game.MurderMysteryRole;
 import io.github.mebsic.murdermystery.registry.KnifeSkinRegistry;
 import io.github.mebsic.murdermystery.service.ActionBarService;
+import io.github.mebsic.murdermystery.service.MurderMysteryMinimapService;
 import io.github.mebsic.murdermystery.stats.MurderMysteryStats;
 import org.bukkit.*;
 import org.bukkit.block.Block;
@@ -76,8 +77,12 @@ public class MurderMysteryGameManager extends GameManager {
     private static final int INNOCENTS_WIN_WARNING_SECONDS = 60;
     private static final int MURDERER_SWORD_COUNTDOWN_START_REMAINING_SECONDS = 260; // 4:20
     private static final int MURDERER_SWORD_UNLOCK_REMAINING_SECONDS = 255; // 4:15
+    private static final Sound MURDERER_SWORD_COUNTDOWN_SOUND = Sound.CLICK;
+    private static final float MURDERER_SWORD_COUNTDOWN_SOUND_VOLUME = 1.0F;
+    private static final float MURDERER_SWORD_COUNTDOWN_SOUND_PITCH = 1.0F;
     private static final int TITLE_FADE_IN_TICKS = 0;
     private static final int TITLE_STAY_TICKS = 60; // 3 seconds
+    private static final int MYSTERY_POTION_TITLE_STAY_TICKS = 40; // 2 seconds
     private static final int ROLE_TITLE_STAY_TICKS = 100; // 5 seconds
     private static final int OUTCOME_TITLE_STAY_TICKS = 200; // 10 seconds
     private static final long SHOT_ARROW_DESPAWN_TICKS = 100L; // 5 seconds
@@ -98,15 +103,20 @@ public class MurderMysteryGameManager extends GameManager {
     private static final int ARROW_HOTBAR_SLOT = 2;
     private static final int MURDERER_BOW_HOTBAR_SLOT = 2; // Slot 3 in the player's hotbar.
     private static final int MURDERER_ARROW_HOTBAR_SLOT = 3; // Slot 4 in the player's hotbar.
+    private static final int MIDDLE_HOTBAR_SLOT = MurderMysteryMinimapService.HOTBAR_SLOT; // Slot 5 in the player's hotbar.
     private static final int GOLD_HOTBAR_SLOT = 8; // Last hotbar slot.
     private static final int MAP_GOLD_PICKUP_DELAY_TICKS = 10;
     private static final int GOLD_FOR_BOW = 10;
     private static final int MYSTERY_POTION_COST_GOLD = 1;
+    private static final int MYSTERY_POTION_MAX_CARRIED = 3;
+    private static final long MYSTERY_POTION_DELIVERY_DELAY_TICKS = 40L;
     private static final int MYSTERY_POTION_BLINDNESS_DURATION_SECONDS = 10;
     private static final int MYSTERY_POTION_INVISIBILITY_DURATION_SECONDS = 14;
     private static final int MYSTERY_POTION_RESISTANCE_DURATION_SECONDS = 20;
     private static final int MYSTERY_POTION_SLOWNESS_DURATION_SECONDS = 10;
     private static final int MYSTERY_POTION_SPEED_DURATION_SECONDS = 20;
+    private static final PotionEffectType MYSTERY_POTION_RESISTANCE_EFFECT_TYPE =
+            resolveCompatiblePotionEffectType("DAMAGE_RESISTANCE", "RESISTANCE");
     private static final double MYSTERY_POTION_HOLOGRAM_XZ_OFFSET = 0.5D;
     private static final double MYSTERY_POTION_HOLOGRAM_Y_OFFSET = 1.2D;
     private static final double MYSTERY_POTION_RESISTANCE_PARTICLE_Y_OFFSET = 1.0D;
@@ -125,16 +135,20 @@ public class MurderMysteryGameManager extends GameManager {
             ChatColor.RED + "You need at least " + ChatColor.GOLD + "1 Gold" + ChatColor.RED + " to use this!";
     private static final String MYSTERY_POTION_NO_SPACE_MESSAGE =
             ChatColor.RED + "You don't have enough inventory space!";
+    private static final String MYSTERY_POTION_IN_USE_MESSAGE =
+            ChatColor.RED + "Someone is already using that!";
+    private static final String MYSTERY_POTION_ACTIVE_EFFECT_MESSAGE =
+            ChatColor.RED + "You can only have one potion effect active at once!";
     private static final MysteryPotionOption[] MYSTERY_POTION_OPTIONS = {
-            new MysteryPotionOption("speed", "Speed", "SPEED II",
+            new MysteryPotionOption("speed", "Speed", "SPEED",
                     PotionEffectType.SPEED, MYSTERY_POTION_SPEED_DURATION_SECONDS, 1, true, false, (short) 1),
             new MysteryPotionOption("invisibility", "Invisibility", "INVISIBILITY",
                     PotionEffectType.INVISIBILITY, MYSTERY_POTION_INVISIBILITY_DURATION_SECONDS, 0, true, false, (short) 2),
-            new MysteryPotionOption("resistance", "Resistance", "RESISTANCE",
-                    null, MYSTERY_POTION_RESISTANCE_DURATION_SECONDS, 0, true, true, (short) 3),
+            new MysteryPotionOption("resistance", "Resistance", "INVINCIBILITY",
+                    MYSTERY_POTION_RESISTANCE_EFFECT_TYPE, MYSTERY_POTION_RESISTANCE_DURATION_SECONDS, 0, true, true, (short) 3),
             new MysteryPotionOption("blindness", "Blindness", "BLINDNESS",
                     PotionEffectType.BLINDNESS, MYSTERY_POTION_BLINDNESS_DURATION_SECONDS, 0, false, false, (short) 4),
-            new MysteryPotionOption("slowness", "Slowness", "SLOWNESS II",
+            new MysteryPotionOption("slowness", "Slowness", "SLOWNESS",
                     PotionEffectType.SLOW, MYSTERY_POTION_SLOWNESS_DURATION_SECONDS, 1, false, false, (short) 5)
     };
     private static final Effect MYSTERY_POTION_RESISTANCE_BLOCK_EFFECT =
@@ -163,6 +177,10 @@ public class MurderMysteryGameManager extends GameManager {
     private static final Sound MURDER_KILL_DAMAGE_SOUND = resolveMurderKillDamageSound();
     private static final Sound MYSTERY_POTION_SOUND =
             resolveCompatibleSound("DRINK", "ENTITY_GENERIC_DRINK", "FIZZ", "BLOCK_BREWING_STAND_BREW");
+    private static final Sound MYSTERY_POTION_FAILURE_SOUND =
+            resolveCompatibleSound("ANVIL_LAND", "BLOCK_ANVIL_LAND", "ANVIL_USE", "BLOCK_ANVIL_USE");
+    private static final float ROLE_ASSIGNMENT_SOUND_VOLUME = 2.0F;
+    private static final float ROLE_ASSIGNMENT_SOUND_PITCH = 1.0F;
     private static final String TOKEN_REASON_SURVIVED_30_SECONDS = "Survived 30 seconds";
     private static final String TOKEN_REASON_PICKED_UP_GOLD = "Picked up gold";
     private static final String SPECTATOR_CHAT_HINT_LINE_ONE =
@@ -186,21 +204,30 @@ public class MurderMysteryGameManager extends GameManager {
     private float droppedBowYaw;
     private final Map<Item, Integer> activeMapDropItems = new HashMap<>();
     private final List<ArmorStand> mysteryPotionHolograms = new ArrayList<>();
+    private final Map<UUID, Integer> pendingMysteryPotionPurchases = new HashMap<>();
+    private final Map<MysteryPotionBlockRef, UUID> activeMysteryPotionUsers = new HashMap<>();
+    private final Map<MysteryPotionBlockRef, Integer> activeMysteryPotionUseCounts = new HashMap<>();
     private final Map<UUID, Set<String>> revealedMysteryPotionEffects = new HashMap<>();
     private final Map<UUID, MysteryPotionOption> activeMysteryPotionEffects = new HashMap<>();
+    private final Map<UUID, Long> mysteryPotionEffectExpiresAt = new HashMap<>();
     private final Map<UUID, Long> mysteryPotionResistanceExpiresAt = new HashMap<>();
+    private final Map<UUID, Integer> lastMurdererSwordCountdownSoundSeconds = new HashMap<>();
     private final Set<Arrow> activeRoundArrows = new HashSet<>();
     private final Set<OpenableBlockRef> trackedOpenables = new HashSet<>();
+    private long mysteryPotionRoundToken;
     private UUID originalDetectiveUuid;
     private boolean originalDetectiveEliminated;
     private UUID summaryMurdererUuid;
     private boolean summaryMurdererEliminated;
+    private final MurderMysteryMinimapService minimapService;
     private ActionBarService actionBarService;
 
     public MurderMysteryGameManager(CorePlugin plugin, BossBarService bossBarService) {
         super(plugin, bossBarService);
         this.innocentsWon = false;
         this.elapsedGameSeconds = 0;
+        this.minimapService = new MurderMysteryMinimapService(plugin, this);
+        this.minimapService.start();
     }
 
     public void setActionBarService(ActionBarService actionBarService) {
@@ -227,10 +254,27 @@ public class MurderMysteryGameManager extends GameManager {
     }
 
     @Override
+    public void preparePregamePlayer(Player player) {
+        super.preparePregamePlayer(player);
+        minimapService.giveMap(player);
+    }
+
+    @Override
+    public void prepareLobbyPlayer(Player player) {
+        super.prepareLobbyPlayer(player);
+        if (getState() == GameState.WAITING || getState() == GameState.STARTING) {
+            minimapService.giveMap(player);
+            return;
+        }
+        minimapService.removeMap(player);
+    }
+
+    @Override
     protected void onGameStarted(GameMap activeMap) {
         innocentsWon = false;
         elapsedGameSeconds = 0;
         murdererSwordUnlocked = false;
+        lastMurdererSwordCountdownSoundSeconds.clear();
         outcomeTitlesShown = false;
         closeTrackedOpenables();
         clearActiveRoundArrows();
@@ -331,6 +375,7 @@ public class MurderMysteryGameManager extends GameManager {
 
     @Override
     protected void onGameEnding() {
+        minimapService.resetAll();
         clearMurdererLastInnocentSpeed();
         if (goldTask != null) {
             goldTask.cancel();
@@ -344,6 +389,7 @@ public class MurderMysteryGameManager extends GameManager {
         clearMysteryPotionRoundState();
         forceOutcomeTitlesOnGameEnd();
         murdererSwordUnlocked = false;
+        lastMurdererSwordCountdownSoundSeconds.clear();
         outcomeTitlesShown = true;
         getTablistService().setNameTagsHidden(true);
         getTablistService().setForcedNameColor(ChatColor.WHITE);
@@ -797,7 +843,7 @@ public class MurderMysteryGameManager extends GameManager {
             return false;
         }
         try {
-            player.playSound(player.getLocation(), sound, 1.0f, 1.0f);
+            player.playSound(player.getLocation(), sound, ROLE_ASSIGNMENT_SOUND_VOLUME, ROLE_ASSIGNMENT_SOUND_PITCH);
             return true;
         } catch (IllegalArgumentException ignored) {
             // Fallback sounds are handled by caller.
@@ -811,7 +857,7 @@ public class MurderMysteryGameManager extends GameManager {
         }
         final String roleSoundKey = soundKey.trim();
         try {
-            player.playSound(player.getLocation(), roleSoundKey, 1.0f, 1.0f);
+            player.playSound(player.getLocation(), roleSoundKey, ROLE_ASSIGNMENT_SOUND_VOLUME, ROLE_ASSIGNMENT_SOUND_PITCH);
             return true;
         } catch (IllegalArgumentException ignored) {
             return false;
@@ -1033,23 +1079,88 @@ public class MurderMysteryGameManager extends GameManager {
         if (mmPlayer == null || !mmPlayer.isAlive()) {
             return true;
         }
-        if (mmPlayer.getGold() < MYSTERY_POTION_COST_GOLD) {
-            player.sendMessage(NOT_ENOUGH_MYSTERY_POTION_GOLD_MESSAGE);
+        UUID playerUuid = player.getUniqueId();
+        MysteryPotionBlockRef blockRef = MysteryPotionBlockRef.from(block);
+        UUID activeUser = activeMysteryPotionUsers.get(blockRef);
+        if (activeUser != null && !activeUser.equals(playerUuid)) {
+            sendMysteryPotionInUseFeedback(player);
             return true;
         }
-        int potionSlot = findUnusedMysteryPotionSlot(player, mmPlayer);
-        if (potionSlot < 0) {
-            player.sendMessage(MYSTERY_POTION_NO_SPACE_MESSAGE);
+        int pendingPurchases = getPendingMysteryPotionPurchases(playerUuid);
+        if (countCarriedMysteryPotions(player) + pendingPurchases >= MYSTERY_POTION_MAX_CARRIED) {
+            sendMysteryPotionNoSpaceFeedback(player);
+            return true;
+        }
+        if (mmPlayer.getGold() < MYSTERY_POTION_COST_GOLD) {
+            sendMysteryPotionNoGoldFeedback(player);
+            return true;
+        }
+        if (countUnusedMysteryPotionSlots(player, mmPlayer) <= pendingPurchases) {
+            sendMysteryPotionNoSpaceFeedback(player);
             return true;
         }
         MysteryPotionOption option = randomMysteryPotionOption();
-        player.getInventory().setItem(
-                potionSlot,
-                createMysteryPotionItem(option, isMysteryPotionOptionRevealed(player.getUniqueId(), option))
-        );
         mmPlayer.removeGold(MYSTERY_POTION_COST_GOLD);
+        addPendingMysteryPotionPurchase(playerUuid);
+        addActiveMysteryPotionUse(blockRef, playerUuid);
+        scheduleMysteryPotionDelivery(playerUuid, option, mysteryPotionRoundToken, blockRef);
         syncGoldHotbarItem(player, mmPlayer);
         return true;
+    }
+
+    private void scheduleMysteryPotionDelivery(UUID playerUuid,
+                                               MysteryPotionOption option,
+                                               long roundToken,
+                                               MysteryPotionBlockRef blockRef) {
+        getPlugin().getServer().getScheduler().runTaskLater(
+                getPlugin(),
+                () -> deliverMysteryPotionPurchase(playerUuid, option, roundToken, blockRef),
+                MYSTERY_POTION_DELIVERY_DELAY_TICKS
+        );
+    }
+
+    private void deliverMysteryPotionPurchase(UUID playerUuid,
+                                              MysteryPotionOption option,
+                                              long roundToken,
+                                              MysteryPotionBlockRef blockRef) {
+        if (playerUuid == null || roundToken != mysteryPotionRoundToken || getState() != GameState.IN_GAME) {
+            return;
+        }
+        removeActiveMysteryPotionUse(blockRef, playerUuid);
+        if (!removePendingMysteryPotionPurchase(playerUuid) || option == null) {
+            return;
+        }
+        Player player = Bukkit.getPlayer(playerUuid);
+        if (player == null || !player.isOnline()) {
+            return;
+        }
+        MurderMysteryGamePlayer mmPlayer = getMurderMysteryPlayer(player);
+        if (mmPlayer == null || !mmPlayer.isAlive()) {
+            return;
+        }
+        if (countCarriedMysteryPotions(player) >= MYSTERY_POTION_MAX_CARRIED) {
+            refundMysteryPotionPurchase(player, mmPlayer);
+            sendMysteryPotionNoSpaceFeedback(player);
+            return;
+        }
+        int potionSlot = findUnusedMysteryPotionSlot(player, mmPlayer);
+        if (potionSlot < 0) {
+            refundMysteryPotionPurchase(player, mmPlayer);
+            sendMysteryPotionNoSpaceFeedback(player);
+            return;
+        }
+        player.getInventory().setItem(
+                potionSlot,
+                createMysteryPotionItem(option, isMysteryPotionOptionRevealed(playerUuid, option))
+        );
+    }
+
+    private void refundMysteryPotionPurchase(Player player, MurderMysteryGamePlayer mmPlayer) {
+        if (player == null || mmPlayer == null) {
+            return;
+        }
+        mmPlayer.addGold(MYSTERY_POTION_COST_GOLD);
+        syncGoldHotbarItem(player, mmPlayer);
     }
 
     private int findUnusedMysteryPotionSlot(Player player, MurderMysteryGamePlayer mmPlayer) {
@@ -1073,6 +1184,47 @@ public class MurderMysteryGameManager extends GameManager {
         return -1;
     }
 
+    private int countUnusedMysteryPotionSlots(Player player, MurderMysteryGamePlayer mmPlayer) {
+        if (player == null) {
+            return 0;
+        }
+        PlayerInventory inventory = player.getInventory();
+        if (inventory == null) {
+            return 0;
+        }
+        int unusedSlots = 0;
+        int inventorySize = getMysteryPotionInventorySize(inventory);
+        for (int slot = 0; slot < inventorySize; slot++) {
+            if (isReservedLoadoutSlot(slot, mmPlayer)) {
+                continue;
+            }
+            ItemStack item = inventory.getItem(slot);
+            if (item == null || item.getType() == Material.AIR) {
+                unusedSlots++;
+            }
+        }
+        return unusedSlots;
+    }
+
+    private int countCarriedMysteryPotions(Player player) {
+        if (player == null) {
+            return 0;
+        }
+        PlayerInventory inventory = player.getInventory();
+        if (inventory == null) {
+            return 0;
+        }
+        int carried = 0;
+        int inventorySize = getMysteryPotionInventorySize(inventory);
+        for (int slot = 0; slot < inventorySize; slot++) {
+            ItemStack item = inventory.getItem(slot);
+            if (isMysteryPotionItem(item)) {
+                carried += Math.max(1, item.getAmount());
+            }
+        }
+        return carried;
+    }
+
     private int getMysteryPotionInventorySize(PlayerInventory inventory) {
         if (inventory == null) {
             return 0;
@@ -1085,7 +1237,7 @@ public class MurderMysteryGameManager extends GameManager {
     }
 
     private boolean isReservedLoadoutSlot(int slot, MurderMysteryGamePlayer mmPlayer) {
-        if (slot == HOTBAR_SLOT_ONE_INDEX || slot == GOLD_HOTBAR_SLOT) {
+        if (slot == MIDDLE_HOTBAR_SLOT || slot == GOLD_HOTBAR_SLOT) {
             return true;
         }
         MurderMysteryRole role = mmPlayer == null ? MurderMysteryRole.INNOCENT : mmPlayer.getRole();
@@ -1153,12 +1305,14 @@ public class MurderMysteryGameManager extends GameManager {
         if (option == null) {
             return false;
         }
+        if (hasActiveMysteryPotionEffect(player)) {
+            player.sendMessage(MYSTERY_POTION_ACTIVE_EFFECT_MESSAGE);
+            return false;
+        }
         applyMysteryPotionEffect(player, option);
         revealMysteryPotionOption(player, option);
         showMysteryPotionTitle(player, option);
         playMysteryPotionSound(player.getLocation());
-        player.sendMessage(ChatColor.LIGHT_PURPLE + "Mystery Potion! "
-                + ChatColor.YELLOW + option.getName());
         return true;
     }
 
@@ -1206,6 +1360,14 @@ public class MurderMysteryGameManager extends GameManager {
         return role == MurderMysteryRole.INNOCENT || role == MurderMysteryRole.DETECTIVE;
     }
 
+    public boolean blocksMysteryPotionResistanceArrowDamage(Player player) {
+        if (!hasActiveMysteryPotionResistance(player)) {
+            return false;
+        }
+        MurderMysteryGamePlayer mmPlayer = getMurderMysteryPlayer(player);
+        return mmPlayer != null && mmPlayer.isAlive();
+    }
+
     public void showMysteryPotionResistanceBlock(Player player) {
         if (player == null || player.getWorld() == null || MYSTERY_POTION_RESISTANCE_BLOCK_EFFECT == null) {
             return;
@@ -1234,7 +1396,82 @@ public class MurderMysteryGameManager extends GameManager {
             return;
         }
         clearActiveMysteryPotionEffect(player);
+        pendingMysteryPotionPurchases.remove(player.getUniqueId());
+        removeActiveMysteryPotionUses(player.getUniqueId());
         revealedMysteryPotionEffects.remove(player.getUniqueId());
+    }
+
+    private int getPendingMysteryPotionPurchases(UUID playerUuid) {
+        if (playerUuid == null) {
+            return 0;
+        }
+        Integer pending = pendingMysteryPotionPurchases.get(playerUuid);
+        return pending == null ? 0 : Math.max(0, pending);
+    }
+
+    private void addPendingMysteryPotionPurchase(UUID playerUuid) {
+        if (playerUuid == null) {
+            return;
+        }
+        pendingMysteryPotionPurchases.put(playerUuid, getPendingMysteryPotionPurchases(playerUuid) + 1);
+    }
+
+    private boolean removePendingMysteryPotionPurchase(UUID playerUuid) {
+        if (playerUuid == null) {
+            return false;
+        }
+        int pending = getPendingMysteryPotionPurchases(playerUuid);
+        if (pending <= 0) {
+            return false;
+        }
+        if (pending <= 1) {
+            pendingMysteryPotionPurchases.remove(playerUuid);
+            return true;
+        }
+        pendingMysteryPotionPurchases.put(playerUuid, pending - 1);
+        return true;
+    }
+
+    private void addActiveMysteryPotionUse(MysteryPotionBlockRef blockRef, UUID playerUuid) {
+        if (blockRef == null || playerUuid == null) {
+            return;
+        }
+        activeMysteryPotionUsers.put(blockRef, playerUuid);
+        Integer count = activeMysteryPotionUseCounts.get(blockRef);
+        activeMysteryPotionUseCounts.put(blockRef, count == null ? 1 : Math.max(0, count) + 1);
+    }
+
+    private void removeActiveMysteryPotionUse(MysteryPotionBlockRef blockRef, UUID playerUuid) {
+        if (blockRef == null || playerUuid == null) {
+            return;
+        }
+        UUID activeUser = activeMysteryPotionUsers.get(blockRef);
+        if (!playerUuid.equals(activeUser)) {
+            return;
+        }
+        Integer count = activeMysteryPotionUseCounts.get(blockRef);
+        if (count == null || count <= 1) {
+            activeMysteryPotionUsers.remove(blockRef);
+            activeMysteryPotionUseCounts.remove(blockRef);
+            return;
+        }
+        activeMysteryPotionUseCounts.put(blockRef, count - 1);
+    }
+
+    private void removeActiveMysteryPotionUses(UUID playerUuid) {
+        if (playerUuid == null || activeMysteryPotionUsers.isEmpty()) {
+            return;
+        }
+        Set<MysteryPotionBlockRef> refsToRemove = new HashSet<>();
+        for (Map.Entry<MysteryPotionBlockRef, UUID> entry : activeMysteryPotionUsers.entrySet()) {
+            if (playerUuid.equals(entry.getValue())) {
+                refsToRemove.add(entry.getKey());
+            }
+        }
+        for (MysteryPotionBlockRef blockRef : refsToRemove) {
+            activeMysteryPotionUsers.remove(blockRef);
+            activeMysteryPotionUseCounts.remove(blockRef);
+        }
     }
 
     private ItemStack createMysteryPotionItem(MysteryPotionOption option, boolean revealed) {
@@ -1407,17 +1644,59 @@ public class MurderMysteryGameManager extends GameManager {
     private void applyMysteryPotionEffect(Player player, MysteryPotionOption option) {
         clearActiveMysteryPotionEffect(player);
         UUID playerUuid = player.getUniqueId();
+        long expiresAt = System.currentTimeMillis() + option.getDurationSeconds() * MILLIS_PER_SECOND;
         activeMysteryPotionEffects.put(playerUuid, option);
+        mysteryPotionEffectExpiresAt.put(playerUuid, expiresAt);
         if (option.isResistance()) {
-            mysteryPotionResistanceExpiresAt.put(
-                    playerUuid,
-                    System.currentTimeMillis() + option.getDurationSeconds() * MILLIS_PER_SECOND
-            );
-            return;
+            mysteryPotionResistanceExpiresAt.put(playerUuid, expiresAt);
         }
         PotionEffect effect = option.createEffect();
         if (effect != null) {
             player.addPotionEffect(effect, true);
+        }
+        scheduleMysteryPotionEffectExpiration(playerUuid, option, expiresAt, mysteryPotionRoundToken);
+    }
+
+    private void scheduleMysteryPotionEffectExpiration(UUID playerUuid,
+                                                       MysteryPotionOption option,
+                                                       long expiresAt,
+                                                       long roundToken) {
+        if (playerUuid == null || option == null) {
+            return;
+        }
+        long delayTicks = Math.max(1L, option.getDurationSeconds() * 20L);
+        getPlugin().getServer().getScheduler().runTaskLater(
+                getPlugin(),
+                () -> expireMysteryPotionEffect(playerUuid, option, expiresAt, roundToken),
+                delayTicks
+        );
+    }
+
+    private void expireMysteryPotionEffect(UUID playerUuid,
+                                           MysteryPotionOption option,
+                                           long expiresAt,
+                                           long roundToken) {
+        if (playerUuid == null || option == null || roundToken != mysteryPotionRoundToken) {
+            return;
+        }
+        MysteryPotionOption activeOption = activeMysteryPotionEffects.get(playerUuid);
+        Long activeExpiresAt = mysteryPotionEffectExpiresAt.get(playerUuid);
+        if (activeOption == null
+                || !activeOption.getKey().equals(option.getKey())
+                || activeExpiresAt == null
+                || activeExpiresAt.longValue() != expiresAt) {
+            return;
+        }
+        Player player = Bukkit.getPlayer(playerUuid);
+        if (player == null || !player.isOnline()) {
+            activeMysteryPotionEffects.remove(playerUuid);
+            mysteryPotionEffectExpiresAt.remove(playerUuid);
+            mysteryPotionResistanceExpiresAt.remove(playerUuid);
+            return;
+        }
+        clearActiveMysteryPotionEffect(player);
+        if (option.shouldRefreshMurdererLastInnocentSpeedAfterExpiration()) {
+            refreshMurdererLastInnocentSpeed();
         }
     }
 
@@ -1427,6 +1706,7 @@ public class MurderMysteryGameManager extends GameManager {
         }
         UUID playerUuid = player.getUniqueId();
         MysteryPotionOption activeOption = activeMysteryPotionEffects.remove(playerUuid);
+        mysteryPotionEffectExpiresAt.remove(playerUuid);
         mysteryPotionResistanceExpiresAt.remove(playerUuid);
         if (activeOption != null && activeOption.hasBukkitEffect()) {
             player.removePotionEffect(activeOption.getType());
@@ -1434,6 +1714,10 @@ public class MurderMysteryGameManager extends GameManager {
     }
 
     private void clearMysteryPotionRoundState() {
+        mysteryPotionRoundToken++;
+        pendingMysteryPotionPurchases.clear();
+        activeMysteryPotionUsers.clear();
+        activeMysteryPotionUseCounts.clear();
         for (MurderMysteryGamePlayer mmPlayer : getMmPlayers()) {
             Player player = Bukkit.getPlayer(mmPlayer.getUuid());
             if (player != null && player.isOnline()) {
@@ -1441,12 +1725,44 @@ public class MurderMysteryGameManager extends GameManager {
             }
         }
         activeMysteryPotionEffects.clear();
+        mysteryPotionEffectExpiresAt.clear();
         mysteryPotionResistanceExpiresAt.clear();
         revealedMysteryPotionEffects.clear();
     }
 
+    private boolean hasActiveMysteryPotionEffect(Player player) {
+        if (player == null) {
+            return false;
+        }
+        UUID playerUuid = player.getUniqueId();
+        MysteryPotionOption activeOption = activeMysteryPotionEffects.get(playerUuid);
+        Long expiresAt = mysteryPotionEffectExpiresAt.get(playerUuid);
+        if (activeOption == null || expiresAt == null) {
+            activeMysteryPotionEffects.remove(playerUuid);
+            mysteryPotionEffectExpiresAt.remove(playerUuid);
+            mysteryPotionResistanceExpiresAt.remove(playerUuid);
+            return false;
+        }
+        if (System.currentTimeMillis() >= expiresAt) {
+            clearActiveMysteryPotionEffect(player);
+            return false;
+        }
+        return true;
+    }
+
+    private boolean hasActiveMysteryPotionSpeed(Player player) {
+        if (player == null || !hasActiveMysteryPotionEffect(player)) {
+            return false;
+        }
+        MysteryPotionOption option = activeMysteryPotionEffects.get(player.getUniqueId());
+        return option != null && option.isSpeed();
+    }
+
     private boolean hasActiveMysteryPotionResistance(Player player) {
         if (player == null) {
+            return false;
+        }
+        if (!hasActiveMysteryPotionEffect(player)) {
             return false;
         }
         UUID playerUuid = player.getUniqueId();
@@ -1459,6 +1775,7 @@ public class MurderMysteryGameManager extends GameManager {
             MysteryPotionOption activeOption = activeMysteryPotionEffects.get(playerUuid);
             if (activeOption != null && activeOption.isResistance()) {
                 activeMysteryPotionEffects.remove(playerUuid);
+                mysteryPotionEffectExpiresAt.remove(playerUuid);
             }
             return false;
         }
@@ -1472,10 +1789,10 @@ public class MurderMysteryGameManager extends GameManager {
         ChatColor color = option.isPositive() ? ChatColor.GREEN : ChatColor.RED;
         getTitleService().send(
                 player,
-                color + Integer.toString(option.getDurationSeconds()) + "S OF " + option.getTitleName(),
                 "",
+                color + Integer.toString(option.getDurationSeconds()) + "S OF " + option.getTitleName(),
                 TITLE_FADE_IN_TICKS,
-                TITLE_STAY_TICKS,
+                MYSTERY_POTION_TITLE_STAY_TICKS,
                 TITLE_FADE_OUT_FAST_TICKS
         );
     }
@@ -1488,6 +1805,43 @@ public class MurderMysteryGameManager extends GameManager {
             try {
                 location.getWorld().playSound(location, MYSTERY_POTION_SOUND, 1.0F, 1.0F);
                 return;
+            } catch (IllegalArgumentException ignored) {
+                // Sound enum mismatch on legacy/newer API variants.
+            }
+        }
+    }
+
+    private void sendMysteryPotionNoGoldFeedback(Player player) {
+        if (player == null) {
+            return;
+        }
+        player.sendMessage(NOT_ENOUGH_MYSTERY_POTION_GOLD_MESSAGE);
+        playMysteryPotionFailureSound(player);
+    }
+
+    private void sendMysteryPotionNoSpaceFeedback(Player player) {
+        if (player == null) {
+            return;
+        }
+        player.sendMessage(MYSTERY_POTION_NO_SPACE_MESSAGE);
+        playMysteryPotionFailureSound(player);
+    }
+
+    private void sendMysteryPotionInUseFeedback(Player player) {
+        if (player == null) {
+            return;
+        }
+        player.sendMessage(MYSTERY_POTION_IN_USE_MESSAGE);
+        playMysteryPotionFailureSound(player);
+    }
+
+    private void playMysteryPotionFailureSound(Player player) {
+        if (player == null) {
+            return;
+        }
+        if (MYSTERY_POTION_FAILURE_SOUND != null) {
+            try {
+                player.playSound(player.getLocation(), MYSTERY_POTION_FAILURE_SOUND, 1.0F, 1.0F);
             } catch (IllegalArgumentException ignored) {
                 // Sound enum mismatch on legacy/newer API variants.
             }
@@ -1833,6 +2187,7 @@ public class MurderMysteryGameManager extends GameManager {
                 continue;
             }
             player.getInventory().clear();
+            minimapService.giveMap(player);
             showRoleTitle(player, mmPlayer.getRole());
             sendTeamingWarning(player, mmPlayer.getRole());
             syncGoldHotbarItem(player, mmPlayer);
@@ -1875,10 +2230,33 @@ public class MurderMysteryGameManager extends GameManager {
             }
             if (mmPlayer.getRole() == MurderMysteryRole.MURDERER) {
                 player.sendMessage(murdererMessage);
-                player.playSound(player.getLocation(), Sound.CLICK, 1.0f, 1.0f);
             } else {
                 player.sendMessage(othersMessage);
             }
+            playMurdererSwordCountdownSound(player, seconds);
+        }
+    }
+
+    private void playMurdererSwordCountdownSound(Player player, int seconds) {
+        if (player == null || MURDERER_SWORD_COUNTDOWN_SOUND == null) {
+            return;
+        }
+        UUID playerUuid = player.getUniqueId();
+        int safeSeconds = Math.max(0, seconds);
+        Integer lastSoundSecond = lastMurdererSwordCountdownSoundSeconds.get(playerUuid);
+        if (lastSoundSecond != null && lastSoundSecond.intValue() == safeSeconds) {
+            return;
+        }
+        lastMurdererSwordCountdownSoundSeconds.put(playerUuid, safeSeconds);
+        try {
+            player.playSound(
+                    player.getEyeLocation(),
+                    MURDERER_SWORD_COUNTDOWN_SOUND,
+                    MURDERER_SWORD_COUNTDOWN_SOUND_VOLUME,
+                    MURDERER_SWORD_COUNTDOWN_SOUND_PITCH
+            );
+        } catch (IllegalArgumentException ignored) {
+            // Sound enum mismatch on legacy/newer API variants.
         }
     }
 
@@ -2183,6 +2561,9 @@ public class MurderMysteryGameManager extends GameManager {
             if (player == null || !player.isOnline()) {
                 continue;
             }
+            if (hasActiveMysteryPotionSpeed(player)) {
+                continue;
+            }
             player.addPotionEffect(
                     new PotionEffect(PotionEffectType.SPEED, Integer.MAX_VALUE, 0, false, false),
                     true
@@ -2197,6 +2578,9 @@ public class MurderMysteryGameManager extends GameManager {
             }
             Player player = Bukkit.getPlayer(mmPlayer.getUuid());
             if (player == null || !player.isOnline()) {
+                continue;
+            }
+            if (hasActiveMysteryPotionSpeed(player)) {
                 continue;
             }
             player.removePotionEffect(PotionEffectType.SPEED);
@@ -2454,6 +2838,7 @@ public class MurderMysteryGameManager extends GameManager {
     }
 
     public void cleanupTransientRoundEntitiesForShutdown() {
+        minimapService.stop();
         closeTrackedOpenables();
         clearActiveRoundArrows();
         clearActiveMapDropItems();
@@ -2480,6 +2865,30 @@ public class MurderMysteryGameManager extends GameManager {
             }
         }
         return false;
+    }
+
+    public List<MurderMysteryGamePlayer> getMurderMysteryPlayersSnapshot() {
+        return getMmPlayers();
+    }
+
+    public GameMap getActiveGameMap() {
+        return getMapManager() == null ? null : getMapManager().getActiveMap();
+    }
+
+    public int getRemainingGameSeconds() {
+        return Math.max(0, getGameRemaining());
+    }
+
+    public Location getDroppedBowLocation() {
+        if (droppedBowDisplay == null || !droppedBowDisplay.isValid() || droppedBowDisplay.isDead()) {
+            return null;
+        }
+        Location location = droppedBowDisplay.getLocation();
+        return location == null ? null : location.clone();
+    }
+
+    public boolean isMinimapItem(ItemStack item) {
+        return minimapService.isMinimapItem(item);
     }
 
     private int getAliveCount(MurderMysteryRole role) {
@@ -2533,6 +2942,22 @@ public class MurderMysteryGameManager extends GameManager {
 
     private static Sound resolveMurderKillDamageSound() {
         return resolveCompatibleSound("ENTITY_PLAYER_HURT", "HURT_FLESH");
+    }
+
+    private static PotionEffectType resolveCompatiblePotionEffectType(String... names) {
+        if (names == null) {
+            return null;
+        }
+        for (String name : names) {
+            if (name == null || name.trim().isEmpty()) {
+                continue;
+            }
+            PotionEffectType type = PotionEffectType.getByName(name);
+            if (type != null) {
+                return type;
+            }
+        }
+        return null;
     }
 
     private static Sound resolveCompatibleSound(String... names) {
@@ -2906,6 +3331,14 @@ public class MurderMysteryGameManager extends GameManager {
             return resistance;
         }
 
+        private boolean isSpeed() {
+            return "speed".equals(key);
+        }
+
+        private boolean shouldRefreshMurdererLastInnocentSpeedAfterExpiration() {
+            return isSpeed() || "slowness".equals(key) || "blindness".equals(key);
+        }
+
         private boolean hasBukkitEffect() {
             return type != null;
         }
@@ -2971,6 +3404,53 @@ public class MurderMysteryGameManager extends GameManager {
                 return false;
             }
             OpenableBlockRef that = (OpenableBlockRef) other;
+            if (x != that.x || y != that.y || z != that.z) {
+                return false;
+            }
+            if (worldName == null) {
+                return that.worldName == null;
+            }
+            return worldName.equals(that.worldName);
+        }
+
+        @Override
+        public int hashCode() {
+            int result = worldName == null ? 0 : worldName.hashCode();
+            result = 31 * result + x;
+            result = 31 * result + y;
+            result = 31 * result + z;
+            return result;
+        }
+    }
+
+    private static final class MysteryPotionBlockRef {
+        private final String worldName;
+        private final int x;
+        private final int y;
+        private final int z;
+
+        private MysteryPotionBlockRef(String worldName, int x, int y, int z) {
+            this.worldName = worldName;
+            this.x = x;
+            this.y = y;
+            this.z = z;
+        }
+
+        private static MysteryPotionBlockRef from(Block block) {
+            World world = block.getWorld();
+            String worldName = world == null ? null : world.getName();
+            return new MysteryPotionBlockRef(worldName, block.getX(), block.getY(), block.getZ());
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof MysteryPotionBlockRef)) {
+                return false;
+            }
+            MysteryPotionBlockRef that = (MysteryPotionBlockRef) other;
             if (x != that.x || y != that.y || z != that.z) {
                 return false;
             }

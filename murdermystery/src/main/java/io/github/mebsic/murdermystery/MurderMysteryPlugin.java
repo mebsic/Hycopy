@@ -36,6 +36,7 @@ import io.github.mebsic.murdermystery.command.ToggleHintsCommand;
 import io.github.mebsic.murdermystery.command.WhoIsRoleCommand;
 import io.github.mebsic.murdermystery.command.GetRoleCommand;
 import io.github.mebsic.murdermystery.command.ImageCommand;
+import io.github.mebsic.murdermystery.command.WinsCommand;
 import io.github.mebsic.murdermystery.listener.MurderMysteryListener;
 import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.core.model.Stats;
@@ -122,6 +123,7 @@ public class MurderMysteryPlugin extends JavaPlugin implements HubContext {
         this.roleChanceStore = corePlugin.getRoleChanceStore();
         this.corePlugin.ensureServerIdentity();
         registerCommand("token", new TokenCommand(corePlugin));
+        registerCommand("wins", new WinsCommand(corePlugin));
         registerCommand("image", new ImageCommand(corePlugin));
         registerCommand("clearimage", new ClearImageCommand(corePlugin));
         try {

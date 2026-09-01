@@ -348,6 +348,12 @@ public class ChatFormatListener implements Listener {
         if (safeWins < 1_000) {
             return Integer.toString(safeWins);
         }
+        if (safeWins >= 1_000_000_000) {
+            return formatCompactWins(safeWins, 1_000_000_000, "B");
+        }
+        if (safeWins >= 1_000_000) {
+            return formatCompactWins(safeWins, 1_000_000, "M");
+        }
         if (safeWins < 10_000) {
             int tenths = safeWins / 100;
             int whole = tenths / 10;
@@ -358,6 +364,16 @@ public class ChatFormatListener implements Listener {
             return whole + "." + decimal + "k";
         }
         return (safeWins / 1_000) + "k";
+    }
+
+    private String formatCompactWins(int wins, int unit, String suffix) {
+        int tenths = wins / (unit / 10);
+        int whole = tenths / 10;
+        int decimal = tenths % 10;
+        if (decimal == 0) {
+            return whole + suffix;
+        }
+        return whole + "." + decimal + suffix;
     }
 
     private String formatWholeNumber(int value) {

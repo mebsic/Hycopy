@@ -1,0 +1,113 @@
+package io.github.mebsic.murdermystery.command;
+
+import io.github.mebsic.core.CorePlugin;
+import io.github.mebsic.core.manager.MongoManager;
+import io.github.mebsic.core.model.Profile;
+import io.github.mebsic.core.model.Rank;
+import io.github.mebsic.core.service.ProfileCommandSyncService;
+import io.github.mebsic.core.util.CommonMessages;
+import io.github.mebsic.core.util.MojangApi;
+import io.github.mebsic.core.util.RankUtil;
+import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
+
+import java.util.UUID;
+
+public class WinsCommand implements CommandExecutor {
+    private final CorePlugin corePlugin;
+
+    public WinsCommand(CorePlugin corePlugin) {
+        this.corePlugin = corePlugin;
+    }
+
+    @Override
+    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (corePlugin == null) {
+            return true;
+        }
+        if (sender instanceof Player) {
+            Player player = (Player) sender;
+            if (!RankUtil.hasAtLeast(corePlugin, player, Rank.STAFF)) {
+                player.sendMessage(ChatColor.RED + CommonMessages.NO_PERMISSION_COMMAND);
+                return true;
+            }
+        }
+        if (args.length < 2) {
+            sender.sendMessage(ChatColor.RED + "Invalid usage! Correct usage:");
+            sender.sendMessage(ChatColor.RED + "/wins <player> <amount>");
+            return true;
+        }
+
+        Player target = Bukkit.getPlayerExact(args[0]);
+        UUID uuid = target != null ? target.getUniqueId() : MojangApi.lookupUuid(args[0]);
+        String name = target != null ? target.getName() : args[0];
+        if (uuid == null) {
+            sender.sendMessage(ChatColor.RED + CommonMessages.PLAYER_NOT_FOUND_COMMAND);
+            return true;
+        }
+
+        int amount;
+        try {
+            amount = Integer.parseInt(args[1]);
+        } catch (NumberFormatException ex) {
+            sender.sendMessage(ChatColor.RED + "Wins amount must be a number!");
+            return true;
+        }
+        if (amount < 0) {
+            sender.sendMessage(ChatColor.RED + "Wins amount must be 0 or higher!");
+            return true;
+        }
+
+        boolean selfTarget = sender instanceof Player
+                && uuid.equals(((Player) sender).getUniqueId());
+        if (target != null) {
+            Profile profile = corePlugin.getProfile(uuid);
+            if (profile == null) {
+                if (selfTarget) {
+                    sender.sendMessage(ChatColor.RED + CommonMessages.PROFILE_LOADING);
+                } else {
+                    sender.sendMessage(ChatColor.RED + CommonMessages.TARGET_PROFILE_LOADING_COMMAND);
+                }
+                return true;
+            }
+            setWins(profile, amount);
+            corePlugin.saveProfile(profile);
+        } else {
+            if (!corePlugin.isMongoEnabled() || corePlugin.getProfileStore() == null) {
+                sender.sendMessage(ChatColor.RED + "MongoDB is not enabled!");
+                return true;
+            }
+            Profile profile = corePlugin.getProfileStore().load(uuid, name);
+            setWins(profile, amount);
+            corePlugin.getProfileStore().save(profile);
+        }
+
+        ProfileCommandSyncService sync = corePlugin.getProfileCommandSyncService();
+        if (sync != null) {
+            sync.dispatchCounterSet(
+                    uuid,
+                    MongoManager.MURDER_MYSTERY_LIFETIME_WINS_KEY,
+                    amount,
+                    null,
+                    null
+            );
+        }
+
+        sender.sendMessage(ChatColor.GREEN + CommonMessages.DONE);
+        return true;
+    }
+
+    private void setWins(Profile profile, int amount) {
+        if (profile == null || profile.getStats() == null) {
+            return;
+        }
+        int current = Math.max(0, profile.getStats().getWins());
+        if (current != amount) {
+            profile.getStats().addWins(amount - current);
+        }
+    }
+}

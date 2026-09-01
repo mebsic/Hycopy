@@ -75,6 +75,8 @@ public class GameManager {
     private static final double[] SPAWN_Y_CORRECTION_OFFSETS = {0.5D, 1.0D, 1.5D, 2.0D, 2.5D, 3.0D};
     private static final String POST_GAME_FRAME_BAR = "▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬";
     private static final Sound COUNTDOWN_TICK_SOUND = Sound.CLICK;
+    private static final float COUNTDOWN_TICK_SOUND_VOLUME = 1.0f;
+    private static final float COUNTDOWN_TICK_SOUND_PITCH = 1.0f;
 
     private final CorePlugin plugin;
     private final MapManager mapManager;
@@ -85,6 +87,7 @@ public class GameManager {
     private final Map<UUID, GamePlayer> players;
     private final Map<UUID, LinkedHashMap<String, Integer>> roundRewardSummary;
     private final Map<UUID, Integer> roundMysteryDustRewards;
+    private final Map<UUID, Integer> lastCountdownTickSoundSeconds;
     private final AtomicBoolean mapConfigReloadQueued;
     private final Map<UUID, ScoreboardTitleAnimation> scoreboardTitleAnimators;
 
@@ -124,6 +127,7 @@ public class GameManager {
         this.players = new HashMap<>();
         this.roundRewardSummary = new HashMap<>();
         this.roundMysteryDustRewards = new HashMap<>();
+        this.lastCountdownTickSoundSeconds = new HashMap<>();
         this.mapConfigReloadQueued = new AtomicBoolean(false);
         this.scoreboardTitleAnimators = new HashMap<>();
         this.state = GameState.WAITING;
@@ -439,6 +443,7 @@ public class GameManager {
             onAlivePlayerQuitInGame(player, gp);
         }
         players.remove(player.getUniqueId());
+        lastCountdownTickSoundSeconds.remove(player.getUniqueId());
         scoreboardTitleAnimators.remove(player.getUniqueId());
         scoreboardService.remove(player);
         if (bossBarService != null) {
@@ -532,6 +537,7 @@ public class GameManager {
         state = GameState.STARTING;
         publishStateToCore();
         countdownRemaining = countdownSeconds;
+        lastCountdownTickSoundSeconds.clear();
         cleanupPregameWorldState();
         if (movePlayersToPregame) {
             teleportToPregame();
@@ -555,7 +561,7 @@ public class GameManager {
                 }
                 if (isCountdownCueSecond(countdownRemaining)) {
                     broadcastCountdownMessage(countdownRemaining);
-                    playCountdownTickSoundToAllPlayers();
+                    playCountdownTickSoundToAllPlayers(countdownRemaining);
                 }
                 updateScoreboardAll();
                 countdownRemaining--;
@@ -971,6 +977,7 @@ public class GameManager {
             countdownTask.cancel();
             countdownTask = null;
         }
+        lastCountdownTickSoundSeconds.clear();
         if (gameTask != null) {
             gameTask.cancel();
             gameTask = null;
@@ -1729,13 +1736,35 @@ public class GameManager {
         return seconds == 15 || seconds == 10 || (seconds >= 1 && seconds <= 5);
     }
 
-    private void playCountdownTickSoundToAllPlayers() {
+    private void playCountdownTickSoundToAllPlayers(int seconds) {
+        int safeSeconds = Math.max(0, seconds);
         for (UUID uuid : players.keySet()) {
             Player player = Bukkit.getPlayer(uuid);
             if (player == null || !player.isOnline()) {
                 continue;
             }
-            player.playSound(player.getLocation(), COUNTDOWN_TICK_SOUND, 1.0f, 1.0f);
+            Integer lastSoundSecond = lastCountdownTickSoundSeconds.get(uuid);
+            if (lastSoundSecond != null && lastSoundSecond.intValue() == safeSeconds) {
+                continue;
+            }
+            lastCountdownTickSoundSeconds.put(uuid, safeSeconds);
+            playCountdownTickSound(player);
+        }
+    }
+
+    private void playCountdownTickSound(Player player) {
+        if (player == null || COUNTDOWN_TICK_SOUND == null) {
+            return;
+        }
+        try {
+            player.playSound(
+                    player.getEyeLocation(),
+                    COUNTDOWN_TICK_SOUND,
+                    COUNTDOWN_TICK_SOUND_VOLUME,
+                    COUNTDOWN_TICK_SOUND_PITCH
+            );
+        } catch (IllegalArgumentException ignored) {
+            // Sound enum mismatch on legacy/newer API variants.
         }
     }
 
@@ -1762,6 +1791,7 @@ public class GameManager {
             countdownTask.cancel();
             countdownTask = null;
         }
+        lastCountdownTickSoundSeconds.clear();
     }
 
     private void publishStateToCore() {

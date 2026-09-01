@@ -206,9 +206,7 @@ public class HubNpcListener implements Listener {
             if (online == null || !online.isOnline()) {
                 return;
             }
-            hideOtherProfileNpcsFromViewer(online);
             spawnProfileNpcsForPlayer(online);
-            refreshProfileNpcSkinsForViewer(online);
         });
         plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
             Player online = viewerUuid == null ? null : Bukkit.getPlayer(viewerUuid);
@@ -697,6 +695,7 @@ public class HubNpcListener implements Listener {
         if (viewerUuid == null) {
             return 0;
         }
+        hideOtherProfileNpcsFromViewer(viewer);
         despawnProfileNpcsForViewer(viewerUuid);
 
         List<RuntimeNpc> created = new ArrayList<RuntimeNpc>();
@@ -718,6 +717,7 @@ public class HubNpcListener implements Listener {
         }
         if (!created.isEmpty()) {
             profileNpcsByViewer.put(viewerUuid, created);
+            refreshProfileNpcSkinsForViewer(viewer);
         }
         return created.size();
     }
@@ -740,15 +740,7 @@ public class HubNpcListener implements Listener {
             if (runtime.profileViewerUuid != null && !runtime.profileViewerUuid.equals(viewerUuid)) {
                 continue;
             }
-            runtime.skinOwner = owner;
-            NPC npc = runtime.npc;
-            if (npc == null && runtime.npcId > 0) {
-                npc = resolveNpcById(runtime.npcId);
-                runtime.npc = npc;
-            }
-            if (npc != null) {
-                applyCitizensSkin(npc, NpcKind.PROFILE, owner);
-            }
+            refreshProfileNpcSkin(runtime, viewer, owner);
         }
     }
 
@@ -770,18 +762,117 @@ public class HubNpcListener implements Listener {
             if (runtime.profileViewerUuid != null && !runtime.profileViewerUuid.equals(viewerUuid)) {
                 continue;
             }
-            runtime.skinOwner = owner;
-            NPC npc = runtime.npc;
-            if (npc == null && runtime.npcId > 0) {
-                npc = resolveNpcById(runtime.npcId);
-                runtime.npc = npc;
+            refreshProfileNpcSkin(runtime, viewer, owner);
+        }
+    }
+
+    private void refreshProfileNpcSkin(RuntimeNpc runtime, Player viewer, String owner) {
+        if (runtime == null || runtime.kind != NpcKind.PROFILE || viewer == null || !viewer.isOnline()) {
+            return;
+        }
+        UUID viewerUuid = viewer.getUniqueId();
+        if (viewerUuid == null) {
+            return;
+        }
+        if (runtime.profileViewerUuid != null && !runtime.profileViewerUuid.equals(viewerUuid)) {
+            return;
+        }
+        if (!isTrackedProfileRuntimeForViewer(runtime, viewerUuid)) {
+            return;
+        }
+        runtime.skinOwner = resolveProfileSkinOwner(viewer, owner);
+        NPC npc = runtime.npc;
+        if (npc == null && runtime.npcId > 0) {
+            npc = resolveNpcById(runtime.npcId);
+            runtime.npc = npc;
+        }
+        if (npc == null) {
+            respawnRuntimeAnchor(runtime);
+            npc = runtime.npc;
+            if (npc == null) {
+                return;
             }
-            if (npc != null) {
-                applyCitizensSkin(npc, NpcKind.PROFILE, owner);
-                hideNpcIdentity(npc, npc.getEntity());
+        }
+        if (runtime.profileViewerUuid != null) {
+            applyProfileViewerFilter(npc, runtime.profileViewerUuid);
+        }
+        despawnProfileNpcBeforeSkinRefresh(runtime, npc);
+        SkinTextureCache playerSkin = resolvePlayerSkinTexture(viewer, runtime.skinOwner);
+        applyCitizensSkin(npc, NpcKind.PROFILE, runtime.skinOwner, playerSkin);
+        if (runtime.profileViewerUuid != null) {
+            applyProfileViewerFilter(npc, runtime.profileViewerUuid);
+        }
+        refreshRuntimeNpcSpawn(runtime);
+        ensureRuntimeAnchor(runtime);
+        npc = runtime.npc;
+        if (npc == null) {
+            return;
+        }
+        Entity anchor = npc.getEntity();
+        hideNpcIdentity(npc, anchor);
+        applyProfileNpcHeldItem(anchor);
+        if (runtime.profileViewerUuid != null) {
+            applyProfileViewerFilter(npc, runtime.profileViewerUuid);
+        }
+        syncProfileNpcViewerVisibility(runtime);
+        applyProfileNpcViewerHologram(runtime, viewer);
+        scheduleProfileNpcVisibilitySync(runtime, viewerUuid);
+    }
+
+    private boolean isTrackedProfileRuntimeForViewer(RuntimeNpc runtime, UUID viewerUuid) {
+        if (runtime == null || runtime.kind != NpcKind.PROFILE || viewerUuid == null) {
+            return false;
+        }
+        if (runtime.profileViewerUuid != null && !runtime.profileViewerUuid.equals(viewerUuid)) {
+            return false;
+        }
+        List<RuntimeNpc> runtimes = profileNpcsByViewer.get(viewerUuid);
+        return runtimes != null && runtimes.contains(runtime);
+    }
+
+    private void despawnProfileNpcBeforeSkinRefresh(RuntimeNpc runtime, NPC npc) {
+        if (runtime == null || runtime.kind != NpcKind.PROFILE || npc == null) {
+            return;
+        }
+        try {
+            if (!npc.isSpawned()) {
+                return;
             }
-            ensureRuntimeAnchor(runtime);
-            applyProfileNpcViewerHologram(runtime, viewer);
+            if (!npc.despawn()) {
+                return;
+            }
+            if (runtime.anchorUuid != null) {
+                npcsByEntityUuid.remove(runtime.anchorUuid);
+                runtime.anchorUuid = null;
+            }
+        } catch (Exception ignored) {
+            // Fall back to the normal spawn refresh path.
+        }
+    }
+
+    private void scheduleProfileNpcVisibilitySync(RuntimeNpc runtime, UUID viewerUuid) {
+        if (plugin == null || runtime == null || viewerUuid == null) {
+            return;
+        }
+        final int targetNpcId = runtime.npcId;
+        long[] delays = new long[] {1L, 5L, 20L};
+        for (long delay : delays) {
+            plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+                RuntimeNpc latest = targetNpcId > 0 ? npcsById.get(targetNpcId) : runtime;
+                if (latest == null) {
+                    latest = runtime;
+                }
+                if (!isTrackedProfileRuntimeForViewer(latest, viewerUuid)) {
+                    return;
+                }
+                Player viewer = Bukkit.getPlayer(viewerUuid);
+                if (viewer == null || !viewer.isOnline()) {
+                    return;
+                }
+                ensureRuntimeAnchor(latest);
+                syncProfileNpcViewerVisibility(latest);
+                applyProfileNpcViewerHologram(latest, viewer);
+            }, delay);
         }
     }
 
@@ -813,7 +904,7 @@ public class HubNpcListener implements Listener {
             return null;
         }
         Location base = location.clone();
-        NPC npc = spawnCitizensNpc(kind, base, skinOwner);
+        NPC npc = spawnCitizensNpc(kind, base, skinOwner, profileViewerUuid);
         if (npc == null) {
             return null;
         }
@@ -838,6 +929,9 @@ public class HubNpcListener implements Listener {
         npcsByEntityUuid.put(runtime.anchorUuid, runtime);
         if (kind == NpcKind.PROFILE) {
             Player viewer = profileViewerUuid == null ? null : Bukkit.getPlayer(profileViewerUuid);
+            if (profileViewerUuid != null) {
+                applyProfileViewerFilter(npc, profileViewerUuid);
+            }
             syncProfileNpcViewerVisibility(runtime);
             applyNpcHologramLines(runtime, profileHologramLines(viewer));
             syncProfileNpcViewerVisibility(runtime);
@@ -890,6 +984,9 @@ public class HubNpcListener implements Listener {
                 }
                 RuntimeNpc latest = targetNpcId > 0 ? npcsById.get(targetNpcId) : runtime;
                 if (latest == null || latest.kind != NpcKind.PROFILE) {
+                    return;
+                }
+                if (!isTrackedProfileRuntimeForViewer(latest, viewerUuid)) {
                     return;
                 }
                 applyProfileNpcViewerHologram(latest, onlineViewer);
@@ -992,7 +1089,13 @@ public class HubNpcListener implements Listener {
         Entity anchor;
         try {
             if (!npc.isSpawned()) {
+                if (runtime.kind == NpcKind.PROFILE && runtime.profileViewerUuid != null) {
+                    applyProfileViewerFilter(npc, runtime.profileViewerUuid);
+                }
                 npc.spawn(runtime.spawnLocation.clone());
+                if (runtime.kind == NpcKind.PROFILE && runtime.profileViewerUuid != null) {
+                    applyProfileViewerFilter(npc, runtime.profileViewerUuid);
+                }
             }
             anchor = npc.getEntity();
         } catch (Exception ignored) {
@@ -1037,7 +1140,8 @@ public class HubNpcListener implements Listener {
             npc = spawnCitizensNpc(
                     runtime.kind,
                     runtime.spawnLocation.clone(),
-                    runtime.skinOwner
+                    runtime.skinOwner,
+                    runtime.profileViewerUuid
             );
             if (npc == null) {
                 return;
@@ -1051,7 +1155,13 @@ public class HubNpcListener implements Listener {
         } else {
             try {
                 if (!npc.isSpawned()) {
+                    if (runtime.kind == NpcKind.PROFILE && runtime.profileViewerUuid != null) {
+                        applyProfileViewerFilter(npc, runtime.profileViewerUuid);
+                    }
                     npc.spawn(runtime.spawnLocation.clone());
+                    if (runtime.kind == NpcKind.PROFILE && runtime.profileViewerUuid != null) {
+                        applyProfileViewerFilter(npc, runtime.profileViewerUuid);
+                    }
                 }
             } catch (Exception ignored) {
                 deregisterNpc(npc);
@@ -1063,7 +1173,8 @@ public class HubNpcListener implements Listener {
                 npc = spawnCitizensNpc(
                         runtime.kind,
                         runtime.spawnLocation.clone(),
-                        runtime.skinOwner
+                        runtime.skinOwner,
+                        runtime.profileViewerUuid
                 );
                 if (npc == null) {
                     return;
@@ -1075,6 +1186,10 @@ public class HubNpcListener implements Listener {
                 }
                 npcsById.put(runtime.npcId, runtime);
             }
+        }
+        markRuntimeNpc(npc, runtime.kind == NpcKind.PROFILE ? RUNTIME_PROFILE_NPC_KIND : "CLICK_TO_PLAY", runtime.profileViewerUuid);
+        if (runtime.kind == NpcKind.PROFILE && runtime.profileViewerUuid != null) {
+            applyProfileViewerFilter(npc, runtime.profileViewerUuid);
         }
         Entity anchor = npc.getEntity();
         if (anchor == null || anchor.getUniqueId() == null) {
@@ -1302,11 +1417,20 @@ public class HubNpcListener implements Listener {
             return;
         }
         try {
+            if (runtime.kind == NpcKind.PROFILE && runtime.profileViewerUuid != null) {
+                applyProfileViewerFilter(npc, runtime.profileViewerUuid);
+            }
             if (npc.isSpawned()) {
                 npc.despawn();
             }
+            if (runtime.kind == NpcKind.PROFILE && runtime.profileViewerUuid != null) {
+                applyProfileViewerFilter(npc, runtime.profileViewerUuid);
+            }
             if (!npc.spawn(runtime.spawnLocation.clone())) {
                 throw new IllegalStateException("Citizens refused to respawn NPC");
+            }
+            if (runtime.kind == NpcKind.PROFILE && runtime.profileViewerUuid != null) {
+                applyProfileViewerFilter(npc, runtime.profileViewerUuid);
             }
         } catch (Exception ignored) {
             deregisterNpc(npc);
@@ -1596,6 +1720,10 @@ public class HubNpcListener implements Listener {
     }
 
     private NPC spawnCitizensNpc(NpcKind kind, Location location, String skinOwner) {
+        return spawnCitizensNpc(kind, location, skinOwner, null);
+    }
+
+    private NPC spawnCitizensNpc(NpcKind kind, Location location, String skinOwner, UUID profileViewerUuid) {
         if (!citizensEnabled || npcRegistry == null || location == null || location.getWorld() == null) {
             return null;
         }
@@ -1622,10 +1750,16 @@ public class HubNpcListener implements Listener {
         }
         hideNpcIdentity(npc, null);
         applyCitizensSkin(npc, kind, skinOwner);
+        if (kind == NpcKind.PROFILE && profileViewerUuid != null) {
+            applyProfileViewerFilter(npc, profileViewerUuid);
+        }
         try {
             if (!npc.spawn(location.clone())) {
                 deregisterNpc(npc);
                 return null;
+            }
+            if (kind == NpcKind.PROFILE && profileViewerUuid != null) {
+                applyProfileViewerFilter(npc, profileViewerUuid);
             }
             hideNpcIdentity(npc, npc.getEntity());
             return npc;
@@ -1702,23 +1836,28 @@ public class HubNpcListener implements Listener {
     }
 
     private void applyCitizensSkin(NPC npc, NpcKind kind, String skinOwner) {
+        SkinTextureCache textureCache = kind == NpcKind.CLICK_TO_PLAY ? clickToPlaySkinCache : null;
+        applyCitizensSkin(npc, kind, skinOwner, textureCache);
+    }
+
+    private void applyCitizensSkin(NPC npc, NpcKind kind, String skinOwner, SkinTextureCache textureCache) {
         if (npc == null) {
             return;
         }
         String owner = resolveCitizensSkinOwner(kind, skinOwner);
         Object skinTrait = resolveSkinTrait(npc);
-        SkinTextureCache textureCache = kind == NpcKind.CLICK_TO_PLAY ? clickToPlaySkinCache : null;
         if (kind == NpcKind.CLICK_TO_PLAY && skinTrait != null) {
             disableSkinTraitAutoUpdates(skinTrait);
         }
+        boolean hasTextureCache = textureCache != null && textureCache.hasTexture();
         if (skinTrait != null) {
-            boolean appliedPersistent = textureCache != null
+            boolean appliedPersistent = hasTextureCache
                     && applySkinTraitPersistent(skinTrait, owner, textureCache);
             if (!appliedPersistent) {
                 applySkinTraitName(skinTrait, owner, kind == NpcKind.PROFILE);
             }
         }
-        if (kind == NpcKind.CLICK_TO_PLAY) {
+        if (kind == NpcKind.CLICK_TO_PLAY || hasTextureCache) {
             setNpcMetadataPersistent(npc, NPC.Metadata.PLAYER_SKIN_USE_LATEST, Boolean.FALSE);
         } else {
             setNpcMetadataPersistent(npc, NPC.Metadata.PLAYER_SKIN_USE_LATEST, Boolean.TRUE);
@@ -1726,7 +1865,7 @@ public class HubNpcListener implements Listener {
         setNpcMetadataPersistent(npc, NPC.Metadata.PLAYER_SKIN_UUID, owner);
         setNpcDataPersistent(npc, "cached-skin-uuid-name", owner);
         setNpcDataPersistent(npc, "player-skin-name", owner);
-        if (textureCache != null) {
+        if (hasTextureCache) {
             setNpcMetadataPersistent(npc, NPC.Metadata.PLAYER_SKIN_TEXTURE_PROPERTIES, textureCache.texture);
             setNpcMetadataPersistent(npc, NPC.Metadata.PLAYER_SKIN_TEXTURE_PROPERTIES_SIGN, textureCache.signature);
             setNpcDataPersistent(npc, "cached-texture", textureCache.texture);
@@ -1766,7 +1905,7 @@ public class HubNpcListener implements Listener {
     }
 
     private boolean applySkinTraitPersistent(Object skinTrait, String owner, SkinTextureCache textureCache) {
-        if (skinTrait == null || textureCache == null || !textureCache.isUsable()) {
+        if (skinTrait == null || textureCache == null || !textureCache.hasTexture()) {
             return false;
         }
         try {
@@ -1786,6 +1925,173 @@ public class HubNpcListener implements Listener {
         } catch (Exception ignored) {
             return false;
         }
+    }
+
+    private SkinTextureCache resolvePlayerSkinTexture(Player player, String fallbackSkinName) {
+        if (player == null) {
+            return null;
+        }
+        List<Object> profiles = new ArrayList<Object>();
+        addProfileCandidate(profiles, invokeNoArgMethodResult(player, "getProfile", "getPlayerProfile"));
+        Object handle = invokeNoArgMethodResult(player, "getHandle");
+        addProfileCandidate(profiles, invokeNoArgMethodResult(handle, "getProfile", "getGameProfile"));
+        for (Object profile : profiles) {
+            SkinTextureCache texture = resolvePlayerSkinTextureFromProfile(player, fallbackSkinName, profile);
+            if (texture != null) {
+                return texture;
+            }
+        }
+        return null;
+    }
+
+    private void addProfileCandidate(List<Object> profiles, Object profile) {
+        if (profiles == null || profile == null || profiles.contains(profile)) {
+            return;
+        }
+        profiles.add(profile);
+    }
+
+    private SkinTextureCache resolvePlayerSkinTextureFromProfile(Player player, String fallbackSkinName, Object profile) {
+        if (player == null || profile == null) {
+            return null;
+        }
+        Object properties = invokeNoArgMethodResult(profile, "getProperties", "properties");
+        Object textureProperty = resolveTextureProperty(properties);
+        String texture = invokeStringResult(textureProperty, "getValue", "value");
+        if (texture.isEmpty()) {
+            return null;
+        }
+        String signature = invokeStringResult(textureProperty, "getSignature", "signature");
+        return new SkinTextureCache(
+                resolveProfileSkinOwner(player, fallbackSkinName),
+                texture,
+                signature,
+                System.currentTimeMillis()
+        );
+    }
+
+    private Object resolveTextureProperty(Object properties) {
+        if (properties == null) {
+            return null;
+        }
+        Object textures = invokeSingleArgMethodResult(properties, "textures", "get", "getProperty", "property");
+        Object textureProperty = firstValue(textures);
+        if (textureProperty != null) {
+            return textureProperty;
+        }
+        if (hasPropertyName(textures, "textures")) {
+            return textures;
+        }
+        return firstNamedValue(properties, "textures");
+    }
+
+    private Object firstNamedValue(Object value, String propertyName) {
+        if (value == null || propertyName == null || propertyName.isEmpty()) {
+            return null;
+        }
+        if (value instanceof Map<?, ?>) {
+            Object mapped = ((Map<?, ?>) value).get(propertyName);
+            Object first = firstValue(mapped);
+            return first == null ? mapped : first;
+        }
+        if (value instanceof Iterable<?>) {
+            for (Object entry : (Iterable<?>) value) {
+                if (hasPropertyName(entry, propertyName)) {
+                    return entry;
+                }
+            }
+        }
+        if (value.getClass().isArray()) {
+            int length = java.lang.reflect.Array.getLength(value);
+            for (int index = 0; index < length; index++) {
+                Object entry = java.lang.reflect.Array.get(value, index);
+                if (hasPropertyName(entry, propertyName)) {
+                    return entry;
+                }
+            }
+        }
+        return hasPropertyName(value, propertyName) ? value : null;
+    }
+
+    private boolean hasPropertyName(Object value, String propertyName) {
+        if (value == null || propertyName == null || propertyName.isEmpty()) {
+            return false;
+        }
+        String name = invokeStringResult(value, "getName", "name");
+        return propertyName.equalsIgnoreCase(name);
+    }
+
+    private Object firstValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Iterable<?>) {
+            for (Object entry : (Iterable<?>) value) {
+                if (entry != null) {
+                    return entry;
+                }
+            }
+            return null;
+        }
+        if (value.getClass().isArray()) {
+            int length = java.lang.reflect.Array.getLength(value);
+            for (int index = 0; index < length; index++) {
+                Object entry = java.lang.reflect.Array.get(value, index);
+                if (entry != null) {
+                    return entry;
+                }
+            }
+        }
+        return null;
+    }
+
+    private Object invokeNoArgMethodResult(Object target, String... methodNames) {
+        if (target == null || methodNames == null) {
+            return null;
+        }
+        for (String methodName : methodNames) {
+            if (methodName == null || methodName.isEmpty()) {
+                continue;
+            }
+            try {
+                Method method = target.getClass().getMethod(methodName);
+                return method.invoke(target);
+            } catch (Exception ignored) {
+                // Try next method variant.
+            }
+        }
+        return null;
+    }
+
+    private Object invokeSingleArgMethodResult(Object target, Object arg, String... methodNames) {
+        if (target == null || methodNames == null) {
+            return null;
+        }
+        for (String methodName : methodNames) {
+            if (methodName == null || methodName.isEmpty()) {
+                continue;
+            }
+            Method[] methods = target.getClass().getMethods();
+            for (Method method : methods) {
+                if (method == null || !methodName.equals(method.getName())) {
+                    continue;
+                }
+                Class<?>[] params = method.getParameterTypes();
+                if (params.length != 1 || !supportsValueType(params[0], arg)) {
+                    continue;
+                }
+                try {
+                    return method.invoke(target, arg);
+                } catch (Exception ignored) {
+                    // Try next method variant.
+                }
+            }
+        }
+        return null;
+    }
+
+    private String invokeStringResult(Object target, String... methodNames) {
+        return safeText(invokeNoArgMethodResult(target, methodNames));
     }
 
     private boolean applySkinTraitName(Object skinTrait, String owner, boolean forceRefresh) {
@@ -3045,8 +3351,8 @@ public class HubNpcListener implements Listener {
             this.refreshedAtMillis = refreshedAtMillis;
         }
 
-        private boolean isUsable() {
-            return refreshedAtMillis > 0L && !texture.isEmpty() && !signature.isEmpty();
+        private boolean hasTexture() {
+            return refreshedAtMillis > 0L && !texture.isEmpty();
         }
     }
 

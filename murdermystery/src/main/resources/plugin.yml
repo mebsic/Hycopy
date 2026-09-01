@@ -8,6 +8,8 @@ commands:
     usage: /start
   token:
     usage: /token <player> <amount>
+  wins:
+    usage: /wins <player> <amount>
   image:
     usage: /image <URL>
   clearimage:
