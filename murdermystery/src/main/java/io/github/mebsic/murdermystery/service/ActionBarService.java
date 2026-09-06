@@ -7,6 +7,7 @@ import io.github.mebsic.game.manager.GameManager;
 import io.github.mebsic.game.model.GamePlayer;
 import io.github.mebsic.game.model.GameState;
 import io.github.mebsic.game.model.RoleChance;
+import io.github.mebsic.murdermystery.manager.MurderMysteryGameManager;
 import io.github.mebsic.murdermystery.stats.MurderMysteryStats;
 import io.github.mebsic.murdermystery.util.ActionBarUtil;
 import org.bukkit.ChatColor;
@@ -135,7 +136,7 @@ public class ActionBarService {
     }
 
     public void showBowChargeActionBar(Player player) {
-        startChargingActionBar(player, "CHARGING", BOW_CHARGE_ACTION_BAR_SECONDS * 1000L, null, 0L);
+        startChargingActionBar(player, "CHARGING", BOW_CHARGE_ACTION_BAR_SECONDS * 1000L, null, 0L, false);
     }
 
     public void showKnifeThrowActionBar(Player player) {
@@ -144,7 +145,8 @@ public class ActionBarService {
                 "THROWING",
                 Math.max(1L, Math.round(KNIFE_THROWING_SECONDS * 1000.0D)),
                 "CHARGING",
-                KNIFE_CHARGING_SECONDS * 1000L
+                KNIFE_CHARGING_SECONDS * 1000L,
+                true
         );
     }
 
@@ -168,7 +170,8 @@ public class ActionBarService {
                                         String label,
                                         long durationMillis,
                                         String nextLabel,
-                                        long nextDurationMillis) {
+                                        long nextDurationMillis,
+                                        boolean playCompletionTickSound) {
         if (player == null || gameManager == null) {
             return;
         }
@@ -182,7 +185,14 @@ public class ActionBarService {
             previous.cancelTask();
         }
         long startedAtMillis = System.currentTimeMillis();
-        ChargingActionBar charging = new ChargingActionBar(label, startedAtMillis, safeDurationMillis, nextLabel, nextDurationMillis);
+        ChargingActionBar charging = new ChargingActionBar(
+                label,
+                startedAtMillis,
+                safeDurationMillis,
+                nextLabel,
+                nextDurationMillis,
+                playCompletionTickSound
+        );
         chargingActionBars.put(uuid, charging);
         sendChargingActionBar(player, charging, startedAtMillis);
         BukkitTask updateTask = plugin.getServer().getScheduler().runTaskTimer(
@@ -410,13 +420,30 @@ public class ActionBarService {
         long remainingMillis = charging.getRemainingMillis(now);
         if (remainingMillis <= 0L) {
             if (charging.hasNextPhase()) {
-                startChargingActionBar(player, charging.nextLabel, charging.nextDurationMillis, null, 0L);
+                startChargingActionBar(
+                        player,
+                        charging.nextLabel,
+                        charging.nextDurationMillis,
+                        null,
+                        0L,
+                        charging.playCompletionTickSound
+                );
                 return;
+            }
+            if (charging.playCompletionTickSound) {
+                playKnifeReadyTickSound(player);
             }
             removeChargingActionBar(uuid, true, player);
             return;
         }
         sendChargingActionBar(player, charging, now);
+    }
+
+    private void playKnifeReadyTickSound(Player player) {
+        if (player == null || !(gameManager instanceof MurderMysteryGameManager)) {
+            return;
+        }
+        ((MurderMysteryGameManager) gameManager).playMurdererKnifeReadySound(player);
     }
 
     private void removeChargingActionBar(UUID uuid, boolean clearActionBar, Player player) {
@@ -618,16 +645,19 @@ public class ActionBarService {
         private final long durationMillis;
         private final String nextLabel;
         private final long nextDurationMillis;
+        private final boolean playCompletionTickSound;
         private BukkitTask task;
 
         private ChargingActionBar(String label,
                                   long startedAtMillis,
                                   long durationMillis,
                                   String nextLabel,
-                                  long nextDurationMillis) {
+                                  long nextDurationMillis,
+                                  boolean playCompletionTickSound) {
             this.label = normalizeActionBarLabel(label);
             this.startedAtMillis = startedAtMillis;
             this.durationMillis = Math.max(1L, durationMillis);
+            this.playCompletionTickSound = playCompletionTickSound;
             if (nextDurationMillis > 0L && nextLabel != null && !nextLabel.trim().isEmpty()) {
                 this.nextLabel = normalizeActionBarLabel(nextLabel);
                 this.nextDurationMillis = nextDurationMillis;

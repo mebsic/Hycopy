@@ -174,6 +174,7 @@ public class MurderMysteryGameManager extends GameManager {
     private static final Sound WIN_GAME_ORB_PICKUP_SOUND =
             resolveCompatibleSound("ORB_PICKUP", "ENTITY_EXPERIENCE_ORB_PICKUP");
     private static final Sound WIN_GAME_SOUND = resolveCompatibleSound("LEVEL_UP", "ENTITY_PLAYER_LEVELUP");
+    private static final Sound VANILLA_PICKUP_SOUND = resolveCompatibleSound("ITEM_PICKUP", "ENTITY_ITEM_PICKUP");
     private static final Sound MURDER_KILL_DAMAGE_SOUND = resolveMurderKillDamageSound();
     private static final Sound MYSTERY_POTION_SOUND =
             resolveCompatibleSound("DRINK", "ENTITY_GENERIC_DRINK", "FIZZ", "BLOCK_BREWING_STAND_BREW");
@@ -181,6 +182,7 @@ public class MurderMysteryGameManager extends GameManager {
             resolveCompatibleSound("ANVIL_LAND", "BLOCK_ANVIL_LAND", "ANVIL_USE", "BLOCK_ANVIL_USE");
     private static final float ROLE_ASSIGNMENT_SOUND_VOLUME = 2.0F;
     private static final float ROLE_ASSIGNMENT_SOUND_PITCH = 1.0F;
+    private static final float VANILLA_PICKUP_SOUND_VOLUME = 0.2F;
     private static final String TOKEN_REASON_SURVIVED_30_SECONDS = "Survived 30 seconds";
     private static final String TOKEN_REASON_PICKED_UP_GOLD = "Picked up gold";
     private static final String SPECTATOR_CHAT_HINT_LINE_ONE =
@@ -219,6 +221,7 @@ public class MurderMysteryGameManager extends GameManager {
     private boolean originalDetectiveEliminated;
     private UUID summaryMurdererUuid;
     private boolean summaryMurdererEliminated;
+    private final Map<UUID, ChatColor> participantRankColors = new HashMap<>();
     private final MurderMysteryMinimapService minimapService;
     private ActionBarService actionBarService;
 
@@ -256,6 +259,7 @@ public class MurderMysteryGameManager extends GameManager {
     @Override
     public void preparePregamePlayer(Player player) {
         super.preparePregamePlayer(player);
+        minimapService.removeMap(player);
         minimapService.giveMap(player);
     }
 
@@ -263,6 +267,7 @@ public class MurderMysteryGameManager extends GameManager {
     public void prepareLobbyPlayer(Player player) {
         super.prepareLobbyPlayer(player);
         if (getState() == GameState.WAITING || getState() == GameState.STARTING) {
+            minimapService.removeMap(player);
             minimapService.giveMap(player);
             return;
         }
@@ -270,7 +275,23 @@ public class MurderMysteryGameManager extends GameManager {
     }
 
     @Override
+    public void handleQuit(Player player) {
+        if (player != null && participantRankColors.containsKey(player.getUniqueId())) {
+            resolveRankNameColor(player.getUniqueId());
+        }
+        minimapService.removeMap(player);
+        super.handleQuit(player);
+    }
+
+    @Override
     protected void onGameStarted(GameMap activeMap) {
+        participantRankColors.clear();
+        for (MurderMysteryGamePlayer mmPlayer : getMmPlayers()) {
+            UUID uuid = mmPlayer.getUuid();
+            participantRankColors.put(uuid, resolveRankNameColor(uuid));
+        }
+        minimapService.resetAll();
+        minimapService.start();
         innocentsWon = false;
         elapsedGameSeconds = 0;
         murdererSwordUnlocked = false;
@@ -1956,6 +1977,7 @@ public class MurderMysteryGameManager extends GameManager {
         }
         syncGoldHotbarItem(player, mmPlayer);
         if (!fromGold) {
+            playVanillaPickupSound(player);
             player.getInventory().setHeldItemSlot(BOW_HOTBAR_SLOT);
             player.sendMessage(ChatColor.GREEN + "You picked up the bow! "
                     + ChatColor.GOLD + "GOAL: Find and kill the murderer!");
@@ -2248,6 +2270,13 @@ public class MurderMysteryGameManager extends GameManager {
             return;
         }
         lastMurdererSwordCountdownSoundSeconds.put(playerUuid, safeSeconds);
+        playMurdererKnifeReadySound(player);
+    }
+
+    public void playMurdererKnifeReadySound(Player player) {
+        if (player == null || MURDERER_SWORD_COUNTDOWN_SOUND == null) {
+            return;
+        }
         try {
             player.playSound(
                     player.getEyeLocation(),
@@ -2258,6 +2287,27 @@ public class MurderMysteryGameManager extends GameManager {
         } catch (IllegalArgumentException ignored) {
             // Sound enum mismatch on legacy/newer API variants.
         }
+    }
+
+    public void playVanillaPickupSound(Player player) {
+        if (player == null || !player.isOnline() || VANILLA_PICKUP_SOUND == null) {
+            return;
+        }
+        try {
+            player.playSound(
+                    player.getLocation(),
+                    VANILLA_PICKUP_SOUND,
+                    VANILLA_PICKUP_SOUND_VOLUME,
+                    randomVanillaPickupPitch()
+            );
+        } catch (IllegalArgumentException ignored) {
+            // Sound enum mismatch on legacy/newer API variants.
+        }
+    }
+
+    private float randomVanillaPickupPitch() {
+        double pitch = ((Math.random() - Math.random()) * 0.7D + 1.0D) * 2.0D;
+        return (float) pitch;
     }
 
     private void broadcastMurdererSwordReceivedMessageToOthers() {
@@ -2315,6 +2365,7 @@ public class MurderMysteryGameManager extends GameManager {
             player.getInventory().setItem(KNIFE_HOTBAR_SLOT, knife);
             player.getInventory().setHeldItemSlot(KNIFE_HOTBAR_SLOT);
             mmPlayer.markMurdererWeaponGrantedNow();
+            playMurdererKnifeReadySound(player);
             player.sendMessage(ChatColor.YELLOW + "You have received your sword!");
             getTitleService().send(
                     player,
@@ -2479,6 +2530,7 @@ public class MurderMysteryGameManager extends GameManager {
                 player.getInventory().setItem(KNIFE_HOTBAR_SLOT, knife);
                 player.getInventory().setHeldItemSlot(KNIFE_HOTBAR_SLOT);
                 selected.markMurdererWeaponGrantedNow();
+                playMurdererKnifeReadySound(player);
             }
             showRoleTitle(player, selected.getRole());
             sendTeamingWarning(player, selected.getRole());
@@ -3021,7 +3073,7 @@ public class MurderMysteryGameManager extends GameManager {
                 continue;
             }
             if (WIN_GAME_SOUND != null) {
-                player.playSound(player.getLocation(), WIN_GAME_SOUND, 1.0f, 1.0f);
+                player.playSound(player.getLocation(), WIN_GAME_SOUND, 1.0f, 0.9f);
             }
         }
     }
@@ -3031,10 +3083,10 @@ public class MurderMysteryGameManager extends GameManager {
             return;
         }
         final Player winner = player;
-        winner.playSound(winner.getLocation(), WIN_GAME_ORB_PICKUP_SOUND, 1.0f, 0.9f);
+        winner.playSound(winner.getLocation(), WIN_GAME_ORB_PICKUP_SOUND, 1.0f, 0.81f);
         getPlugin().getServer().getScheduler().runTaskLater(getPlugin(), () -> {
             if (winner.isOnline()) {
-                winner.playSound(winner.getLocation(), WIN_GAME_ORB_PICKUP_SOUND, 1.0f, 1.25f);
+                winner.playSound(winner.getLocation(), WIN_GAME_ORB_PICKUP_SOUND, 1.0f, 1.125f);
             }
         }, 4L);
     }
@@ -3145,18 +3197,27 @@ public class MurderMysteryGameManager extends GameManager {
     }
 
     private ChatColor resolveRankNameColor(UUID uuid) {
-        CoreApi coreApi = getPlugin() == null ? null : getPlugin().getCoreApi();
-        if (coreApi == null || uuid == null) {
+        if (uuid == null) {
             return ChatColor.GRAY;
+        }
+        ChatColor cachedColor = participantRankColors.getOrDefault(uuid, ChatColor.GRAY);
+        CoreApi coreApi = getPlugin() == null ? null : getPlugin().getCoreApi();
+        Profile profile = coreApi == null ? null : coreApi.getProfile(uuid);
+        if (profile == null) {
+            // Profiles are unloaded on disconnect; keep the participant's round color.
+            return cachedColor;
         }
         Rank rank = coreApi.getRank(uuid);
         if (rank == null) {
             rank = Rank.DEFAULT;
         }
-        Profile profile = coreApi.getProfile(uuid);
-        String mvpPlusPlusPrefixColor = profile == null ? null : profile.getMvpPlusPlusPrefixColor();
+        String mvpPlusPlusPrefixColor = profile.getMvpPlusPlusPrefixColor();
         ChatColor color = RankFormatUtil.baseColor(rank, mvpPlusPlusPrefixColor);
-        return color == null ? ChatColor.GRAY : color;
+        color = color == null ? ChatColor.GRAY : color;
+        if (participantRankColors.containsKey(uuid)) {
+            participantRankColors.put(uuid, color);
+        }
+        return color;
     }
 
     private String resolveParticipantName(UUID uuid) {

@@ -29,9 +29,11 @@ import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.entity.ProjectileHitEvent;
 import org.bukkit.event.player.PlayerArmorStandManipulateEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
+import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerItemDamageEvent;
 import org.bukkit.event.player.PlayerItemConsumeEvent;
+import org.bukkit.event.player.PlayerItemHeldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerPickupItemEvent;
@@ -71,15 +73,17 @@ public class MurderMysteryListener implements Listener {
     private static final double MURDERER_THROW_SLOWNESS_SECONDS = MURDERER_KNIFE_THROWING_SECONDS;
     private static final int MURDERER_THROW_SLOWNESS_AMPLIFIER = 1; // Slowness II
     private static final double THROWN_KNIFE_SPEED_BLOCKS_PER_TICK = 0.55D;
-    private static final double THROWN_KNIFE_LAUNCH_HEIGHT = 0.4D;
+    private static final double THROWN_KNIFE_LAUNCH_HEIGHT = 0.26D;
     private static final double THROWN_KNIFE_SPAWN_FORWARD_OFFSET = 0.7D;
     private static final double THROWN_KNIFE_HIT_RADIUS = 0.9D;
     private static final double THROWN_KNIFE_ARROW_COLLISION_RADIUS = 0.65D;
     private static final double THROWN_KNIFE_BLOCK_SAMPLE_STEP = 0.2D;
-    private static final double THROWN_KNIFE_BLOCK_EDGE_INSET = 0.03D;
-    private static final double THROWN_KNIFE_THIN_BLOCK_MIN = 0.25D;
-    private static final double THROWN_KNIFE_THIN_BLOCK_MAX = 0.75D;
-    private static final EulerAngle THROWN_KNIFE_ARM_POSE = new EulerAngle(Math.toRadians(180.0D), 0.0D, 0.0D);
+    private static final double THROWN_KNIFE_BLADE_Y_OFFSET = 1.35D;
+    private static final double THROWN_KNIFE_BLADE_FORWARD_OFFSET = 0.45D;
+    private static final double THROWN_KNIFE_BLADE_SIDE_OFFSET = 0.35D;
+    private static final double[] THROWN_KNIFE_VICTIM_SAMPLE_HEIGHTS = {0.35D, 0.9D, 1.35D, 1.75D};
+    private static final float THROWN_KNIFE_DISPLAY_YAW_OFFSET_DEGREES = 180.0F;
+    private static final double THROWN_KNIFE_ARM_BASE_PITCH_DEGREES = 180.0D;
     private static final int GLASS_PANE_BREAK_ANIMATION_STAGE = 4;
     private static final long GLASS_PANE_BREAK_RESET_SECONDS = 5L;
     private static final long MURDERER_KNIFE_DRIP_PARTICLE_INTERVAL_TICKS = 3L;
@@ -114,14 +118,12 @@ public class MurderMysteryListener implements Listener {
     private static final float ARROW_KNIFE_CLANK_PITCH = 1.35F;
     private static final Sound KNIFE_THROW_TICK_SOUND = resolveCompatibleSound("CLICK", "UI_BUTTON_CLICK", "NOTE_STICKS", "BLOCK_NOTE_BLOCK_HAT");
     private static final float KNIFE_THROW_TICK_VOLUME = 0.8F;
-    private static final float[] KNIFE_THROW_TICK_PITCHES = {1.3F, 1.5F, 1.6F};
+    private static final float[] KNIFE_THROW_TICK_PITCHES = {1.0F, 1.15F, 1.3F};
     private static final int KNIFE_THROW_TICK_SOUND_COUNT = KNIFE_THROW_TICK_PITCHES.length;
     private static final Sound KNIFE_THROW_RELEASE_SOUND = resolveCompatibleSound("ENDERDRAGON_WINGS", "ENTITY_ENDER_DRAGON_FLAP");
     private static final float KNIFE_THROW_RELEASE_VOLUME = 1.0F;
     private static final float KNIFE_THROW_RELEASE_PITCH = 1.0F;
     private static final double ELIMINATED_PLAYER_HEALTH = 0.01D;
-    private static final Method BLOCK_GET_DATA_METHOD = resolveBlockGetDataMethod();
-
     private final MurderMysteryPlugin plugin;
     private final MurderMysteryGameManager gameManager;
     private final QueueService queueService;
@@ -129,6 +131,7 @@ public class MurderMysteryListener implements Listener {
     private final Map<UUID, BukkitTask> pendingKnifeLaunches;
     private final Map<UUID, BukkitTask> activeArrowTrailTasks;
     private final Map<String, BukkitTask> paneBreakResetTasks;
+    private final Map<UUID, ProjectileTrailStyle> lastProjectileTrailStyles;
 
     public MurderMysteryListener(MurderMysteryPlugin plugin, MurderMysteryGameManager gameManager, QueueService queueService) {
         this.plugin = plugin;
@@ -138,6 +141,7 @@ public class MurderMysteryListener implements Listener {
         this.pendingKnifeLaunches = new HashMap<>();
         this.activeArrowTrailTasks = new HashMap<>();
         this.paneBreakResetTasks = new HashMap<>();
+        this.lastProjectileTrailStyles = new HashMap<>();
         plugin.getServer().getScheduler().runTaskTimer(
                 plugin,
                 this::tickMurdererKnifeDripParticles,
@@ -160,8 +164,10 @@ public class MurderMysteryListener implements Listener {
 
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
-        cancelPendingKnifeLaunch(event.getPlayer().getUniqueId());
-        despawnThrownKnife(event.getPlayer().getUniqueId());
+        UUID playerUuid = event.getPlayer().getUniqueId();
+        cancelPendingKnifeLaunch(playerUuid);
+        despawnThrownKnife(playerUuid);
+        lastProjectileTrailStyles.remove(playerUuid);
         gameManager.clearMysteryPotionPlayerState(event.getPlayer());
         if (queueService != null) {
             queueService.handleQuit(event.getPlayer());
@@ -172,8 +178,10 @@ public class MurderMysteryListener implements Listener {
 
     @EventHandler
     public void onPlayerDeath(PlayerDeathEvent event) {
-        cancelPendingKnifeLaunch(event.getEntity().getUniqueId());
-        despawnThrownKnife(event.getEntity().getUniqueId());
+        UUID playerUuid = event.getEntity().getUniqueId();
+        cancelPendingKnifeLaunch(playerUuid);
+        despawnThrownKnife(playerUuid);
+        lastProjectileTrailStyles.remove(playerUuid);
         event.setDeathMessage(null);
         event.getDrops().clear();
         event.setDroppedExp(0);
@@ -279,7 +287,8 @@ public class MurderMysteryListener implements Listener {
 
     @EventHandler
     public void onInteractEntity(PlayerInteractEntityEvent event) {
-        if (gameManager.isMysteryPotionHologram(event.getRightClicked())) {
+        if (gameManager.isDroppedBowDisplay(event.getRightClicked())
+                || gameManager.isMysteryPotionHologram(event.getRightClicked())) {
             event.setCancelled(true);
             return;
         }
@@ -289,11 +298,28 @@ public class MurderMysteryListener implements Listener {
         }
     }
 
-    @EventHandler
-    public void onArmorStandManipulate(PlayerArmorStandManipulateEvent event) {
-        if (gameManager.isMysteryPotionHologram(event.getRightClicked())) {
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onInteractAtEntity(PlayerInteractAtEntityEvent event) {
+        if (gameManager.isDroppedBowDisplay(event.getRightClicked())
+                || gameManager.isMysteryPotionHologram(event.getRightClicked())) {
             event.setCancelled(true);
         }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onArmorStandManipulate(PlayerArmorStandManipulateEvent event) {
+        if (gameManager.isDroppedBowDisplay(event.getRightClicked())
+                || gameManager.isMysteryPotionHologram(event.getRightClicked())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onItemHeld(PlayerItemHeldEvent event) {
+        if (event.getNewSlot() == event.getPreviousSlot()) {
+            return;
+        }
+        cancelKnifeThrowCharge(event.getPlayer());
     }
 
     private boolean attemptMurdererKnifeThrow(Player player, ItemStack interactionItem) {
@@ -321,14 +347,7 @@ public class MurderMysteryListener implements Listener {
             gp.setLastKnifeThrow(0L);
         }
         if (now - lastKnifeThrow < secondsToMillis(MURDERER_KNIFE_THROW_COOLDOWN_SECONDS)) {
-            boolean canceledPendingThrow = cancelPendingKnifeLaunch(player.getUniqueId());
-            if (canceledPendingThrow) {
-                gp.setLastKnifeThrow(0L);
-                player.removePotionEffect(PotionEffectType.SLOW);
-                if (plugin.getActionBarService() != null) {
-                    plugin.getActionBarService().showKnifeStoppedChargingActionBar(player);
-                }
-            }
+            cancelKnifeThrowCharge(player);
             return false;
         }
         if (!scheduleKnifeLaunch(player, item, THROWN_KNIFE_LIFETIME_SECONDS)) {
@@ -348,6 +367,25 @@ public class MurderMysteryListener implements Listener {
                 ),
                 true
         );
+        return true;
+    }
+
+    private boolean cancelKnifeThrowCharge(Player player) {
+        if (player == null) {
+            return false;
+        }
+        boolean canceledPendingThrow = cancelPendingKnifeLaunch(player.getUniqueId());
+        if (!canceledPendingThrow) {
+            return false;
+        }
+        MurderMysteryGamePlayer gp = gameManager.getMurderMysteryPlayer(player);
+        if (gp != null) {
+            gp.setLastKnifeThrow(0L);
+        }
+        player.removePotionEffect(PotionEffectType.SLOW);
+        if (plugin.getActionBarService() != null) {
+            plugin.getActionBarService().showKnifeStoppedChargingActionBar(player);
+        }
         return true;
     }
 
@@ -382,6 +420,10 @@ public class MurderMysteryListener implements Listener {
                     return;
                 }
                 gameManager.addGold(player, creditedGold);
+                MurderMysteryGamePlayer refreshedPlayer = gameManager.getMurderMysteryPlayer(player);
+                if (refreshedPlayer != null && refreshedPlayer.isAlive()) {
+                    gameManager.playVanillaPickupSound(player);
+                }
             });
             return;
         }
@@ -633,6 +675,7 @@ public class MurderMysteryListener implements Listener {
         }
         long now = System.currentTimeMillis();
         gp.setLastArrowShot(now);
+        final boolean playBowRechargePickupSound = gp.getRole() == MurderMysteryRole.DETECTIVE;
         player.getInventory().remove(Material.ARROW);
         if (plugin.getActionBarService() != null) {
             plugin.getActionBarService().showBowChargeActionBar(player);
@@ -640,6 +683,13 @@ public class MurderMysteryListener implements Listener {
         plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
             if (gameManager.isInGame(player) && gameManager.getState() == GameState.IN_GAME) {
                 player.getInventory().setItem(ARROW_HOTBAR_SLOT, new ItemStack(Material.ARROW, 1));
+                MurderMysteryGamePlayer refreshedPlayer = gameManager.getMurderMysteryPlayer(player);
+                if (playBowRechargePickupSound
+                        && refreshedPlayer != null
+                        && refreshedPlayer.isAlive()
+                        && refreshedPlayer.getRole() == MurderMysteryRole.DETECTIVE) {
+                    gameManager.playVanillaPickupSound(player);
+                }
             }
         }, secondsToTicks(DETECTIVE_HERO_ARROW_RECHARGE_SECONDS));
     }
@@ -722,7 +772,8 @@ public class MurderMysteryListener implements Listener {
         if (arrow == null) {
             return;
         }
-        ProjectileTrailStyle style = randomProjectileTrailStyle();
+        UUID shooterUuid = arrow.getShooter() instanceof Player ? ((Player) arrow.getShooter()).getUniqueId() : null;
+        ProjectileTrailStyle style = randomProjectileTrailStyle(shooterUuid);
         if (style == null || style.effect == null) {
             return;
         }
@@ -737,18 +788,36 @@ public class MurderMysteryListener implements Listener {
         activeArrowTrailTasks.put(arrowUuid, task);
     }
 
-    private ProjectileTrailStyle randomProjectileTrailStyle() {
+    private ProjectileTrailStyle randomProjectileTrailStyle(UUID playerUuid) {
         if (PROJECTILE_TRAIL_STYLES.length == 0) {
             return null;
         }
+        ProjectileTrailStyle lastStyle = playerUuid == null ? null : lastProjectileTrailStyles.get(playerUuid);
+        ProjectileTrailStyle fallback = null;
         int startIndex = ThreadLocalRandom.current().nextInt(PROJECTILE_TRAIL_STYLES.length);
         for (int offset = 0; offset < PROJECTILE_TRAIL_STYLES.length; offset++) {
             ProjectileTrailStyle style = PROJECTILE_TRAIL_STYLES[(startIndex + offset) % PROJECTILE_TRAIL_STYLES.length];
-            if (style != null && style.effect != null) {
-                return style;
+            if (style == null || style.effect == null) {
+                continue;
             }
+            if (fallback == null) {
+                fallback = style;
+            }
+            if (style == lastStyle) {
+                continue;
+            }
+            rememberProjectileTrailStyle(playerUuid, style);
+            return style;
         }
-        return null;
+        rememberProjectileTrailStyle(playerUuid, fallback);
+        return fallback;
+    }
+
+    private void rememberProjectileTrailStyle(UUID playerUuid, ProjectileTrailStyle style) {
+        if (playerUuid == null || style == null) {
+            return;
+        }
+        lastProjectileTrailStyles.put(playerUuid, style);
     }
 
     private void tickArrowTrail(UUID arrowUuid, Arrow arrow, ProjectileTrailStyle style) {
@@ -798,6 +867,43 @@ public class MurderMysteryListener implements Listener {
             return;
         }
         spawnProjectileTrailParticle(location, knife.trailStyle);
+    }
+
+    private Location thrownKnifeBladeLocation(Location location, ThrownKnife knife) {
+        if (location == null) {
+            return null;
+        }
+        Location bladeLocation = location.clone().add(0.0D, THROWN_KNIFE_BLADE_Y_OFFSET, 0.0D);
+        Vector right = thrownKnifeDisplayRight(location);
+        if (right != null) {
+            bladeLocation.add(right.multiply(THROWN_KNIFE_BLADE_SIDE_OFFSET));
+        }
+        Vector direction = thrownKnifeDirection(knife);
+        if (direction != null) {
+            bladeLocation.add(direction.multiply(THROWN_KNIFE_BLADE_FORWARD_OFFSET));
+        }
+        return bladeLocation;
+    }
+
+    private Vector thrownKnifeDisplayRight(Location location) {
+        if (location == null) {
+            return null;
+        }
+        double yawRadians = Math.toRadians(location.getYaw());
+        double forwardX = -Math.sin(yawRadians);
+        double forwardZ = Math.cos(yawRadians);
+        Vector right = new Vector(-forwardZ, 0.0D, forwardX);
+        if (right.lengthSquared() <= 0.000001D) {
+            return null;
+        }
+        return right.normalize();
+    }
+
+    private Vector thrownKnifeDirection(ThrownKnife knife) {
+        if (knife == null || knife.velocity == null || knife.velocity.lengthSquared() <= 0.000001D) {
+            return null;
+        }
+        return knife.velocity.clone().normalize();
     }
 
     private void cancelArrowTrail(UUID arrowUuid) {
@@ -1020,20 +1126,22 @@ public class MurderMysteryListener implements Listener {
         Vector velocity = direction.clone().multiply(THROWN_KNIFE_SPEED_BLOCKS_PER_TICK);
         Location launchLocation = shooter.getLocation().clone().add(0.0D, THROWN_KNIFE_LAUNCH_HEIGHT, 0.0D);
         Location spawnLocation = launchLocation.clone().add(direction.clone().multiply(THROWN_KNIFE_SPAWN_FORWARD_OFFSET));
+        spawnLocation.setYaw(spawnLocation.getYaw() + THROWN_KNIFE_DISPLAY_YAW_OFFSET_DEGREES);
         spawnLocation.setPitch(0.0F);
+        float lookPitch = shooter.getEyeLocation().getPitch();
         ArmorStand display;
         try {
             display = spawnLocation.getWorld().spawn(spawnLocation, ArmorStand.class);
         } catch (Throwable ignored) {
             return false;
         }
-        configureThrownKnifeDisplay(display, sourceKnife);
+        configureThrownKnifeDisplay(display, sourceKnife, lookPitch);
         ThrownKnife thrownKnife = new ThrownKnife(
                 display,
                 velocity,
                 launchLocation.clone(),
                 System.currentTimeMillis() + secondsToMillis(lifetimeSeconds),
-                randomProjectileTrailStyle()
+                randomProjectileTrailStyle(shooterUuid)
         );
         BukkitTask task = plugin.getServer().getScheduler().runTaskTimer(
                 plugin,
@@ -1046,7 +1154,7 @@ public class MurderMysteryListener implements Listener {
         return true;
     }
 
-    private void configureThrownKnifeDisplay(ArmorStand display, ItemStack sourceKnife) {
+    private void configureThrownKnifeDisplay(ArmorStand display, ItemStack sourceKnife, float lookPitch) {
         if (display == null) {
             return;
         }
@@ -1055,7 +1163,7 @@ public class MurderMysteryListener implements Listener {
         display.setArms(true);
         display.setBasePlate(false);
         display.setSmall(false);
-        display.setRightArmPose(THROWN_KNIFE_ARM_POSE);
+        display.setRightArmPose(thrownKnifeArmPose(lookPitch));
         trySetArmorStandMarker(display);
         ItemStack knifeDisplay = sourceKnife == null ? new ItemStack(Material.IRON_SWORD, 1) : sourceKnife.clone();
         if (knifeDisplay.getType() == Material.AIR) {
@@ -1063,6 +1171,11 @@ public class MurderMysteryListener implements Listener {
         }
         knifeDisplay.setAmount(1);
         display.setItemInHand(knifeDisplay);
+    }
+
+    private EulerAngle thrownKnifeArmPose(float lookPitch) {
+        double clampedPitch = clamp(lookPitch, -89.0D, 89.0D);
+        return new EulerAngle(Math.toRadians(THROWN_KNIFE_ARM_BASE_PITCH_DEGREES - clampedPitch), 0.0D, 0.0D);
     }
 
     private void tickThrownKnife(UUID shooterUuid) {
@@ -1094,25 +1207,21 @@ public class MurderMysteryListener implements Listener {
             despawnThrownKnife(shooterUuid);
             return;
         }
-        Location blockCollision = firstThrownKnifeBlockCollision(from, to);
-        Location hitScanEnd = blockCollision == null ? to : blockCollision;
-        shatterGlassPanesAlongPath(from, hitScanEnd, knife);
-        ArrowKnifeCollision arrowCollision = findArrowKnifeCollision(shooter, from, hitScanEnd);
+        Location bladeFrom = thrownKnifeBladeLocation(from, knife);
+        Location bladeTo = thrownKnifeBladeLocation(to, knife);
+        shatterGlassPanesAlongPath(bladeFrom, bladeTo, knife);
+        ArrowKnifeCollision arrowCollision = findArrowKnifeCollision(shooter, bladeFrom, bladeTo);
         if (arrowCollision != null) {
             handleArrowKnifeCollision(shooterUuid, arrowCollision.arrow, arrowCollision.location);
             return;
         }
-        Player victim = findKnifeVictim(shooter, from, hitScanEnd);
+        Player victim = findKnifeVictim(shooter, bladeFrom, bladeTo);
         if (victim != null) {
             handleThrownKnifeHit(knife, shooter, victim);
             despawnThrownKnife(shooterUuid);
             return;
         }
-        if (blockCollision != null) {
-            despawnThrownKnife(shooterUuid);
-            return;
-        }
-        spawnThrownKnifeTrailParticle(from, knife);
+        spawnThrownKnifeTrailParticle(bladeFrom, knife);
         display.teleport(to);
     }
 
@@ -1137,6 +1246,9 @@ public class MurderMysteryListener implements Listener {
         Vector start = from.toVector();
         Vector end = to.toVector();
         double hitRadiusSquared = THROWN_KNIFE_HIT_RADIUS * THROWN_KNIFE_HIT_RADIUS;
+        Player closestVictim = null;
+        double closestProgress = Double.MAX_VALUE;
+        double closestDistanceSquared = Double.MAX_VALUE;
         for (Player candidate : plugin.getServer().getOnlinePlayers()) {
             if (candidate == null || !candidate.isOnline()) {
                 continue;
@@ -1157,12 +1269,35 @@ public class MurderMysteryListener implements Listener {
             if (victimData.getRole() == MurderMysteryRole.MURDERER) {
                 continue;
             }
-            Vector victimCenter = candidate.getLocation().add(0.0D, 1.0D, 0.0D).toVector();
-            if (distanceSquaredPointToSegment(victimCenter, start, end) <= hitRadiusSquared) {
-                return candidate;
+            Vector victimBase = candidate.getLocation().toVector();
+            double candidateProgress = Double.MAX_VALUE;
+            double candidateDistanceSquared = Double.MAX_VALUE;
+            for (double sampleHeight : THROWN_KNIFE_VICTIM_SAMPLE_HEIGHTS) {
+                Vector victimPoint = victimBase.clone().add(new Vector(0.0D, sampleHeight, 0.0D));
+                double distanceSquared = distanceSquaredPointToSegment(victimPoint, start, end);
+                if (distanceSquared > hitRadiusSquared) {
+                    continue;
+                }
+                double progress = progressOnSegment(victimPoint, start, end);
+                int progressComparison = Double.compare(progress, candidateProgress);
+                if (progressComparison < 0
+                        || (progressComparison == 0 && distanceSquared < candidateDistanceSquared)) {
+                    candidateProgress = progress;
+                    candidateDistanceSquared = distanceSquared;
+                }
+            }
+            if (candidateProgress == Double.MAX_VALUE) {
+                continue;
+            }
+            int progressComparison = Double.compare(candidateProgress, closestProgress);
+            if (progressComparison < 0
+                    || (progressComparison == 0 && candidateDistanceSquared < closestDistanceSquared)) {
+                closestVictim = candidate;
+                closestProgress = candidateProgress;
+                closestDistanceSquared = candidateDistanceSquared;
             }
         }
-        return null;
+        return closestVictim;
     }
 
     private ArrowKnifeCollision findArrowKnifeCollision(Player knifeShooter, Location from, Location to) {
@@ -1316,33 +1451,6 @@ public class MurderMysteryListener implements Listener {
         }
     }
 
-    private Location firstThrownKnifeBlockCollision(Location from, Location to) {
-        if (from == null || to == null || from.getWorld() == null || !from.getWorld().equals(to.getWorld())) {
-            return null;
-        }
-        World world = from.getWorld();
-        double dx = to.getX() - from.getX();
-        double dy = to.getY() - from.getY();
-        double dz = to.getZ() - from.getZ();
-        double length = Math.sqrt((dx * dx) + (dy * dy) + (dz * dz));
-        int samples = Math.max(1, (int) Math.ceil(length / THROWN_KNIFE_BLOCK_SAMPLE_STEP));
-        for (int i = 1; i <= samples; i++) {
-            double progress = i / (double) samples;
-            double x = from.getX() + (dx * progress);
-            double y = from.getY() + (dy * progress);
-            double z = from.getZ() + (dz * progress);
-            Block block = world.getBlockAt((int) Math.floor(x), (int) Math.floor(y), (int) Math.floor(z));
-            if (!isThrownKnifeBlockingBlock(block, x, y, z)) {
-                continue;
-            }
-            Location collision = new Location(world, x, y, z);
-            collision.setYaw(to.getYaw());
-            collision.setPitch(0.0F);
-            return collision;
-        }
-        return null;
-    }
-
     private String paneBlockKey(Block block) {
         if (block == null || block.getWorld() == null) {
             return "";
@@ -1362,229 +1470,6 @@ public class MurderMysteryListener implements Listener {
         }
         String name = material.name();
         return material == Material.THIN_GLASS || (name.contains("GLASS") && name.contains("PANE"));
-    }
-
-    private boolean isThrownKnifeBlockingBlock(Block block, double x, double y, double z) {
-        if (block == null) {
-            return false;
-        }
-        Material material = block.getType();
-        if (material == null || material == Material.AIR || isGlassPane(material)) {
-            return false;
-        }
-
-        double localX = x - block.getX();
-        double localY = y - block.getY();
-        double localZ = z - block.getZ();
-        byte blockData = readBlockData(block);
-        if (isSlabMaterial(material)) {
-            return isInsideSlabCollisionBounds(blockData, localX, localY, localZ);
-        }
-        if (isStairsMaterial(material)) {
-            return isInsideStairCollisionBounds(blockData, localX, localY, localZ);
-        }
-        if (isFenceGateMaterial(material)) {
-            return isInsideFenceGateCollisionBounds(blockData, localX, localY, localZ);
-        }
-        if (isThinCenteredBlockingBlock(material)) {
-            return isInsideThinCenteredCollisionBounds(localX, localY, localZ);
-        }
-        if (isChestLikeBlock(material)) {
-            return isInsideBox(localX, localY, localZ, 0.0625D, 0.9375D, 0.0D, 0.875D, 0.0625D, 0.9375D);
-        }
-        if (material == Material.CAKE_BLOCK) {
-            return isInsideBox(localX, localY, localZ, 0.0625D, 0.9375D, 0.0D, 0.5D, 0.0625D, 0.9375D);
-        }
-        if (material == Material.CACTUS) {
-            return isInsideBox(localX, localY, localZ, 0.0625D, 0.9375D, 0.0D, 1.0D, 0.0625D, 0.9375D);
-        }
-        if (!isFullThrownKnifeBlockingBlock(material)) {
-            return false;
-        }
-        return isInsideFullBlockCollisionBounds(localX, localY, localZ);
-    }
-
-    private boolean isSlabMaterial(Material material) {
-        return material == Material.STEP || material == Material.WOOD_STEP || material == Material.STONE_SLAB2;
-    }
-
-    private boolean isStairsMaterial(Material material) {
-        if (material == null) {
-            return false;
-        }
-        String name = material.name();
-        return material == Material.WOOD_STAIRS || name.endsWith("_STAIRS");
-    }
-
-    private boolean isFenceGateMaterial(Material material) {
-        return material != null && material.name().contains("FENCE_GATE");
-    }
-
-    private boolean isThinCenteredBlockingBlock(Material material) {
-        if (material == null) {
-            return false;
-        }
-        String name = material.name();
-        return name.endsWith("_FENCE") || material == Material.FENCE || material == Material.IRON_FENCE || material == Material.COBBLE_WALL;
-    }
-
-    private boolean isChestLikeBlock(Material material) {
-        return material == Material.CHEST || material == Material.TRAPPED_CHEST || material == Material.ENDER_CHEST;
-    }
-
-    private boolean isFullThrownKnifeBlockingBlock(Material material) {
-        if (material == null) {
-            return false;
-        }
-        try {
-            if (material.isOccluding()) {
-                return true;
-            }
-        } catch (NoSuchMethodError ignored) {
-            return material != Material.AIR && !isGlassPane(material);
-        }
-        return isTransparentFullBlockingBlock(material);
-    }
-
-    private boolean isTransparentFullBlockingBlock(Material material) {
-        return material == Material.GLASS
-                || material == Material.STAINED_GLASS
-                || material == Material.ICE
-                || material == Material.PACKED_ICE
-                || material == Material.GLOWSTONE
-                || material == Material.LEAVES
-                || material == Material.LEAVES_2
-                || material == Material.TNT
-                || material == Material.SEA_LANTERN;
-    }
-
-    private boolean isInsideFullBlockCollisionBounds(double localX, double localY, double localZ) {
-        return isInsideBox(
-                localX,
-                localY,
-                localZ,
-                THROWN_KNIFE_BLOCK_EDGE_INSET,
-                1.0D - THROWN_KNIFE_BLOCK_EDGE_INSET,
-                THROWN_KNIFE_BLOCK_EDGE_INSET,
-                1.0D - THROWN_KNIFE_BLOCK_EDGE_INSET,
-                THROWN_KNIFE_BLOCK_EDGE_INSET,
-                1.0D - THROWN_KNIFE_BLOCK_EDGE_INSET
-        );
-    }
-
-    private boolean isInsideSlabCollisionBounds(byte blockData, double localX, double localY, double localZ) {
-        if (!isInsideHorizontalFullBlockBounds(localX, localZ)) {
-            return false;
-        }
-        boolean inverted = (blockData & 0x8) != 0;
-        if (inverted) {
-            return localY >= 0.5D && localY <= 1.0D - THROWN_KNIFE_BLOCK_EDGE_INSET;
-        }
-        return localY >= THROWN_KNIFE_BLOCK_EDGE_INSET && localY <= 0.5D;
-    }
-
-    private boolean isInsideStairCollisionBounds(byte blockData, double localX, double localY, double localZ) {
-        if (!isInsideHorizontalFullBlockBounds(localX, localZ)) {
-            return false;
-        }
-        boolean inverted = (blockData & 0x4) != 0;
-        if (inverted) {
-            if (localY >= 0.5D && localY <= 1.0D - THROWN_KNIFE_BLOCK_EDGE_INSET) {
-                return true;
-            }
-            if (localY < THROWN_KNIFE_BLOCK_EDGE_INSET || localY > 0.5D) {
-                return false;
-            }
-        } else {
-            if (localY >= THROWN_KNIFE_BLOCK_EDGE_INSET && localY <= 0.5D) {
-                return true;
-            }
-            if (localY < 0.5D || localY > 1.0D - THROWN_KNIFE_BLOCK_EDGE_INSET) {
-                return false;
-            }
-        }
-
-        switch (blockData & 0x3) {
-            case 0:
-                return localX >= 0.5D && localX <= 1.0D - THROWN_KNIFE_BLOCK_EDGE_INSET;
-            case 1:
-                return localX >= THROWN_KNIFE_BLOCK_EDGE_INSET && localX <= 0.5D;
-            case 2:
-                return localZ >= 0.5D && localZ <= 1.0D - THROWN_KNIFE_BLOCK_EDGE_INSET;
-            case 3:
-                return localZ >= THROWN_KNIFE_BLOCK_EDGE_INSET && localZ <= 0.5D;
-            default:
-                return false;
-        }
-    }
-
-    private boolean isInsideFenceGateCollisionBounds(byte blockData, double localX, double localY, double localZ) {
-        if ((blockData & 0x4) != 0) {
-            return false;
-        }
-        int direction = blockData & 0x3;
-        if (direction == 0 || direction == 2) {
-            return isInsideBox(
-                    localX,
-                    localY,
-                    localZ,
-                    THROWN_KNIFE_BLOCK_EDGE_INSET,
-                    1.0D - THROWN_KNIFE_BLOCK_EDGE_INSET,
-                    THROWN_KNIFE_BLOCK_EDGE_INSET,
-                    1.0D - THROWN_KNIFE_BLOCK_EDGE_INSET,
-                    0.375D,
-                    0.625D
-            );
-        }
-        return isInsideBox(
-                localX,
-                localY,
-                localZ,
-                0.375D,
-                0.625D,
-                THROWN_KNIFE_BLOCK_EDGE_INSET,
-                1.0D - THROWN_KNIFE_BLOCK_EDGE_INSET,
-                THROWN_KNIFE_BLOCK_EDGE_INSET,
-                1.0D - THROWN_KNIFE_BLOCK_EDGE_INSET
-        );
-    }
-
-    private boolean isInsideThinCenteredCollisionBounds(double localX, double localY, double localZ) {
-        return isInsideBox(
-                localX,
-                localY,
-                localZ,
-                THROWN_KNIFE_THIN_BLOCK_MIN,
-                THROWN_KNIFE_THIN_BLOCK_MAX,
-                THROWN_KNIFE_BLOCK_EDGE_INSET,
-                1.0D - THROWN_KNIFE_BLOCK_EDGE_INSET,
-                THROWN_KNIFE_THIN_BLOCK_MIN,
-                THROWN_KNIFE_THIN_BLOCK_MAX
-        );
-    }
-
-    private boolean isInsideHorizontalFullBlockBounds(double localX, double localZ) {
-        return localX >= THROWN_KNIFE_BLOCK_EDGE_INSET
-                && localX <= 1.0D - THROWN_KNIFE_BLOCK_EDGE_INSET
-                && localZ >= THROWN_KNIFE_BLOCK_EDGE_INSET
-                && localZ <= 1.0D - THROWN_KNIFE_BLOCK_EDGE_INSET;
-    }
-
-    private boolean isInsideBox(double localX,
-                                double localY,
-                                double localZ,
-                                double minX,
-                                double maxX,
-                                double minY,
-                                double maxY,
-                                double minZ,
-                                double maxZ) {
-        return localX >= minX
-                && localX <= maxX
-                && localY >= minY
-                && localY <= maxY
-                && localZ >= minZ
-                && localZ <= maxZ;
     }
 
     private void playGlassPaneShatterEffect(Block block) {
@@ -1725,6 +1610,18 @@ public class MurderMysteryListener implements Listener {
         }
     }
 
+    private double progressOnSegment(Vector point, Vector start, Vector end) {
+        if (point == null || start == null || end == null) {
+            return Double.MAX_VALUE;
+        }
+        Vector segment = end.clone().subtract(start);
+        double lengthSquared = segment.lengthSquared();
+        if (lengthSquared <= 0.000001D) {
+            return 0.0D;
+        }
+        return clamp(point.clone().subtract(start).dot(segment) / lengthSquared, 0.0D, 1.0D);
+    }
+
     private double distanceSquaredPointToSegment(Vector point, Vector start, Vector end) {
         if (point == null || start == null || end == null) {
             return Double.MAX_VALUE;
@@ -1862,32 +1759,6 @@ public class MurderMysteryListener implements Listener {
         } catch (IllegalArgumentException ignored) {
             return null;
         }
-    }
-
-    private static Method resolveBlockGetDataMethod() {
-        try {
-            return Block.class.getMethod("getData");
-        } catch (NoSuchMethodException ignored) {
-            return null;
-        }
-    }
-
-    private static byte readBlockData(Block block) {
-        if (block == null || BLOCK_GET_DATA_METHOD == null) {
-            return 0;
-        }
-        try {
-            Object data = BLOCK_GET_DATA_METHOD.invoke(block);
-            if (data instanceof Byte) {
-                return (Byte) data;
-            }
-            if (data instanceof Number) {
-                return ((Number) data).byteValue();
-            }
-        } catch (Throwable ignored) {
-            // Missing legacy block data only makes directional collision fall back to its default orientation.
-        }
-        return 0;
     }
 
     private void resyncDamagedItemSlots(Player player, ItemStack damagedItem) {
