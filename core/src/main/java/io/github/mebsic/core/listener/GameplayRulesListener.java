@@ -3,10 +3,16 @@ package io.github.mebsic.core.listener;
 import io.github.mebsic.core.CorePlugin;
 import io.github.mebsic.core.server.ServerType;
 import io.github.mebsic.game.model.GameState;
+import org.bukkit.ChatColor;
+import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
+import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -24,6 +30,7 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.weather.ThunderChangeEvent;
 import org.bukkit.event.weather.WeatherChangeEvent;
+import org.bukkit.inventory.ItemStack;
 
 import java.util.Locale;
 
@@ -209,6 +216,9 @@ public class GameplayRulesListener implements Listener {
         if (clicked == null) {
             return;
         }
+        if (action == Action.RIGHT_CLICK_BLOCK && handleBuildModeSpawnEggUse(event)) {
+            return;
+        }
         Material type = clicked.getType();
         if (action == Action.RIGHT_CLICK_BLOCK) {
             if (shouldBlockMechanismUntilInGame() && isBlockedMechanismInteractionMaterial(type)) {
@@ -238,6 +248,70 @@ public class GameplayRulesListener implements Listener {
             return false;
         }
         return plugin.getCurrentGameState() != GameState.IN_GAME;
+    }
+
+    private boolean handleBuildModeSpawnEggUse(PlayerInteractEvent event) {
+        if (event == null || plugin == null) {
+            return false;
+        }
+        Player player = event.getPlayer();
+        if (player == null || !plugin.isBuildModeActive(player.getUniqueId())) {
+            return false;
+        }
+        EntityType entityType = resolveSpawnEggEntityType(event.getItem());
+        if (entityType == null) {
+            return false;
+        }
+        Location spawnLocation = resolveSpawnEggLocation(event);
+        if (spawnLocation == null || spawnLocation.getWorld() == null) {
+            return false;
+        }
+        event.setCancelled(true);
+        event.setUseInteractedBlock(Event.Result.DENY);
+        event.setUseItemInHand(Event.Result.DENY);
+        try {
+            spawnLocation.getWorld().spawnEntity(spawnLocation, entityType);
+        } catch (IllegalArgumentException ex) {
+            player.sendMessage(ChatColor.RED + "That mob cannot be spawned here!");
+        }
+        return true;
+    }
+
+    private EntityType resolveSpawnEggEntityType(ItemStack item) {
+        if (item == null || item.getType() != Material.MONSTER_EGG) {
+            return null;
+        }
+        EntityType entityType = EntityType.fromId(item.getDurability());
+        if (entityType == null || !entityType.isAlive() || !entityType.isSpawnable()) {
+            return null;
+        }
+        return entityType;
+    }
+
+    private Location resolveSpawnEggLocation(PlayerInteractEvent event) {
+        if (event == null || event.getClickedBlock() == null) {
+            return null;
+        }
+        BlockFace face = event.getBlockFace();
+        if (face == null) {
+            face = BlockFace.UP;
+        }
+        Block targetBlock = event.getClickedBlock().getRelative(face);
+        if (targetBlock == null) {
+            return null;
+        }
+        Location location = targetBlock.getLocation();
+        if (location == null) {
+            return null;
+        }
+        location = location.add(0.5D, 0.0D, 0.5D);
+        Player player = event.getPlayer();
+        if (player != null && player.getLocation() != null) {
+            location.setYaw(player.getLocation().getYaw());
+            location.setPitch(0.0f);
+        }
+        World world = location.getWorld();
+        return world == null ? null : location;
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)

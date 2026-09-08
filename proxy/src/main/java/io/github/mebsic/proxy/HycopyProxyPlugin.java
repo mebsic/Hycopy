@@ -42,6 +42,7 @@ import io.github.mebsic.proxy.service.PrivateMessageReplyService;
 import io.github.mebsic.proxy.service.QueueOrchestrator;
 import io.github.mebsic.proxy.service.RankResolver;
 import io.github.mebsic.proxy.service.StaffChatService;
+import io.github.mebsic.proxy.service.WatchdogAnnouncementService;
 import io.github.mebsic.proxy.util.Components;
 import io.github.mebsic.proxy.util.PartyComponents;
 import io.github.mebsic.core.manager.RedisManager;
@@ -151,6 +152,7 @@ public class HycopyProxyPlugin {
     private PrivateMessageReplyService privateMessageReplyService;
     private PartyService partyService;
     private StaffChatService staffChatService;
+    private WatchdogAnnouncementService watchdogAnnouncementService;
     private UpdateCommand updateCommand;
     private final AtomicBoolean infrastructureFailure = new AtomicBoolean(false);
     private final AtomicInteger mongoHealthFailures = new AtomicInteger(0);
@@ -310,7 +312,9 @@ public class HycopyProxyPlugin {
                     chatMessageService
             );
             ChatCommand chatCommand = new ChatCommand(chatChannelService, partyService);
-            StaffChatCommand staffChatCommand = new StaffChatCommand(staffChatService);
+            StaffChatCommand staffChatCommand = new StaffChatCommand(staffChatService, chatRestrictionService);
+            this.watchdogAnnouncementService = new WatchdogAnnouncementService(proxy, this);
+            this.watchdogAnnouncementService.start();
             registerCommand(commands, "friend", friendCommand);
             registerCommand(commands, "f", friendAliasCommand);
             registerCommand(commands, "block", blockCommand);
@@ -741,6 +745,10 @@ public class HycopyProxyPlugin {
         if (queueOrchestrator != null) {
             queueOrchestrator.stop();
             queueOrchestrator = null;
+        }
+        if (watchdogAnnouncementService != null) {
+            watchdogAnnouncementService.stop();
+            watchdogAnnouncementService = null;
         }
         registryService = null;
         friendService = null;

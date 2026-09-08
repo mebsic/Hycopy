@@ -1,17 +1,26 @@
 package io.github.mebsic.proxy.command;
 
 import io.github.mebsic.core.util.CommonMessages;
+import io.github.mebsic.proxy.service.ChatRestrictionService;
 import io.github.mebsic.proxy.service.StaffChatService;
 import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.proxy.Player;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
 public class StaffChatCommand implements SimpleCommand {
+    private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacySection();
     private final StaffChatService staffChat;
+    private final ChatRestrictionService chatRestrictions;
 
     public StaffChatCommand(StaffChatService staffChat) {
+        this(staffChat, null);
+    }
+
+    public StaffChatCommand(StaffChatService staffChat, ChatRestrictionService chatRestrictions) {
         this.staffChat = staffChat;
+        this.chatRestrictions = chatRestrictions;
     }
 
     @Override
@@ -31,6 +40,9 @@ public class StaffChatCommand implements SimpleCommand {
             player.sendMessage(Component.text("/staffchat <message>", NamedTextColor.RED));
             return;
         }
+        if (sendActiveMuteFrame(player)) {
+            return;
+        }
         String message = joinArgs(args);
         staffChat.broadcastChat(player, message);
     }
@@ -44,5 +56,17 @@ public class StaffChatCommand implements SimpleCommand {
             builder.append(args[i]);
         }
         return builder.toString();
+    }
+
+    private boolean sendActiveMuteFrame(Player player) {
+        if (player == null || chatRestrictions == null) {
+            return false;
+        }
+        String message = chatRestrictions.formatActiveMuteMessage(player.getUniqueId());
+        if (message == null || message.trim().isEmpty()) {
+            return false;
+        }
+        player.sendMessage(LEGACY.deserialize(message));
+        return true;
     }
 }

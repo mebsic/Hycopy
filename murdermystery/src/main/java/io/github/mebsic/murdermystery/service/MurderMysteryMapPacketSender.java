@@ -11,6 +11,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
+/**
+ * Sends full 128x128 map pixel payloads when Bukkit's wrapper only flushes cursors reliably.
+ */
 final class MurderMysteryMapPacketSender {
     private static final int MAP_PIXEL_SIZE = 128;
 

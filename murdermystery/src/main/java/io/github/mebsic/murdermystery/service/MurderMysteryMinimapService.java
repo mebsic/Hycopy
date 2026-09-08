@@ -24,6 +24,7 @@ import org.bukkit.map.MapView;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -41,7 +42,7 @@ public final class MurderMysteryMinimapService {
     private static final String LORE_LINE = ChatColor.GRAY + "Use this Map to navigate in the world.";
     private static final int PLAYER_REVEAL_REMAINING_SECONDS = 30;
     private static final int PLAYER_REVEAL_ALIVE_NON_MURDERERS = 2;
-    private static final double PLAYER_REVEAL_MAX_Y_DELTA = 5.0D;
+    private static final double NEARBY_PLAYER_REVEAL_MAX_Y_DELTA = 5.0D;
     private static final long REFRESH_PERIOD_TICKS = 1L;
     private static final long MAP_FIRST_RESEND_DELAY_TICKS = 1L;
     private static final long MAP_JOIN_RESEND_DELAY_TICKS = 20L;
@@ -74,6 +75,7 @@ public final class MurderMysteryMinimapService {
     private final Set<UUID> mapEligiblePlayers;
     private final MurderMysteryMapPacketSender mapPacketSender;
     private final MurderMysteryMapStateWriter mapStateWriter;
+    private final byte[] blankMapPixels;
     private boolean loggedMapPacketFallback;
     private boolean loggedEmptyTerrainCapture;
     private long mapSessionId;
@@ -87,6 +89,7 @@ public final class MurderMysteryMinimapService {
         this.mapEligiblePlayers = new HashSet<>();
         this.mapPacketSender = MurderMysteryMapPacketSender.create();
         this.mapStateWriter = MurderMysteryMapStateWriter.create();
+        this.blankMapPixels = blankPixels();
         this.loggedMapPacketFallback = false;
         this.loggedEmptyTerrainCapture = false;
         this.mapSessionId = 1L;
@@ -318,17 +321,32 @@ public final class MurderMysteryMinimapService {
         List<MapRenderer> renderers = minimap.mapView.getRenderers();
         return renderers.size() == 1
                 && renderers.get(0) == minimap.renderer
-                && isMapViewOnAnchor(minimap.mapView, anchor);
+                && isMapViewOnAnchor(minimap, anchor);
     }
 
-    private boolean isMapViewOnAnchor(MapView mapView, MapAnchor anchor) {
+    private boolean isMapViewOnAnchor(PlayerMinimap minimap, MapAnchor anchor) {
+        if (minimap == null || minimap.mapView == null || anchor == null || anchor.world == null) {
+            return false;
+        }
+        if (minimap.anchor != null && !sameAnchor(minimap.anchor, anchor)) {
+            return false;
+        }
+        MapView mapView = minimap.mapView;
         return mapView != null
                 && anchor != null
                 && anchor.world != null
-                && sameWorld(mapView.getWorld(), anchor.world)
                 && mapView.getCenterX() == anchor.centerX
                 && mapView.getCenterZ() == anchor.centerZ
                 && mapView.getScale() == anchor.scale;
+    }
+
+    private boolean sameAnchor(MapAnchor first, MapAnchor second) {
+        return first != null
+                && second != null
+                && sameWorld(first.world, second.world)
+                && first.centerX == second.centerX
+                && first.centerZ == second.centerZ
+                && first.scale == second.scale;
     }
 
     private void removeRenderers() {
@@ -350,9 +368,8 @@ public final class MurderMysteryMinimapService {
         if (player == null || minimap == null || minimap.mapView == null) {
             return;
         }
-        byte[] pixels = blankPixels();
         if (mapStateWriter != null) {
-            mapStateWriter.write(minimap.mapView, pixels);
+            mapStateWriter.write(minimap.mapView, blankMapPixels);
         }
         Integer mapId = readMapId(minimap.mapView);
         if (mapPacketSender != null && mapId != null) {
@@ -360,7 +377,7 @@ public final class MurderMysteryMinimapService {
                     player,
                     mapId,
                     (byte) scaleValue(minimap.mapView.getScale()),
-                    pixels,
+                    blankMapPixels,
                     new MapCursorCollection()
             );
         }
@@ -477,11 +494,34 @@ public final class MurderMysteryMinimapService {
         mapView.setCenterX(anchor.centerX);
         mapView.setCenterZ(anchor.centerZ);
         mapView.setScale(anchor.scale);
+        applyStaticTrackingSettings(mapView);
+    }
+
+    private void applyStaticTrackingSettings(MapView mapView) {
+        invokeMapViewBooleanSetter(mapView, "setTrackingPosition", false);
+        invokeMapViewBooleanSetter(mapView, "setUnlimitedTracking", false);
+        invokeMapViewBooleanSetter(mapView, "setLocked", true);
+    }
+
+    private void invokeMapViewBooleanSetter(MapView mapView, String methodName, boolean value) {
+        if (mapView == null || methodName == null || methodName.isEmpty()) {
+            return;
+        }
+        try {
+            Method method = mapView.getClass().getMethod(methodName, boolean.class);
+            method.invoke(mapView, value);
+        } catch (Throwable ignored) {
+            // Older server APIs do not expose every map tracking flag.
+        }
     }
 
     private void syncMinimapAnchor(PlayerMinimap minimap, MapAnchor anchor) {
+        if (minimap == null) {
+            return;
+        }
+        minimap.anchor = anchor;
         TerrainCacheKey anchorKey = TerrainCacheKey.from(anchor, mapSessionId);
-        if (minimap == null || anchorKey == null || anchorKey.equals(minimap.anchorKey)) {
+        if (anchorKey == null || anchorKey.equals(minimap.anchorKey)) {
             return;
         }
         minimap.anchorKey = anchorKey;
@@ -489,20 +529,24 @@ public final class MurderMysteryMinimapService {
         minimap.renderedSampledTerrainKey = null;
     }
 
-    private boolean shouldRevealRemainingPlayers() {
+    private boolean shouldRevealOpposingPlayers() {
         if (gameManager.getState() != GameState.IN_GAME) {
             return false;
         }
-        if (gameManager.getRemainingGameSeconds() <= PLAYER_REVEAL_REMAINING_SECONDS) {
-            return true;
+        return gameManager.getRemainingGameSeconds() <= PLAYER_REVEAL_REMAINING_SECONDS;
+    }
+
+    private boolean shouldRevealNonMurderersToMurderer(MurderMysteryGamePlayer viewerData) {
+        if (gameManager.getState() != GameState.IN_GAME || !isMurderer(viewerData)) {
+            return false;
         }
         int aliveNonMurderers = 0;
         for (MurderMysteryGamePlayer mmPlayer : gameManager.getMurderMysteryPlayersSnapshot()) {
-            if (mmPlayer != null && mmPlayer.isAlive() && mmPlayer.getRole() != MurderMysteryRole.MURDERER) {
+            if (isAliveNonMurderer(mmPlayer)) {
                 aliveNonMurderers++;
             }
         }
-        return aliveNonMurderers == PLAYER_REVEAL_ALIVE_NON_MURDERERS;
+        return aliveNonMurderers > 0 && aliveNonMurderers <= PLAYER_REVEAL_ALIVE_NON_MURDERERS;
     }
 
     private void render(MapView mapView, MapCanvas canvas, Player viewer) {
@@ -529,10 +573,28 @@ public final class MurderMysteryMinimapService {
         if (mapView == null || viewer == null || !viewer.isOnline() || !canCarryMap(viewer)) {
             return cursors;
         }
-        addLocationCursor(cursors, mapView, viewer.getLocation(), viewerDirection(viewer), MapCursor.Type.GREEN_POINTER);
-        addDroppedBowCursor(cursors, mapView);
-        addRemainingPlayerCursors(cursors, mapView, viewer);
+        MapAnchor anchor = cursorAnchor(mapView, viewer);
+        addLocationCursor(cursors, anchor, viewer.getLocation(), viewerDirection(viewer), MapCursor.Type.GREEN_POINTER);
+        addDroppedBowCursor(cursors, anchor);
+        addPlayerRevealCursors(cursors, anchor, viewer);
         return cursors;
+    }
+
+    private MapAnchor cursorAnchor(MapView mapView, Player viewer) {
+        if (viewer != null) {
+            PlayerMinimap minimap = playerMinimaps.get(viewer.getUniqueId());
+            if (minimap != null && minimap.mapView == mapView && minimap.anchor != null) {
+                return minimap.anchor;
+            }
+        }
+        MapAnchor activeAnchor = activeMapAnchor();
+        if (activeAnchor != null) {
+            return activeAnchor;
+        }
+        if (mapView == null || mapView.getWorld() == null) {
+            return null;
+        }
+        return new MapAnchor(mapView.getWorld(), mapView.getCenterX(), mapView.getCenterZ(), mapView.getScale());
     }
 
     private void copyCursors(MapCursorCollection target, MapCursorCollection source) {
@@ -547,51 +609,103 @@ public final class MurderMysteryMinimapService {
         }
     }
 
-    private void addDroppedBowCursor(MapCursorCollection cursors, MapView mapView) {
+    private void addDroppedBowCursor(MapCursorCollection cursors, MapAnchor anchor) {
+        if (gameManager == null || gameManager.getState() != GameState.IN_GAME) {
+            return;
+        }
         Location droppedBow = gameManager.getDroppedBowLocation();
         if (droppedBow == null) {
             return;
         }
-        addLocationCursor(cursors, mapView, droppedBow, (byte) 0, MapCursor.Type.BLUE_POINTER);
+        addLocationCursor(cursors, anchor, droppedBow, (byte) 0, MapCursor.Type.BLUE_POINTER);
     }
 
-    private void addRemainingPlayerCursors(MapCursorCollection cursors, MapView mapView, Player viewer) {
-        if (!shouldRevealRemainingPlayers() || viewer == null) {
+    private void addPlayerRevealCursors(MapCursorCollection cursors, MapAnchor anchor, Player viewer) {
+        if (cursors == null || anchor == null || viewer == null || gameManager == null
+                || gameManager.getState() != GameState.IN_GAME) {
             return;
         }
-        for (MurderMysteryGamePlayer mmPlayer : gameManager.getMurderMysteryPlayersSnapshot()) {
-            if (mmPlayer == null) {
+        MurderMysteryGamePlayer viewerData = gameManager.getMurderMysteryPlayer(viewer);
+        if (viewerData == null || !viewerData.isAlive()) {
+            return;
+        }
+        boolean revealOpposingPlayers = shouldRevealOpposingPlayers();
+        boolean revealNonMurderersToMurderer = shouldRevealNonMurderersToMurderer(viewerData);
+        Set<UUID> addedPlayers = new HashSet<>();
+        for (MurderMysteryGamePlayer targetData : gameManager.getMurderMysteryPlayersSnapshot()) {
+            if (targetData == null || !targetData.isAlive()) {
                 continue;
             }
-            Player target = Bukkit.getPlayer(mmPlayer.getUuid());
-            if (!isVisibleRemainingPlayerForViewer(viewer, mmPlayer, target)) {
+            UUID targetUuid = targetData.getUuid();
+            if (targetUuid == null || targetUuid.equals(viewer.getUniqueId()) || addedPlayers.contains(targetUuid)) {
                 continue;
             }
-            addLocationCursor(cursors, mapView, target.getLocation(), viewerDirection(target), MapCursor.Type.RED_POINTER);
+            Player target = Bukkit.getPlayer(targetUuid);
+            if (!isVisiblePlayerForViewer(
+                    viewer,
+                    viewerData,
+                    target,
+                    targetData,
+                    revealOpposingPlayers,
+                    revealNonMurderersToMurderer
+            )) {
+                continue;
+            }
+            addLocationCursor(cursors, anchor, target.getLocation(), viewerDirection(target), MapCursor.Type.RED_POINTER);
+            addedPlayers.add(targetUuid);
         }
     }
 
-    private boolean isVisibleRemainingPlayerForViewer(Player viewer, MurderMysteryGamePlayer mmPlayer, Player target) {
-        if (viewer == null || mmPlayer == null || !mmPlayer.isAlive() || target == null || !target.isOnline()) {
+    private boolean isVisiblePlayerForViewer(Player viewer,
+                                             MurderMysteryGamePlayer viewerData,
+                                             Player target,
+                                             MurderMysteryGamePlayer targetData,
+                                             boolean revealOpposingPlayers,
+                                             boolean revealNonMurderersToMurderer) {
+        if (viewer == null || viewerData == null || target == null || targetData == null || !target.isOnline()
+                || !targetData.isAlive()) {
             return false;
         }
-        if (viewer.getUniqueId().equals(mmPlayer.getUuid())) {
+        if (isNearbyPlayer(viewer, target)) {
+            return true;
+        }
+        if (revealNonMurderersToMurderer && isMurderer(viewerData) && isAliveNonMurderer(targetData)) {
+            return true;
+        }
+        return revealOpposingPlayers && isOpposingSide(viewerData, targetData);
+    }
+
+    private boolean isNearbyPlayer(Player viewer, Player target) {
+        if (viewer == null || target == null) {
             return false;
         }
         Location viewerLocation = viewer.getLocation();
         Location targetLocation = target.getLocation();
-        if (!sameWorld(viewerLocation, targetLocation)) {
+        return sameWorld(viewerLocation, targetLocation)
+                && Math.abs(targetLocation.getY() - viewerLocation.getY()) <= NEARBY_PLAYER_REVEAL_MAX_Y_DELTA;
+    }
+
+    private boolean isOpposingSide(MurderMysteryGamePlayer viewerData, MurderMysteryGamePlayer targetData) {
+        if (viewerData == null || targetData == null) {
             return false;
         }
-        return Math.abs(targetLocation.getY() - viewerLocation.getY()) <= PLAYER_REVEAL_MAX_Y_DELTA;
+        return isMurderer(viewerData) != isMurderer(targetData);
+    }
+
+    private boolean isAliveNonMurderer(MurderMysteryGamePlayer mmPlayer) {
+        return mmPlayer != null && mmPlayer.isAlive() && !isMurderer(mmPlayer);
+    }
+
+    private boolean isMurderer(MurderMysteryGamePlayer mmPlayer) {
+        return mmPlayer != null && mmPlayer.getRole() == MurderMysteryRole.MURDERER;
     }
 
     private void addLocationCursor(MapCursorCollection cursors,
-                                   MapView mapView,
+                                   MapAnchor anchor,
                                    Location location,
                                    byte direction,
                                    MapCursor.Type type) {
-        CursorPosition position = cursorPosition(mapView, location);
+        CursorPosition position = cursorPosition(anchor, location);
         if (position == null) {
             return;
         }
@@ -615,6 +729,7 @@ public final class MurderMysteryMinimapService {
         }
         TerrainSnapshot snapshot = terrainSnapshotFor(minimap, viewer);
         if (snapshot == null) {
+            paintBlank(canvas);
             return;
         }
         paintSampledTerrain(minimap, canvas, snapshot);
@@ -626,9 +741,15 @@ public final class MurderMysteryMinimapService {
         }
         MapAnchor anchor = activeMapAnchor();
         if (anchor == null || anchor.world == null) {
+            paintBlank(canvas);
             return;
         }
-        paintSnapshot(canvas, terrainSnapshot(anchor));
+        TerrainSnapshot snapshot = terrainSnapshot(anchor);
+        if (snapshot == null) {
+            paintBlank(canvas);
+            return;
+        }
+        paintSnapshot(canvas, snapshot);
     }
 
     private TerrainSnapshot terrainSnapshotFor(PlayerMinimap minimap, Player player) {
@@ -637,16 +758,6 @@ public final class MurderMysteryMinimapService {
         }
         MapAnchor anchor = resolveMapAnchor(minimap, player);
         TerrainSnapshot snapshot = terrainSnapshot(anchor);
-        if (snapshot == null) {
-            MapAnchor fallbackAnchor = fallbackAnchor(minimap, player);
-            if (!sameAnchor(anchor, fallbackAnchor)) {
-                TerrainSnapshot fallbackSnapshot = terrainSnapshot(fallbackAnchor);
-                if (fallbackSnapshot != null) {
-                    anchor = fallbackAnchor;
-                    snapshot = fallbackSnapshot;
-                }
-            }
-        }
         if (snapshot == null || anchor == null) {
             applyMapView(minimap.mapView, anchor);
             syncMinimapAnchor(minimap, anchor);
@@ -655,28 +766,6 @@ public final class MurderMysteryMinimapService {
         applyMapView(minimap.mapView, anchor);
         syncMinimapAnchor(minimap, anchor);
         return snapshot;
-    }
-
-    private MapAnchor fallbackAnchor(PlayerMinimap minimap, Player player) {
-        if (minimap == null || player == null || player.getWorld() == null) {
-            return null;
-        }
-        if (minimap.fallbackAnchor == null || !sameWorld(minimap.fallbackAnchor.world, player.getWorld())) {
-            minimap.fallbackAnchor = playerAnchor(player);
-        }
-        return minimap.fallbackAnchor;
-    }
-
-    private boolean sameAnchor(MapAnchor first, MapAnchor second) {
-        if (first == second) {
-            return true;
-        }
-        return first != null
-                && second != null
-                && sameWorld(first.world, second.world)
-                && first.centerX == second.centerX
-                && first.centerZ == second.centerZ
-                && first.scale == second.scale;
     }
 
     private void paintSampledTerrain(PlayerMinimap minimap, MapCanvas canvas, TerrainSnapshot snapshot) {
@@ -698,8 +787,19 @@ public final class MurderMysteryMinimapService {
         if (canvas == null || snapshot == null || snapshot.pixels == null) {
             return;
         }
+        paintPixels(canvas, snapshot.pixels);
+    }
+
+    private void paintBlank(MapCanvas canvas) {
+        paintPixels(canvas, blankMapPixels);
+    }
+
+    private void paintPixels(MapCanvas canvas, byte[] pixels) {
+        if (canvas == null || pixels == null) {
+            return;
+        }
         for (int index = 0; index < MAP_PIXEL_SIZE * MAP_PIXEL_SIZE; index++) {
-            setSnapshotPixel(canvas, snapshot.pixels, index);
+            setSnapshotPixel(canvas, pixels, index);
         }
     }
 
@@ -1098,16 +1198,16 @@ public final class MurderMysteryMinimapService {
         }
     }
 
-    private CursorPosition cursorPosition(MapView mapView, Location location) {
-        if (mapView == null || location == null || location.getWorld() == null || mapView.getWorld() == null) {
+    private CursorPosition cursorPosition(MapAnchor anchor, Location location) {
+        if (anchor == null || anchor.world == null || location == null || location.getWorld() == null) {
             return null;
         }
-        if (!sameWorld(mapView.getWorld(), location.getWorld())) {
+        if (!sameWorld(anchor.world, location.getWorld())) {
             return null;
         }
-        double blocksPerPixel = blocksPerPixel(mapView.getScale());
-        int cursorX = (int) Math.round(((location.getX() - mapView.getCenterX()) / blocksPerPixel) * 2.0D);
-        int cursorY = (int) Math.round(((location.getZ() - mapView.getCenterZ()) / blocksPerPixel) * 2.0D);
+        double blocksPerPixel = blocksPerPixel(anchor.scale);
+        int cursorX = (int) Math.round(((location.getX() - anchor.centerX) / blocksPerPixel) * 2.0D);
+        int cursorY = (int) Math.round(((location.getZ() - anchor.centerZ) / blocksPerPixel) * 2.0D);
         return new CursorPosition(clampCursorCoordinate(cursorX), clampCursorCoordinate(cursorY));
     }
 
@@ -1149,17 +1249,20 @@ public final class MurderMysteryMinimapService {
             return;
         }
         TerrainSnapshot snapshot = terrainSnapshotFor(minimap, player);
+        if (snapshot == null) {
+            clearMapDecorations(minimap.mapView);
+        }
         writeStaticMapState(minimap, snapshot);
         Integer mapId = readMapId(minimap.mapView);
         MapCursorCollection cursors = createCursors(minimap.mapView, player);
+        byte[] pixels = snapshot == null ? blankMapPixels : snapshot.pixels;
         if (mapPacketSender != null
-                && snapshot != null
                 && mapId != null
                 && mapPacketSender.send(
                         player,
                         mapId,
                         (byte) scaleValue(minimap.mapView.getScale()),
-                        snapshot.pixels,
+                        pixels,
                         cursors
                 )) {
             return;
@@ -1189,6 +1292,13 @@ public final class MurderMysteryMinimapService {
             minimap.writtenStaticTerrainKey = snapshot.key;
             minimap.writtenStaticTerrainVersion = snapshot.version;
         }
+    }
+
+    private void clearMapDecorations(MapView mapView) {
+        if (mapStateWriter == null || mapView == null) {
+            return;
+        }
+        mapStateWriter.clearDecorations(mapView);
     }
 
     private void logMapPacketFallback() {
@@ -1407,6 +1517,7 @@ public final class MurderMysteryMinimapService {
         private final MapRenderer renderer;
         private final long sessionId;
         private TerrainCacheKey anchorKey;
+        private MapAnchor anchor;
         private MapAnchor fallbackAnchor;
         private TerrainCacheKey renderedSampledTerrainKey;
         private long renderedSampledTerrainVersion = -1L;
