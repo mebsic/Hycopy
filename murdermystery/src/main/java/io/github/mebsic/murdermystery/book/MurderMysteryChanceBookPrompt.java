@@ -111,7 +111,7 @@ public class MurderMysteryChanceBookPrompt extends InteractiveBookPrompt {
     }
 
     private void addCenteredAction(TextComponent root, String text, String token) {
-        root.addExtra(new TextComponent(centerPadding(text)));
+        root.addExtra(new TextComponent(desiredEnabled ? centerPadding(text) : ""));
         TextComponent action = new TextComponent(text);
         action.setColor(net.md_5.bungee.api.ChatColor.GOLD);
         action.setBold(true);
