@@ -34,6 +34,7 @@ public class ProfileStore {
         BASE_STATS_KEYS.add(MongoManager.MURDER_MYSTERY_LIFETIME_KILLS_KEY);
         BASE_STATS_KEYS.add(MongoManager.MURDER_MYSTERY_LIFETIME_GAMES_KEY);
         BASE_STATS_KEYS.add(MongoManager.MURDER_MYSTERY_WINS_CHAT_ENABLED_KEY);
+        BASE_STATS_KEYS.add(MongoManager.MURDER_MYSTERY_TEN_TIMES_MODE_ENABLED_KEY);
     }
     private static final String DEFAULT_KNIFE_ID = KnifeSkinStore.DEFAULT_KNIFE_ID;
     private static final KnifeSkinDefinition DEFAULT_KNIFE = new KnifeSkinDefinition(
@@ -189,6 +190,10 @@ public class ProfileStore {
             if (winsChatEnabled != null) {
                 profile.setMurderMysteryWinsChatEnabled(winsChatEnabled);
             }
+            Boolean tenTimesModeEnabled = stats.getBoolean(MongoManager.MURDER_MYSTERY_TEN_TIMES_MODE_ENABLED_KEY);
+            if (tenTimesModeEnabled != null) {
+                profile.setMurderMysteryTenTimesModeEnabled(tenTimesModeEnabled);
+            }
             // Treat any extra numeric stats keys as custom counters for the Murder Mystery scope.
             for (Map.Entry<String, Object> entry : stats.entrySet()) {
                 if (entry == null || entry.getKey() == null) {
@@ -267,7 +272,8 @@ public class ProfileStore {
         Document murderMysteryStats = new Document(MongoManager.MURDER_MYSTERY_LIFETIME_WINS_KEY, profile.getStats().getWins())
                 .append(MongoManager.MURDER_MYSTERY_LIFETIME_KILLS_KEY, profile.getStats().getKills())
                 .append(MongoManager.MURDER_MYSTERY_LIFETIME_GAMES_KEY, profile.getStats().getGames())
-                .append(MongoManager.MURDER_MYSTERY_WINS_CHAT_ENABLED_KEY, profile.isMurderMysteryWinsChatEnabled());
+                .append(MongoManager.MURDER_MYSTERY_WINS_CHAT_ENABLED_KEY, profile.isMurderMysteryWinsChatEnabled())
+                .append(MongoManager.MURDER_MYSTERY_TEN_TIMES_MODE_ENABLED_KEY, profile.isMurderMysteryTenTimesModeEnabled());
         for (Map.Entry<String, Integer> entry : profile.getStats().getCustomCounters().entrySet()) {
             if (entry == null || entry.getKey() == null) {
                 continue;
@@ -420,6 +426,12 @@ public class ProfileStore {
         if (shouldEnableFlightOnRankGrant(rank)) {
             update.append("flightEnabled", true);
         }
+        if (!canUseMurderMysteryTenTimesMode(rank)) {
+            update.append(
+                    "stats." + MongoManager.MURDER_MYSTERY_GAME_KEY + "." + MongoManager.MURDER_MYSTERY_TEN_TIMES_MODE_ENABLED_KEY,
+                    false
+            );
+        }
         if (hasActiveSubscription != null) {
             update.append(MongoManager.PROFILE_HAS_ACTIVE_SUBSCRIPTION_KEY, hasActiveSubscription);
         }
@@ -501,6 +513,7 @@ public class ProfileStore {
                         "flightEnabled",
                         "buildModeExpiresAt",
                         "playerVisibilityEnabled",
+                        "stats." + MongoManager.MURDER_MYSTERY_GAME_KEY + "." + MongoManager.MURDER_MYSTERY_TEN_TIMES_MODE_ENABLED_KEY,
                         "networkLevel",
                         "networkGold",
                         MongoManager.PROFILE_MYSTERY_DUST_KEY,
@@ -544,6 +557,11 @@ public class ProfileStore {
             buildModeExpiresAt = Math.max(0L, ((Number) buildModeExpiresAtRaw).longValue());
         }
         Boolean playerVisibilityEnabled = doc.getBoolean("playerVisibilityEnabled");
+        Document statsRoot = doc.get("stats", Document.class);
+        Document murderMysteryStats = statsRoot == null ? null : statsRoot.get(MongoManager.MURDER_MYSTERY_GAME_KEY, Document.class);
+        Boolean murderMysteryTenTimesModeEnabled = murderMysteryStats == null
+                ? null
+                : murderMysteryStats.getBoolean(MongoManager.MURDER_MYSTERY_TEN_TIMES_MODE_ENABLED_KEY);
         int networkLevel = 0;
         Long hycopyExperience = doc.getLong("hycopyExperience");
         if (hycopyExperience != null) {
@@ -573,6 +591,7 @@ public class ProfileStore {
                 flightEnabled != null && flightEnabled,
                 buildModeExpiresAt,
                 playerVisibilityEnabled == null || playerVisibilityEnabled,
+                murderMysteryTenTimesModeEnabled != null && murderMysteryTenTimesModeEnabled,
                 networkLevel,
                 networkGold,
                 mysteryDust,
@@ -594,6 +613,21 @@ public class ProfileStore {
                 new com.mongodb.client.model.UpdateOptions().upsert(true));
     }
 
+    public void updateMurderMysteryTenTimesMode(UUID uuid, String name, boolean enabled) {
+        if (uuid == null) {
+            return;
+        }
+        MongoCollection<Document> collection = mongo.getProfiles();
+        Document update = new Document(
+                "stats." + MongoManager.MURDER_MYSTERY_GAME_KEY + "." + MongoManager.MURDER_MYSTERY_TEN_TIMES_MODE_ENABLED_KEY,
+                enabled
+        );
+        if (name != null && !name.trim().isEmpty()) {
+            update.append("name", name.trim());
+        }
+        collection.updateOne(eq("uuid", uuid.toString()), new Document("$set", update));
+    }
+
     private Document spectatorDefaultsDocument() {
         return new Document("spectatorSpeedLevel", 0)
                 .append("spectatorAutoTeleportEnabled", false)
@@ -613,6 +647,10 @@ public class ProfileStore {
 
     private static boolean canUseMvpPlusPlusPrefixColor(Rank rank) {
         return rank == Rank.MVP_PLUS_PLUS || rank == Rank.STAFF || rank == Rank.YOUTUBE;
+    }
+
+    private static boolean canUseMurderMysteryTenTimesMode(Rank rank) {
+        return rank == Rank.YOUTUBE || rank == Rank.STAFF;
     }
 
     private static boolean shouldEnableFlightOnRankGrant(Rank rank) {
@@ -717,6 +755,7 @@ public class ProfileStore {
         private final boolean flightEnabled;
         private final long buildModeExpiresAt;
         private final boolean playerVisibilityEnabled;
+        private final boolean murderMysteryTenTimesModeEnabled;
         private final int networkLevel;
         private final int networkGold;
         private final int mysteryDust;
@@ -732,6 +771,7 @@ public class ProfileStore {
                            boolean flightEnabled,
                            long buildModeExpiresAt,
                            boolean playerVisibilityEnabled,
+                           boolean murderMysteryTenTimesModeEnabled,
                            int networkLevel,
                            int networkGold,
                            int mysteryDust,
@@ -746,6 +786,7 @@ public class ProfileStore {
             this.flightEnabled = flightEnabled;
             this.buildModeExpiresAt = Math.max(0L, buildModeExpiresAt);
             this.playerVisibilityEnabled = playerVisibilityEnabled;
+            this.murderMysteryTenTimesModeEnabled = murderMysteryTenTimesModeEnabled;
             this.networkLevel = Math.max(0, networkLevel);
             this.networkGold = Math.max(0, networkGold);
             this.mysteryDust = Math.max(0, mysteryDust);
@@ -783,6 +824,10 @@ public class ProfileStore {
 
         public boolean isPlayerVisibilityEnabled() {
             return playerVisibilityEnabled;
+        }
+
+        public boolean isMurderMysteryTenTimesModeEnabled() {
+            return murderMysteryTenTimesModeEnabled;
         }
 
         public int getNetworkLevel() {

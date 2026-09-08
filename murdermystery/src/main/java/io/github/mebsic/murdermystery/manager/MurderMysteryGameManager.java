@@ -25,6 +25,7 @@ import io.github.mebsic.murdermystery.registry.KnifeSkinRegistry;
 import io.github.mebsic.murdermystery.service.ActionBarService;
 import io.github.mebsic.murdermystery.service.MurderMysteryMinimapService;
 import io.github.mebsic.murdermystery.stats.MurderMysteryStats;
+import io.github.mebsic.murdermystery.util.MurderMysteryChanceMode;
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -159,18 +160,9 @@ public class MurderMysteryGameManager extends GameManager {
     private static final long DROPPED_BOW_DEATH_DELAY_TICKS = 2L;
     private static final int POST_GAME_RESULT_TEXT_WIDTH = 75;
     private static final int POST_GAME_REWARD_SUMMARY_TEXT_WIDTH = 80;
-    private static final Sound INNOCENT_ROLE_IDLE_SOUND = resolveCompatibleSound("VILLAGER_IDLE", "ENTITY_VILLAGER_AMBIENT");
-    private static final Sound INNOCENT_ROLE_ACCEPT_SOUND = resolveCompatibleSound("VILLAGER_YES", "ENTITY_VILLAGER_YES");
-    private static final Sound DETECTIVE_ROLE_SOUND = resolveCompatibleSound("LEVEL_UP", "ENTITY_PLAYER_LEVELUP", "ORB_PICKUP", "ENTITY_EXPERIENCE_ORB_PICKUP");
-    private static final Sound MODERN_MURDERER_ROLE_SOUND =
-            resolveCompatibleSound("ENTITY_ELDER_GUARDIAN_CURSE", "ELDER_GUARDIAN_CURSE");
-    private static final String[] MURDERER_ROLE_SOUND_KEYS = {
-            "mob.guardian.curse",
-            "entity.elder_guardian.curse",
-            "entity.guardian.curse"
-    };
-    private static final Sound MURDERER_ROLE_FALLBACK_SOUND =
-            resolveCompatibleSound("WITHER_SPAWN", "ENTITY_WITHER_SPAWN");
+    private static final String INNOCENT_ROLE_SOUND_KEY = "mob.villager.idle";
+    private static final String DETECTIVE_ROLE_SOUND_KEY = "random.levelup";
+    private static final String MURDERER_ROLE_SOUND_KEY = "mob.guardian.curse";
     private static final Sound WIN_GAME_ORB_PICKUP_SOUND =
             resolveCompatibleSound("ORB_PICKUP", "ENTITY_EXPERIENCE_ORB_PICKUP");
     private static final Sound WIN_GAME_SOUND = resolveCompatibleSound("LEVEL_UP", "ENTITY_PLAYER_LEVELUP");
@@ -180,9 +172,11 @@ public class MurderMysteryGameManager extends GameManager {
             resolveCompatibleSound("DRINK", "ENTITY_GENERIC_DRINK", "FIZZ", "BLOCK_BREWING_STAND_BREW");
     private static final Sound MYSTERY_POTION_FAILURE_SOUND =
             resolveCompatibleSound("ANVIL_LAND", "BLOCK_ANVIL_LAND", "ANVIL_USE", "BLOCK_ANVIL_USE");
-    private static final float ROLE_ASSIGNMENT_SOUND_VOLUME = 2.0F;
+    private static final float ROLE_ASSIGNMENT_SOUND_VOLUME = 1.0F;
     private static final float ROLE_ASSIGNMENT_SOUND_PITCH = 1.0F;
-    private static final float VANILLA_PICKUP_SOUND_VOLUME = 0.2F;
+    private static final long ROLE_ASSIGNMENT_SOUND_DELAY_TICKS = 2L;
+    private static final float VANILLA_PICKUP_SOUND_VOLUME = 1.0F;
+    private static final float VANILLA_PICKUP_SOUND_PITCH = 1.0F;
     private static final String TOKEN_REASON_SURVIVED_30_SECONDS = "Survived 30 seconds";
     private static final String TOKEN_REASON_PICKED_UP_GOLD = "Picked up gold";
     private static final String SPECTATOR_CHAT_HINT_LINE_ONE =
@@ -824,64 +818,42 @@ public class MurderMysteryGameManager extends GameManager {
         if (player == null || role == null) {
             return;
         }
-        if (role == MurderMysteryRole.MURDERER) {
-            playMurdererRoleAssignmentSound(player);
-            return;
-        }
-        Sound sound = null;
+        String soundKey = null;
         if (role == MurderMysteryRole.DETECTIVE || role == MurderMysteryRole.HERO) {
-            sound = DETECTIVE_ROLE_SOUND;
+            soundKey = DETECTIVE_ROLE_SOUND_KEY;
         } else if (role == MurderMysteryRole.INNOCENT) {
-            sound = chooseInnocentRoleSound();
+            soundKey = INNOCENT_ROLE_SOUND_KEY;
+        } else if (role == MurderMysteryRole.MURDERER) {
+            soundKey = MURDERER_ROLE_SOUND_KEY;
         }
-        playRoleSoundNow(player, sound);
-    }
-
-    private Sound chooseInnocentRoleSound() {
-        if (INNOCENT_ROLE_IDLE_SOUND == null) {
-            return INNOCENT_ROLE_ACCEPT_SOUND;
-        }
-        if (INNOCENT_ROLE_ACCEPT_SOUND == null) {
-            return INNOCENT_ROLE_IDLE_SOUND;
-        }
-        return Math.random() < 0.5D ? INNOCENT_ROLE_IDLE_SOUND : INNOCENT_ROLE_ACCEPT_SOUND;
-    }
-
-    private void playMurdererRoleAssignmentSound(Player player) {
-        if (playRoleSoundNow(player, MODERN_MURDERER_ROLE_SOUND)) {
+        if (soundKey == null) {
             return;
         }
-        for (String soundKey : MURDERER_ROLE_SOUND_KEYS) {
-            if (playRoleStringSoundNow(player, soundKey)) {
+        playRoleStringSoundDelayed(player, soundKey);
+    }
+
+    private void playRoleStringSoundDelayed(Player player, String soundKey) {
+        if (player == null || soundKey == null || soundKey.trim().isEmpty()) {
+            return;
+        }
+        final String roleSoundKey = soundKey.trim();
+        getPlugin().getServer().getScheduler().runTaskLater(getPlugin(), () -> {
+            if (player == null || !player.isOnline() || getState() != GameState.IN_GAME) {
                 return;
             }
-        }
-        playRoleSoundNow(player, MURDERER_ROLE_FALLBACK_SOUND);
+            playRoleStringSoundNow(player, roleSoundKey);
+        }, ROLE_ASSIGNMENT_SOUND_DELAY_TICKS);
     }
 
-    private boolean playRoleSoundNow(Player player, Sound sound) {
-        if (player == null || sound == null) {
-            return false;
-        }
-        try {
-            player.playSound(player.getLocation(), sound, ROLE_ASSIGNMENT_SOUND_VOLUME, ROLE_ASSIGNMENT_SOUND_PITCH);
-            return true;
-        } catch (IllegalArgumentException ignored) {
-            // Fallback sounds are handled by caller.
-            return false;
-        }
-    }
-
-    private boolean playRoleStringSoundNow(Player player, String soundKey) {
+    private void playRoleStringSoundNow(Player player, String soundKey) {
         if (player == null || soundKey == null || soundKey.trim().isEmpty()) {
-            return false;
+            return;
         }
         final String roleSoundKey = soundKey.trim();
         try {
-            player.playSound(player.getLocation(), roleSoundKey, ROLE_ASSIGNMENT_SOUND_VOLUME, ROLE_ASSIGNMENT_SOUND_PITCH);
-            return true;
+            player.playSound(player.getEyeLocation(), roleSoundKey, ROLE_ASSIGNMENT_SOUND_VOLUME, ROLE_ASSIGNMENT_SOUND_PITCH);
         } catch (IllegalArgumentException ignored) {
-            return false;
+            // Client sound key mismatch on incompatible versions.
         }
     }
 
@@ -1174,6 +1146,7 @@ public class MurderMysteryGameManager extends GameManager {
                 potionSlot,
                 createMysteryPotionItem(option, isMysteryPotionOptionRevealed(playerUuid, option))
         );
+        playVanillaPickupSound(player);
     }
 
     private void refundMysteryPotionPurchase(Player player, MurderMysteryGamePlayer mmPlayer) {
@@ -2298,16 +2271,11 @@ public class MurderMysteryGameManager extends GameManager {
                     player.getLocation(),
                     VANILLA_PICKUP_SOUND,
                     VANILLA_PICKUP_SOUND_VOLUME,
-                    randomVanillaPickupPitch()
+                    VANILLA_PICKUP_SOUND_PITCH
             );
         } catch (IllegalArgumentException ignored) {
             // Sound enum mismatch on legacy/newer API variants.
         }
-    }
-
-    private float randomVanillaPickupPitch() {
-        double pitch = ((Math.random() - Math.random()) * 0.7D + 1.0D) * 2.0D;
-        return (float) pitch;
     }
 
     private void broadcastMurdererSwordReceivedMessageToOthers() {
@@ -2481,7 +2449,7 @@ public class MurderMysteryGameManager extends GameManager {
         double total = 0.0;
         for (MurderMysteryGamePlayer mmPlayer : candidates) {
             RoleChance chance = chances.get(mmPlayer.getUuid());
-            double weight = chance == null ? 1.0 : (murderer ? chance.getMurdererChance() : chance.getDetectiveChance());
+            double weight = resolveSelectionWeight(mmPlayer, chance, murderer);
             total += Math.max(0.0, weight);
         }
         if (total <= 0.0) {
@@ -2491,13 +2459,22 @@ public class MurderMysteryGameManager extends GameManager {
         double running = 0.0;
         for (MurderMysteryGamePlayer mmPlayer : candidates) {
             RoleChance chance = chances.get(mmPlayer.getUuid());
-            double weight = chance == null ? 1.0 : (murderer ? chance.getMurdererChance() : chance.getDetectiveChance());
+            double weight = resolveSelectionWeight(mmPlayer, chance, murderer);
             running += Math.max(0.0, weight);
             if (roll <= running) {
                 return mmPlayer;
             }
         }
         return candidates.get(candidates.size() - 1);
+    }
+
+    private double resolveSelectionWeight(MurderMysteryGamePlayer mmPlayer, RoleChance chance, boolean murderer) {
+        double weight = chance == null ? 1.0D : (murderer ? chance.getMurdererChance() : chance.getDetectiveChance());
+        if (!murderer || mmPlayer == null) {
+            return Math.max(0.0D, weight);
+        }
+        Profile profile = getPlugin() == null ? null : getPlugin().getProfile(mmPlayer.getUuid());
+        return MurderMysteryChanceMode.applyMurdererMultiplier(profile, weight);
     }
 
     private void assignReplacementMurderer(UUID leaver) {

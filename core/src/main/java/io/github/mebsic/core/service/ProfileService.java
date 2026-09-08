@@ -329,6 +329,7 @@ public class ProfileService {
             profile.setMvpPlusPlusPrefixColor(update.meta.getMvpPlusPlusPrefixColor());
             profile.setFlightEnabled(update.meta.isFlightEnabled());
             profile.setPlayerVisibilityEnabled(update.meta.isPlayerVisibilityEnabled());
+            profile.setMurderMysteryTenTimesModeEnabled(update.meta.isMurderMysteryTenTimesModeEnabled());
             profile.setNetworkLevel(update.meta.getNetworkLevel());
             profile.setNetworkGold(update.meta.getNetworkGold());
             profile.setMysteryDust(update.meta.getMysteryDust());
@@ -369,6 +370,9 @@ public class ProfileService {
             return true;
         }
         if (profile.isPlayerVisibilityEnabled() != meta.isPlayerVisibilityEnabled()) {
+            return true;
+        }
+        if (profile.isMurderMysteryTenTimesModeEnabled() != meta.isMurderMysteryTenTimesModeEnabled()) {
             return true;
         }
         if (profile.getNetworkLevel() != meta.getNetworkLevel()) {

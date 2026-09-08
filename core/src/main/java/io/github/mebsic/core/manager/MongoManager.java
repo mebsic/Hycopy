@@ -89,6 +89,7 @@ public class MongoManager {
     public static final String MURDER_MYSTERY_QUICKEST_MURDERER_WIN_SECONDS_KEY = "quickestMurdererWinSeconds";
     public static final String MURDER_MYSTERY_HINTS_ENABLED_KEY = "hintsEnabled";
     public static final String MURDER_MYSTERY_WINS_CHAT_ENABLED_KEY = "winsChatEnabled";
+    public static final String MURDER_MYSTERY_TEN_TIMES_MODE_ENABLED_KEY = "tenTimesModeEnabled";
     public static final String MURDER_MYSTERY_LIFETIME_WINS_KEY = "lifetimeWins";
     public static final String MURDER_MYSTERY_LIFETIME_KILLS_KEY = "lifetimeKills";
     public static final String MURDER_MYSTERY_LIFETIME_GAMES_KEY = "lifetimeGames";

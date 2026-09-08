@@ -1,11 +1,13 @@
 package io.github.mebsic.murdermystery.listener;
 
+import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.game.model.GameState;
 import io.github.mebsic.game.service.QueueService;
 import io.github.mebsic.murdermystery.game.MurderMysteryGamePlayer;
 import io.github.mebsic.murdermystery.game.MurderMysteryRole;
 import io.github.mebsic.murdermystery.manager.MurderMysteryGameManager;
 import io.github.mebsic.murdermystery.MurderMysteryPlugin;
+import io.github.mebsic.murdermystery.util.MurderMysteryChanceMode;
 import org.bukkit.ChatColor;
 import org.bukkit.Effect;
 import org.bukkit.Location;
@@ -81,6 +83,8 @@ public class MurderMysteryListener implements Listener {
     private static final double THROWN_KNIFE_BLADE_Y_OFFSET = 1.35D;
     private static final double THROWN_KNIFE_BLADE_FORWARD_OFFSET = 0.45D;
     private static final double THROWN_KNIFE_BLADE_SIDE_OFFSET = 0.35D;
+    private static final String TEN_TIMES_MODE_JOIN_NOTICE =
+            ChatColor.GREEN + "10X Mode active - your stats this game will be tracked";
     private static final double[] THROWN_KNIFE_VICTIM_SAMPLE_HEIGHTS = {0.35D, 0.9D, 1.35D, 1.75D};
     private static final float THROWN_KNIFE_DISPLAY_YAW_OFFSET_DEGREES = 180.0F;
     private static final double THROWN_KNIFE_ARM_BASE_PITCH_DEGREES = 180.0D;
@@ -105,12 +109,13 @@ public class MurderMysteryListener implements Listener {
     private static final float PROJECTILE_TRAIL_PARTICLE_SPREAD = 0.02F;
     private static final float PROJECTILE_TRAIL_PARTICLE_SPEED = 0.0F;
     private static final ProjectileTrailStyle[] PROJECTILE_TRAIL_STYLES = {
-            new ProjectileTrailStyle("CRIT", 0.0F, 0.0F, 0.0F),
+            new ProjectileTrailStyle("HEART", 0.0F, 0.0F, 0.0F),
             new ProjectileTrailStyle("MAGIC_CRIT", 0.0F, 0.0F, 0.0F),
             new ProjectileTrailStyle("FIREWORKS_SPARK", 0.0F, 0.0F, 0.0F),
             new ProjectileTrailStyle("SPELL", 0.0F, 0.0F, 0.0F),
             new ProjectileTrailStyle("INSTANT_SPELL", 0.0F, 0.0F, 0.0F),
-            new ProjectileTrailStyle("HAPPY_VILLAGER", 0.0F, 0.0F, 0.0F)
+            new ProjectileTrailStyle("HAPPY_VILLAGER", 0.0F, 0.0F, 0.0F),
+            new ProjectileTrailStyle("FLAME", 0.0F, 0.0F, 0.0F)
     };
     private static final Sound GLASS_SHATTER_SOUND = resolveCompatibleSound("GLASS", "BLOCK_GLASS_BREAK");
     private static final Sound ARROW_KNIFE_CLANK_SOUND = resolveCompatibleSound("ITEM_BREAK", "ENTITY_ITEM_BREAK");
@@ -118,7 +123,7 @@ public class MurderMysteryListener implements Listener {
     private static final float ARROW_KNIFE_CLANK_PITCH = 1.35F;
     private static final Sound KNIFE_THROW_TICK_SOUND = resolveCompatibleSound("CLICK", "UI_BUTTON_CLICK", "NOTE_STICKS", "BLOCK_NOTE_BLOCK_HAT");
     private static final float KNIFE_THROW_TICK_VOLUME = 0.8F;
-    private static final float[] KNIFE_THROW_TICK_PITCHES = {1.0F, 1.15F, 1.3F};
+    private static final float[] KNIFE_THROW_TICK_PITCHES = {1.05F, 1.2F, 1.35F};
     private static final int KNIFE_THROW_TICK_SOUND_COUNT = KNIFE_THROW_TICK_PITCHES.length;
     private static final Sound KNIFE_THROW_RELEASE_SOUND = resolveCompatibleSound("ENDERDRAGON_WINGS", "ENTITY_ENDER_DRAGON_FLAP");
     private static final float KNIFE_THROW_RELEASE_VOLUME = 1.0F;
@@ -159,6 +164,24 @@ public class MurderMysteryListener implements Listener {
         }
         if (plugin.getActionBarService() != null) {
             plugin.getActionBarService().handlePlayerJoin(event.getPlayer());
+        }
+        notifyTenTimesModeIfActive(event.getPlayer());
+    }
+
+    private void notifyTenTimesModeIfActive(Player player) {
+        if (player == null || !player.isOnline() || !gameManager.isInGame(player)) {
+            return;
+        }
+        MurderMysteryGamePlayer mmPlayer = gameManager.getMurderMysteryPlayer(player);
+        if (mmPlayer == null || !mmPlayer.isAlive()) {
+            return;
+        }
+        Profile profile = plugin.getCoreApi() == null ? null : plugin.getCoreApi().getProfile(player.getUniqueId());
+        if (profile == null) {
+            return;
+        }
+        if (MurderMysteryChanceMode.isActive(profile)) {
+            player.sendMessage(TEN_TIMES_MODE_JOIN_NOTICE);
         }
     }
 
@@ -287,8 +310,7 @@ public class MurderMysteryListener implements Listener {
 
     @EventHandler
     public void onInteractEntity(PlayerInteractEntityEvent event) {
-        if (gameManager.isDroppedBowDisplay(event.getRightClicked())
-                || gameManager.isMysteryPotionHologram(event.getRightClicked())) {
+        if (isProtectedDisplayInteraction(event.getRightClicked())) {
             event.setCancelled(true);
             return;
         }
@@ -300,18 +322,22 @@ public class MurderMysteryListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onInteractAtEntity(PlayerInteractAtEntityEvent event) {
-        if (gameManager.isDroppedBowDisplay(event.getRightClicked())
-                || gameManager.isMysteryPotionHologram(event.getRightClicked())) {
+        if (isProtectedDisplayInteraction(event.getRightClicked())) {
             event.setCancelled(true);
         }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onArmorStandManipulate(PlayerArmorStandManipulateEvent event) {
-        if (gameManager.isDroppedBowDisplay(event.getRightClicked())
-                || gameManager.isMysteryPotionHologram(event.getRightClicked())) {
+        if (isProtectedDisplayInteraction(event.getRightClicked())) {
             event.setCancelled(true);
         }
+    }
+
+    private boolean isProtectedDisplayInteraction(Entity entity) {
+        return gameManager.isDroppedBowDisplay(entity)
+                || gameManager.isMysteryPotionHologram(entity)
+                || findThrownKnifeShooterByDisplay(entity) != null;
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -675,7 +701,6 @@ public class MurderMysteryListener implements Listener {
         }
         long now = System.currentTimeMillis();
         gp.setLastArrowShot(now);
-        final boolean playBowRechargePickupSound = gp.getRole() == MurderMysteryRole.DETECTIVE;
         player.getInventory().remove(Material.ARROW);
         if (plugin.getActionBarService() != null) {
             plugin.getActionBarService().showBowChargeActionBar(player);
@@ -684,10 +709,9 @@ public class MurderMysteryListener implements Listener {
             if (gameManager.isInGame(player) && gameManager.getState() == GameState.IN_GAME) {
                 player.getInventory().setItem(ARROW_HOTBAR_SLOT, new ItemStack(Material.ARROW, 1));
                 MurderMysteryGamePlayer refreshedPlayer = gameManager.getMurderMysteryPlayer(player);
-                if (playBowRechargePickupSound
-                        && refreshedPlayer != null
+                if (refreshedPlayer != null
                         && refreshedPlayer.isAlive()
-                        && refreshedPlayer.getRole() == MurderMysteryRole.DETECTIVE) {
+                        && isDetectiveLikeCooldownRole(refreshedPlayer.getRole(), refreshedPlayer)) {
                     gameManager.playVanillaPickupSound(player);
                 }
             }

@@ -267,10 +267,10 @@ public class GiftDecisionBookPrompt extends InteractiveBookPrompt {
 
             Object tag = nmsItemStackClass.getMethod("getTag").invoke(nmsBook);
             if (tag == null) {
-                tag = nbtCompoundClass.newInstance();
+                tag = nbtCompoundClass.getDeclaredConstructor().newInstance();
             }
 
-            Object pages = nbtListClass.newInstance();
+            Object pages = nbtListClass.getDeclaredConstructor().newInstance();
             Object nbtJsonPage = nbtStringClass.getConstructor(String.class).newInstance(jsonPage);
             Method addToList = findSingleArgMethod(nbtListClass, "add", nbtBaseClass);
             if (addToList == null) {

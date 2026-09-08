@@ -1,7 +1,11 @@
 package io.github.mebsic.game.menu;
 
+import io.github.mebsic.core.CorePlugin;
 import io.github.mebsic.core.menu.Menu;
 import io.github.mebsic.core.menu.MenuClick;
+import io.github.mebsic.core.model.Profile;
+import io.github.mebsic.core.model.Rank;
+import io.github.mebsic.core.util.RankFormatUtil;
 import io.github.mebsic.game.manager.GameManager;
 import io.github.mebsic.game.model.GamePlayer;
 import org.bukkit.Bukkit;
@@ -29,7 +33,7 @@ public class SpectatorTeleporterMenu extends Menu {
     private static final String CLOSE_NAME = ChatColor.RED + "Close";
     private static final String EMPTY_NAME = ChatColor.RED + "No Alive Players";
     private static final String EMPTY_LORE = ChatColor.GRAY + "There is nobody to spectate right now.";
-    private static final String PLAYER_CLICK_LORE = ChatColor.YELLOW + "Click to spectate!";
+    private static final String PLAYER_CLICK_LORE = ChatColor.GRAY + "Click to spectate!";
     private static final String REPORTING_DISABLED_MESSAGE =
             ChatColor.RED + "Reporting is currently disabled!";
     private static final int[] PLAYER_SLOTS = new int[] {
@@ -38,12 +42,14 @@ public class SpectatorTeleporterMenu extends Menu {
             28, 29, 30, 31, 32, 33, 34
     };
 
+    private final CorePlugin plugin;
     private final GameManager gameManager;
     private final SpectateSelectionHandler selectionHandler;
     private final Map<UUID, Map<Integer, UUID>> views;
 
-    public SpectatorTeleporterMenu(GameManager gameManager, SpectateSelectionHandler selectionHandler) {
+    public SpectatorTeleporterMenu(CorePlugin plugin, GameManager gameManager, SpectateSelectionHandler selectionHandler) {
         super("Teleporter", SIZE);
+        this.plugin = plugin;
         this.gameManager = gameManager;
         this.selectionHandler = selectionHandler;
         this.views = new ConcurrentHashMap<>();
@@ -162,11 +168,34 @@ public class SpectatorTeleporterMenu extends Menu {
             displayName = ChatColor.GREEN + target.getName();
         }
         meta.setDisplayName(displayName);
-        List<String> lore = new ArrayList<>(1);
+        List<String> lore = new ArrayList<>(2);
+        lore.add(rankLore(target));
         lore.add(PLAYER_CLICK_LORE);
         meta.setLore(lore);
         stack.setItemMeta(meta);
         return stack;
+    }
+
+    private String rankLore(Player target) {
+        if (target == null || plugin == null) {
+            return ChatColor.GRAY + "Default";
+        }
+        UUID uuid = target.getUniqueId();
+        Profile profile = plugin.getProfile(uuid);
+        Rank rank = profile == null || profile.getRank() == null
+                ? plugin.getRank(uuid)
+                : profile.getRank();
+        if (rank == null) {
+            rank = Rank.DEFAULT;
+        }
+        if (rank == Rank.DEFAULT) {
+            return ChatColor.GRAY + "Default";
+        }
+        int networkLevel = profile == null ? plugin.getNetworkLevel(uuid) : profile.getNetworkLevel();
+        String plusColor = profile == null ? null : profile.getPlusColor();
+        String mvpPlusPlusPrefixColor = profile == null ? null : profile.getMvpPlusPlusPrefixColor();
+        String prefix = RankFormatUtil.buildPrefix(rank, Math.max(0, networkLevel), plusColor, mvpPlusPlusPrefixColor);
+        return prefix == null || prefix.trim().isEmpty() ? rank.getColor() + rank.name() : prefix.trim();
     }
 
     private Material resolveHeadMaterial() {

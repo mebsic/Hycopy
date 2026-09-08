@@ -32,6 +32,7 @@ public class Profile {
     private boolean spectatorHideOtherSpectatorsEnabled;
     private boolean spectatorFirstPersonEnabled;
     private boolean murderMysteryWinsChatEnabled;
+    private boolean murderMysteryTenTimesModeEnabled;
     private final Stats stats;
     private final Set<Rank> unlockedRanks;
     private final Map<CosmeticType, String> selected;
@@ -63,6 +64,7 @@ public class Profile {
         this.spectatorHideOtherSpectatorsEnabled = false;
         this.spectatorFirstPersonEnabled = false;
         this.murderMysteryWinsChatEnabled = true;
+        this.murderMysteryTenTimesModeEnabled = false;
         this.stats = new Stats();
         this.unlockedRanks = EnumSet.noneOf(Rank.class);
         this.selected = new EnumMap<>(CosmeticType.class);
@@ -260,6 +262,14 @@ public class Profile {
 
     public void setMurderMysteryWinsChatEnabled(boolean murderMysteryWinsChatEnabled) {
         this.murderMysteryWinsChatEnabled = murderMysteryWinsChatEnabled;
+    }
+
+    public boolean isMurderMysteryTenTimesModeEnabled() {
+        return murderMysteryTenTimesModeEnabled;
+    }
+
+    public void setMurderMysteryTenTimesModeEnabled(boolean murderMysteryTenTimesModeEnabled) {
+        this.murderMysteryTenTimesModeEnabled = murderMysteryTenTimesModeEnabled;
     }
 
     public Stats getStats() {

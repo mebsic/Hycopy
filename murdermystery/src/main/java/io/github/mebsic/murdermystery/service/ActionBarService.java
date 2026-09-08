@@ -10,6 +10,7 @@ import io.github.mebsic.game.model.RoleChance;
 import io.github.mebsic.murdermystery.manager.MurderMysteryGameManager;
 import io.github.mebsic.murdermystery.stats.MurderMysteryStats;
 import io.github.mebsic.murdermystery.util.ActionBarUtil;
+import io.github.mebsic.murdermystery.util.MurderMysteryChanceMode;
 import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
@@ -245,7 +246,7 @@ public class ActionBarService {
                 continue;
             }
             RoleChance roleChance = chanceCache.get(player.getUniqueId());
-            double murdererWeight = resolveMurdererChance(roleChance);
+            double murdererWeight = resolveMurdererChance(player, roleChance);
             double detectiveWeight = resolveDetectiveChance(roleChance);
             double murdererPercent = toPercent(murdererWeight, totals.primaryTotal);
             double detectivePercent = toPercent(detectiveWeight, totals.secondaryTotal);
@@ -335,17 +336,21 @@ public class ActionBarService {
         double detective = 0.0;
         for (Player participant : participants) {
             RoleChance chance = chanceCache.get(participant.getUniqueId());
-            murderer += resolveMurdererChance(chance);
+            murderer += resolveMurdererChance(participant, chance);
             detective += resolveDetectiveChance(chance);
         }
         return new ChanceTotals(murderer, detective);
     }
 
-    private double resolveMurdererChance(RoleChance chance) {
+    private double resolveMurdererChance(Player player, RoleChance chance) {
+        double baseChance;
         if (chance == null) {
-            return Math.max(0.0, defaultMurdererChance);
+            baseChance = defaultMurdererChance;
+        } else {
+            baseChance = chance.getMurdererChance();
         }
-        return Math.max(0.0, chance.getMurdererChance());
+        Profile profile = corePlugin == null || player == null ? null : corePlugin.getProfile(player.getUniqueId());
+        return MurderMysteryChanceMode.applyMurdererMultiplier(profile, baseChance);
     }
 
     private double resolveDetectiveChance(RoleChance chance) {

@@ -30,6 +30,7 @@ import io.github.mebsic.hub.service.KnifeMenuStateService;
 import io.github.mebsic.hub.service.ServerRegistryService;
 import io.github.mebsic.hub.service.HubScoreboardService;
 import io.github.mebsic.hub.util.LocationUtil;
+import io.github.mebsic.murdermystery.command.ChanceCommand;
 import io.github.mebsic.murdermystery.command.ClearImageCommand;
 import io.github.mebsic.murdermystery.command.TokenCommand;
 import io.github.mebsic.murdermystery.command.ToggleHintsCommand;
@@ -122,6 +123,7 @@ public class MurderMysteryPlugin extends JavaPlugin implements HubContext {
         this.serverType = corePlugin.getServerType();
         this.roleChanceStore = corePlugin.getRoleChanceStore();
         this.corePlugin.ensureServerIdentity();
+        registerCommand("chance", new ChanceCommand(corePlugin));
         registerCommand("token", new TokenCommand(corePlugin));
         registerCommand("wins", new WinsCommand(corePlugin));
         registerCommand("image", new ImageCommand(corePlugin));

@@ -20,16 +20,16 @@ import java.util.List;
 public class SpectatorSettingsMenu extends Menu {
     private static final int SIZE = 36;
 
-    private static final int SPEED_NONE_SLOT = 10;
-    private static final int SPEED_ONE_SLOT = 11;
-    private static final int SPEED_TWO_SLOT = 12;
-    private static final int SPEED_THREE_SLOT = 13;
-    private static final int SPEED_FOUR_SLOT = 14;
+    private static final int SPEED_NONE_SLOT = 11;
+    private static final int SPEED_ONE_SLOT = 12;
+    private static final int SPEED_TWO_SLOT = 13;
+    private static final int SPEED_THREE_SLOT = 14;
+    private static final int SPEED_FOUR_SLOT = 15;
 
-    private static final int AUTO_TELEPORT_SLOT = 19;
-    private static final int NIGHT_VISION_SLOT = 20;
-    private static final int FIRST_PERSON_SLOT = 22;
-    private static final int HIDE_SPECTATORS_SLOT = 23;
+    private static final int AUTO_TELEPORT_SLOT = 20;
+    private static final int NIGHT_VISION_SLOT = 21;
+    private static final int FIRST_PERSON_SLOT = 23;
+    private static final int HIDE_SPECTATORS_SLOT = 24;
 
     private static final String TITLE = "Spectator Settings";
     private static final String SPEED_REMOVED_MESSAGE =
@@ -39,7 +39,7 @@ public class SpectatorSettingsMenu extends Menu {
     private static final String AUTO_TELEPORT_ENABLED_MESSAGE =
             ChatColor.GREEN + "Once you select a player using your compass, it will auto teleport you to them!";
     private static final String AUTO_TELEPORT_DISABLED_MESSAGE =
-            ChatColor.RED + "You will no longer auto teleport to targets!";
+            ChatColor.RED + "You will no longer auto-teleport to targets!";
     private static final String NIGHT_VISION_ENABLED_MESSAGE =
             ChatColor.GREEN + "You now have night vision!";
     private static final String NIGHT_VISION_DISABLED_MESSAGE =
@@ -72,12 +72,11 @@ public class SpectatorSettingsMenu extends Menu {
         if (profile == null) {
             return;
         }
-        int speed = clampSpeed(profile.getSpectatorSpeedLevel());
-        set(inventory, SPEED_NONE_SLOT, speedItem(resolveSpeedBootMaterial(0), "No Speed", speed == 0));
-        set(inventory, SPEED_ONE_SLOT, speedItem(resolveSpeedBootMaterial(1), "Speed I", speed == 1));
-        set(inventory, SPEED_TWO_SLOT, speedItem(resolveSpeedBootMaterial(2), "Speed II", speed == 2));
-        set(inventory, SPEED_THREE_SLOT, speedItem(resolveSpeedBootMaterial(3), "Speed III", speed == 3));
-        set(inventory, SPEED_FOUR_SLOT, speedItem(resolveSpeedBootMaterial(4), "Speed IV", speed == 4));
+        set(inventory, SPEED_NONE_SLOT, speedItem(resolveSpeedBootMaterial(0), "No Speed"));
+        set(inventory, SPEED_ONE_SLOT, speedItem(resolveSpeedBootMaterial(1), "Speed I"));
+        set(inventory, SPEED_TWO_SLOT, speedItem(resolveSpeedBootMaterial(2), "Speed II"));
+        set(inventory, SPEED_THREE_SLOT, speedItem(resolveSpeedBootMaterial(3), "Speed III"));
+        set(inventory, SPEED_FOUR_SLOT, speedItem(resolveSpeedBootMaterial(4), "Speed IV"));
 
         set(inventory, AUTO_TELEPORT_SLOT, autoTeleportItem(profile.isSpectatorAutoTeleportEnabled()));
         set(inventory, NIGHT_VISION_SLOT, nightVisionItem(profile.isSpectatorNightVisionEnabled()));
@@ -113,28 +112,28 @@ public class SpectatorSettingsMenu extends Menu {
                 profile.setSpectatorSpeedLevel(1);
                 changed = true;
                 needsSpectatorStateRefresh = true;
-                player.sendMessage(SPEED_SET_MESSAGE_PREFIX + "I");
+                player.sendMessage(SPEED_SET_MESSAGE_PREFIX + "I!");
             }
         } else if (slot == SPEED_TWO_SLOT) {
             if (profile.getSpectatorSpeedLevel() != 2) {
                 profile.setSpectatorSpeedLevel(2);
                 changed = true;
                 needsSpectatorStateRefresh = true;
-                player.sendMessage(SPEED_SET_MESSAGE_PREFIX + "II");
+                player.sendMessage(SPEED_SET_MESSAGE_PREFIX + "II!");
             }
         } else if (slot == SPEED_THREE_SLOT) {
             if (profile.getSpectatorSpeedLevel() != 3) {
                 profile.setSpectatorSpeedLevel(3);
                 changed = true;
                 needsSpectatorStateRefresh = true;
-                player.sendMessage(SPEED_SET_MESSAGE_PREFIX + "III");
+                player.sendMessage(SPEED_SET_MESSAGE_PREFIX + "III!");
             }
         } else if (slot == SPEED_FOUR_SLOT) {
             if (profile.getSpectatorSpeedLevel() != 4) {
                 profile.setSpectatorSpeedLevel(4);
                 changed = true;
                 needsSpectatorStateRefresh = true;
-                player.sendMessage(SPEED_SET_MESSAGE_PREFIX + "IV");
+                player.sendMessage(SPEED_SET_MESSAGE_PREFIX + "IV!");
             }
         } else if (slot == AUTO_TELEPORT_SLOT) {
             profile.setSpectatorAutoTeleportEnabled(!profile.isSpectatorAutoTeleportEnabled());
@@ -198,43 +197,31 @@ public class SpectatorSettingsMenu extends Menu {
         gameManager.restoreDeadSpectatorState(player);
     }
 
-    private ItemStack speedItem(Material material, String label, boolean selected) {
-        List<String> lore = new ArrayList<>();
-        if (selected) {
-            lore.add(ChatColor.GREEN + "Currently selected!");
-        } else {
-            lore.add(ChatColor.GRAY + "Click to select!");
-        }
-        return item(material, (selected ? ChatColor.GREEN : ChatColor.GRAY) + label, lore);
+    private ItemStack speedItem(Material material, String label) {
+        return item(material, ChatColor.GREEN + label);
     }
 
     private ItemStack autoTeleportItem(boolean enabled) {
         if (enabled) {
             return item(resolveCompassMaterial(),
                     ChatColor.RED + "Disable Auto Teleport",
-                    ChatColor.GRAY + "Click to disable auto teleport!");
+                    actionLore("disable", " auto teleport!"));
         }
         return item(resolveCompassMaterial(),
                 ChatColor.GREEN + "Enable Auto Teleport",
-                ChatColor.GRAY + "Click to enable auto teleport!");
+                actionLore("enable", " auto teleport!"));
     }
 
     private ItemStack nightVisionItem(boolean enabled) {
-        Material eye = Material.matchMaterial("ENDER_PEARL");
-        if (eye == null) {
-            eye = Material.matchMaterial("EYE_OF_ENDER");
-        }
-        if (eye == null) {
-            eye = Material.PAPER;
-        }
+        Material material = enabled ? resolveNightVisionEnabledMaterial() : resolveNightVisionDisabledMaterial();
         if (enabled) {
-            return item(eye,
+            return item(material,
                     ChatColor.RED + "Disable Night Vision",
-                    ChatColor.GRAY + "Click to disable night vision!");
+                    actionLore("disable", " night vision!"));
         }
-        return item(eye,
+        return item(material,
                 ChatColor.GREEN + "Enable Night Vision",
-                ChatColor.GRAY + "Click to enable night vision!");
+                actionLore("enable", " night vision!"));
     }
 
     private ItemStack firstPersonItem(boolean enabled) {
@@ -248,28 +235,64 @@ public class SpectatorSettingsMenu extends Menu {
         if (enabled) {
             return item(watch,
                     ChatColor.RED + "Disable First Person",
-                    ChatColor.GRAY + "Click to disable first person spectating when using the compass!",
-                    ChatColor.GRAY + "You can also right-click a player to spectate them in first person.");
+                    firstPersonLore("disable"));
         }
         return item(watch,
                 ChatColor.GREEN + "Enable First Person",
-                ChatColor.GRAY + "Click to enable first person spectating when using the compass!",
-                ChatColor.GRAY + "You can also right-click a player to spectate them in first person.");
+                firstPersonLore("enable"));
     }
 
     private ItemStack hideSpectatorsItem(boolean hideEnabled) {
-        Material redstone = Material.matchMaterial("REDSTONE");
-        if (redstone == null) {
-            redstone = Material.PAPER;
-        }
+        Material material = hideEnabled ? resolveGlowstoneMaterial() : resolveRedstoneDustMaterial();
         if (hideEnabled) {
-            return item(redstone,
+            return item(material,
                     ChatColor.GREEN + "Show Spectators",
-                    ChatColor.GRAY + "Click to show other spectators!");
+                    actionLore("show", " other spectators!"));
         }
-        return item(redstone,
+        return item(material,
                 ChatColor.RED + "Hide Spectators",
-                ChatColor.GRAY + "Click to hide other spectators!");
+                actionLore("hide", " other spectators!"));
+    }
+
+    private String actionLore(String action, String suffix) {
+        return ChatColor.GRAY + "Click to " + action + suffix;
+    }
+
+    private List<String> firstPersonLore(String action) {
+        List<String> lore = new ArrayList<>();
+        lore.add(actionLore(action, " first person"));
+        lore.add(ChatColor.GRAY + "spectating when using the compass!");
+        lore.add(ChatColor.GRAY + "You can also right-click a player");
+        lore.add(ChatColor.GRAY + "to spectate them in first person.");
+        return lore;
+    }
+
+    private Material resolveNightVisionEnabledMaterial() {
+        Material pearl = Material.matchMaterial("ENDER_PEARL");
+        return pearl == null ? resolveNightVisionDisabledMaterial() : pearl;
+    }
+
+    private Material resolveNightVisionDisabledMaterial() {
+        Material eye = Material.matchMaterial("EYE_OF_ENDER");
+        if (eye != null) {
+            return eye;
+        }
+        eye = Material.matchMaterial("ENDER_EYE");
+        return eye == null ? Material.PAPER : eye;
+    }
+
+    private Material resolveRedstoneDustMaterial() {
+        Material redstone = Material.matchMaterial("REDSTONE");
+        return redstone == null ? Material.PAPER : redstone;
+    }
+
+    private Material resolveGlowstoneMaterial() {
+        Material glowstone = Material.matchMaterial("GLOWSTONE_DUST");
+        if (glowstone != null) {
+            return glowstone;
+        }
+        glowstone = Material.matchMaterial("GLOWSTONE");
+        return glowstone == null ? Material.PAPER : glowstone;
     }
 
     private Material resolveSpeedBootMaterial(int level) {
@@ -293,7 +316,4 @@ public class SpectatorSettingsMenu extends Menu {
         return compass == null ? Material.WATCH : compass;
     }
 
-    private int clampSpeed(int speed) {
-        return Math.max(0, Math.min(4, speed));
-    }
 }

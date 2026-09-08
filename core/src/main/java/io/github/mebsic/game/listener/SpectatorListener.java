@@ -84,7 +84,7 @@ public class SpectatorListener implements Listener {
         this.group = plugin == null ? "" : plugin.getConfig().getString("server.group", "");
         this.currentServerId = plugin == null ? "" : plugin.getConfig().getString("server.id", "");
         this.staleSeconds = plugin == null ? 20 : Math.max(0, plugin.getConfig().getInt("registry.staleSeconds", 20));
-        this.teleporterMenu = new SpectatorTeleporterMenu(gameManager, this::handleTeleporterSelection);
+        this.teleporterMenu = new SpectatorTeleporterMenu(plugin, gameManager, this::handleTeleporterSelection);
         this.settingsMenu = new SpectatorSettingsMenu(plugin, gameManager);
         this.followStates = new ConcurrentHashMap<>();
     }

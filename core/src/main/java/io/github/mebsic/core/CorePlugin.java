@@ -1009,6 +1009,9 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
                 if (subscriptionExpiresAtUpdate != null) {
                     profile.setSubscriptionExpiresAt(subscriptionExpiresAtUpdate);
                 }
+                if (!canUseMurderMysteryTenTimesMode(rank)) {
+                    profile.setMurderMysteryTenTimesModeEnabled(false);
+                }
             }
         }
 
@@ -1065,6 +1068,29 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
             return true;
         }
         return false;
+    }
+
+    public boolean setMurderMysteryTenTimesModeEnabled(UUID uuid, boolean enabled) {
+        if (uuid == null || profileService == null) {
+            return false;
+        }
+        Profile profile = profileService.getProfile(uuid);
+        if (profile == null) {
+            return false;
+        }
+        boolean resolvedEnabled = enabled && canUseMurderMysteryTenTimesMode(profile.getRank());
+        profile.setMurderMysteryTenTimesModeEnabled(resolvedEnabled);
+        Player player = Bukkit.getPlayer(uuid);
+        String name = profile.getName();
+        if ((name == null || name.trim().isEmpty()) && player != null) {
+            name = player.getName();
+        }
+        if (isMongoEnabled() && profileStore != null) {
+            profileStore.updateMurderMysteryTenTimesMode(uuid, name, resolvedEnabled);
+            return true;
+        }
+        profileService.saveProfile(profile);
+        return true;
     }
 
     public boolean isBuildModeActive(UUID uuid) {
@@ -1273,6 +1299,10 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
 
     private boolean canUseMvpPlusPlusPrefixColor(Rank rank) {
         return rank == Rank.MVP_PLUS_PLUS || rank == Rank.STAFF || rank == Rank.YOUTUBE;
+    }
+
+    private boolean canUseMurderMysteryTenTimesMode(Rank rank) {
+        return rank == Rank.YOUTUBE || rank == Rank.STAFF;
     }
 
     @Override

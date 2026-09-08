@@ -4,6 +4,8 @@ version: 0.1
 depend: [Hycopy]
 softdepend: [Citizens]
 commands:
+  chance:
+    usage: /chance
   start:
     usage: /start
   token:
