@@ -21,6 +21,7 @@ public class Profile {
     private String firstLogin;
     private String lastLogin;
     private boolean online;
+    private ProfileStatus status;
     private boolean hasActiveSubscription;
     private long subscriptionExpiresAt;
     private boolean flightEnabled;
@@ -53,6 +54,7 @@ public class Profile {
         this.firstLogin = null;
         this.lastLogin = null;
         this.online = false;
+        this.status = ProfileStatus.ONLINE;
         this.hasActiveSubscription = false;
         this.subscriptionExpiresAt = 0L;
         this.flightEnabled = false;
@@ -174,6 +176,14 @@ public class Profile {
 
     public void setOnline(boolean online) {
         this.online = online;
+    }
+
+    public ProfileStatus getStatus() {
+        return status == null ? ProfileStatus.ONLINE : status;
+    }
+
+    public void setStatus(ProfileStatus status) {
+        this.status = status == null ? ProfileStatus.ONLINE : status;
     }
 
     public boolean hasActiveSubscription() {

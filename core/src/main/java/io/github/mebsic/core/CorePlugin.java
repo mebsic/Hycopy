@@ -15,6 +15,7 @@ import io.github.mebsic.core.command.GamemodeCommand;
 import io.github.mebsic.core.command.GiftCommand;
 import io.github.mebsic.core.command.GoldCommand;
 import io.github.mebsic.core.command.HelpCommand;
+import io.github.mebsic.core.command.KaboomCommand;
 import io.github.mebsic.core.command.KickCommand;
 import io.github.mebsic.core.command.MapCommand;
 import io.github.mebsic.core.command.MuteCommand;
@@ -26,6 +27,7 @@ import io.github.mebsic.core.command.PunishmentHistoryCommand;
 import io.github.mebsic.core.command.RankCommand;
 import io.github.mebsic.core.command.RankColorCommand;
 import io.github.mebsic.core.command.Reset100RanksGiftedCommand;
+import io.github.mebsic.core.command.StatusCommand;
 import io.github.mebsic.core.command.TeleportCommand;
 import io.github.mebsic.core.command.Unlock100RanksGiftedCommand;
 import io.github.mebsic.core.command.UnbanCommand;
@@ -43,6 +45,7 @@ import io.github.mebsic.core.menu.FindMenu;
 import io.github.mebsic.core.model.CosmeticType;
 import io.github.mebsic.core.model.GameResult;
 import io.github.mebsic.core.model.Profile;
+import io.github.mebsic.core.model.ProfileStatus;
 import io.github.mebsic.core.model.PunishmentType;
 import io.github.mebsic.core.model.Rank;
 import io.github.mebsic.core.book.BookPromptService;
@@ -74,6 +77,7 @@ import io.github.mebsic.core.manager.RedisManager;
 import io.github.mebsic.core.util.GameRewardUtil;
 import io.github.mebsic.core.util.HycopyExperienceUtil;
 import io.github.mebsic.core.util.NetworkLevelUpMessageUtil;
+import io.github.mebsic.core.util.ActionBarUtil;
 import io.github.mebsic.core.util.DomainSettingsStore;
 import io.github.mebsic.core.util.NetworkConstants;
 import io.github.mebsic.core.util.RankColorUtil;
@@ -135,6 +139,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
     private static final long DAY_MILLIS = 24L * 60L * 60L * 1000L;
     private static final ZoneId EASTERN_TIME_ZONE = ZoneId.of("America/New_York");
     private static final long BUILD_MODE_DURATION_MILLIS = 10L * 60L * 1000L;
+    private static final long STATUS_ACTION_BAR_REFRESH_TICKS = 20L;
     private static final int[] BUILD_MODE_WARNING_SECONDS = new int[]{300, 60, 30, 10, 5, 4, 3, 2, 1};
 
     private MongoManager mongo;
@@ -159,6 +164,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
     private BukkitTask buildTablistTask;
     private BukkitTask buildModeTickTask;
     private BukkitTask profileRefreshTask;
+    private BukkitTask statusActionBarTask;
     private BukkitTask networkDomainRefreshTask;
     private volatile GameState currentGameState = GameState.WAITING;
     private final Map<UUID, BlockedCacheEntry> blockedCache = new ConcurrentHashMap<>();
@@ -166,6 +172,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
     private final Map<UUID, Long> buildModeRestoreNoticeExpiresAt = new ConcurrentHashMap<>();
     private final Map<UUID, Integer> queuedPostGameNetworkLevelUps = new ConcurrentHashMap<>();
     private final Map<UUID, Integer> protocolVersionByPlayer = new ConcurrentHashMap<>();
+    private final Set<UUID> statusActionBarPlayers = ConcurrentHashMap.newKeySet();
 
     @Override
     public void onEnable() {
@@ -175,6 +182,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
         MapConfigResolver.apply(this, getConfig(), mongo);
         if (pubSub != null) {
             pubSub.subscribe(FRIEND_VISIBILITY_UPDATE_CHANNEL, this::handleFriendVisibilityUpdate);
+            pubSub.subscribe(NetworkConstants.PROFILE_STATUS_UPDATE_CHANNEL, this::handleProfileStatusUpdate);
         }
         this.serverType = ServerTypeResolver.resolve(getConfig(), ServerType.MURDER_MYSTERY);
         getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
@@ -228,6 +236,11 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
         if (getCommand("rankcolor") != null) {
             getCommand("rankcolor").setExecutor(new RankColorCommand(this));
         }
+        if (getCommand("status") != null) {
+            StatusCommand statusCommand = new StatusCommand(this);
+            getCommand("status").setExecutor(statusCommand);
+            getCommand("status").setTabCompleter(statusCommand);
+        }
         if (getCommand("networklevel") != null) {
             getCommand("networklevel").setExecutor(new NetworkLevelCommand(this));
         }
@@ -274,6 +287,11 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
         }
         if (getCommand("firework") != null) {
             getCommand("firework").setExecutor(new FireworkCommand(this));
+        }
+        if (getCommand("kaboom") != null) {
+            KaboomCommand kaboomCommand = new KaboomCommand(this);
+            getCommand("kaboom").setExecutor(kaboomCommand);
+            getCommand("kaboom").setTabCompleter(kaboomCommand);
         }
         if (getCommand("find") != null) {
             getCommand("find").setExecutor(new FindCommand(this));
@@ -547,6 +565,11 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
             profileRefreshTask.cancel();
             profileRefreshTask = null;
         }
+        if (statusActionBarTask != null) {
+            statusActionBarTask.cancel();
+            statusActionBarTask = null;
+        }
+        statusActionBarPlayers.clear();
         if (networkDomainRefreshTask != null) {
             networkDomainRefreshTask.cancel();
             networkDomainRefreshTask = null;
@@ -655,6 +678,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
         buildModeRestoreNoticeExpiresAt.remove(playerUuid);
         queuedPostGameNetworkLevelUps.remove(playerUuid);
         protocolVersionByPlayer.remove(playerUuid);
+        removeStatusActionBarPlayer(playerUuid);
         cancelPendingGiftRequests(playerUuid);
     }
 
@@ -1070,6 +1094,86 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
         return false;
     }
 
+    public boolean setStatus(UUID uuid, ProfileStatus status) {
+        if (uuid == null || status == null || profileService == null) {
+            return false;
+        }
+        Profile profile = profileService.getProfile(uuid);
+        if (profile == null || !isMongoEnabled() || profileStore == null) {
+            return false;
+        }
+        if (!profileStore.updateStatus(uuid, status)) {
+            return false;
+        }
+        profile.setStatus(status);
+        updateStatusDisplay(Bukkit.getPlayer(uuid), status);
+        publishStatus(uuid, status);
+        return true;
+    }
+
+    private void publishStatus(UUID uuid, ProfileStatus status) {
+        if (uuid == null || status == null || pubSub == null) {
+            return;
+        }
+        try {
+            pubSub.publish(NetworkConstants.PROFILE_STATUS_UPDATE_CHANNEL, uuid + "," + status.name());
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void handleProfileStatusUpdate(String payload) {
+        ProfileStatusUpdate update = parseProfileStatusUpdate(payload);
+        if (update == null) {
+            return;
+        }
+        Runnable applyUpdate = () -> applyProfileStatusUpdate(update.uuid, update.status);
+        if (Bukkit.isPrimaryThread()) {
+            applyUpdate.run();
+            return;
+        }
+        if (isEnabled()) {
+            Bukkit.getScheduler().runTask(this, applyUpdate);
+        }
+    }
+
+    private ProfileStatusUpdate parseProfileStatusUpdate(String payload) {
+        if (payload == null || payload.trim().isEmpty()) {
+            return null;
+        }
+        String[] parts = payload.split(",", 2);
+        if (parts.length != 2) {
+            return null;
+        }
+        try {
+            UUID uuid = UUID.fromString(parts[0].trim());
+            ProfileStatus status = ProfileStatus.fromStoredName(parts[1]);
+            if (status == null) {
+                return null;
+            }
+            return new ProfileStatusUpdate(uuid, status);
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
+    }
+
+    private void applyProfileStatusUpdate(UUID uuid, ProfileStatus status) {
+        if (uuid == null || status == null || profileService == null) {
+            return;
+        }
+        Profile profile = profileService.getProfile(uuid);
+        if (profile != null) {
+            profile.setStatus(status);
+        }
+        Player player = Bukkit.getPlayer(uuid);
+        if (player != null && player.isOnline()) {
+            updateStatusDisplay(player, status);
+        }
+    }
+
+    public void updateStatusDisplay(Player player, ProfileStatus status) {
+        applyStatusActionBar(player, status);
+    }
+
     public boolean setMurderMysteryTenTimesModeEnabled(UUID uuid, boolean enabled) {
         if (uuid == null || profileService == null) {
             return false;
@@ -1130,6 +1234,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
             applyBuildModeState(player, profile, true);
             applyHubFlightState(player, profile);
             applyHubSpeedState(player, profile.getRank());
+            applyStatusActionBar(player, profile.getStatus());
             if (hubItemListener != null) {
                 hubItemListener.applyProfileVisibility(profile);
                 hubItemListener.refreshCollectiblesItem(player);
@@ -1141,6 +1246,88 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
             return;
         }
         Bukkit.getScheduler().runTask(this, applyLoadedProfileState);
+    }
+
+    private void applyStatusActionBar(Player player, ProfileStatus status) {
+        if (player == null || !isHubServer()) {
+            return;
+        }
+        if (!showsStatusActionBar(status)) {
+            statusActionBarPlayers.remove(player.getUniqueId());
+            ActionBarUtil.send(player, " ");
+            stopStatusActionBarTaskIfIdle();
+            return;
+        }
+        statusActionBarPlayers.add(player.getUniqueId());
+        ActionBarUtil.send(player, statusActionBarMessage(status));
+        ensureStatusActionBarTask();
+    }
+
+    private void ensureStatusActionBarTask() {
+        if (statusActionBarTask != null || statusActionBarPlayers.isEmpty() || !isHubServer()) {
+            return;
+        }
+        statusActionBarTask = Bukkit.getScheduler().runTaskTimer(
+                this,
+                this::tickStatusActionBars,
+                STATUS_ACTION_BAR_REFRESH_TICKS,
+                STATUS_ACTION_BAR_REFRESH_TICKS
+        );
+    }
+
+    private void stopStatusActionBarTaskIfIdle() {
+        if (!statusActionBarPlayers.isEmpty() || statusActionBarTask == null) {
+            return;
+        }
+        statusActionBarTask.cancel();
+        statusActionBarTask = null;
+    }
+
+    private void removeStatusActionBarPlayer(UUID uuid) {
+        if (uuid == null) {
+            return;
+        }
+        statusActionBarPlayers.remove(uuid);
+        stopStatusActionBarTaskIfIdle();
+    }
+
+    private void tickStatusActionBars() {
+        if (!isHubServer() || profileService == null || statusActionBarPlayers.isEmpty()) {
+            statusActionBarPlayers.clear();
+            stopStatusActionBarTaskIfIdle();
+            return;
+        }
+        for (UUID uuid : statusActionBarPlayers) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player == null || !player.isOnline()) {
+                statusActionBarPlayers.remove(uuid);
+                continue;
+            }
+            Profile profile = profileService.getProfile(uuid);
+            ProfileStatus status = profile == null ? ProfileStatus.ONLINE : profile.getStatus();
+            if (!showsStatusActionBar(status)) {
+                statusActionBarPlayers.remove(uuid);
+                ActionBarUtil.send(player, " ");
+                continue;
+            }
+            ActionBarUtil.send(player, statusActionBarMessage(status));
+        }
+        stopStatusActionBarTaskIfIdle();
+    }
+
+    private boolean showsStatusActionBar(ProfileStatus status) {
+        return status != null && status != ProfileStatus.ONLINE;
+    }
+
+    private String statusActionBarMessage(ProfileStatus status) {
+        return ChatColor.WHITE + "You are currently " + ChatColor.RED + statusActionBarLabel(status);
+    }
+
+    private String statusActionBarLabel(ProfileStatus status) {
+        if (status == ProfileStatus.APPEAR_OFFLINE) {
+            return "APPEARING OFFLINE";
+        }
+        return status == null ? "" : status.name();
     }
 
     @Override
@@ -1959,6 +2146,16 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
         private BlockedCacheEntry(Set<UUID> blocked, long loadedAt) {
             this.blocked = blocked == null ? Collections.<UUID>emptySet() : blocked;
             this.loadedAt = loadedAt;
+        }
+    }
+
+    private static final class ProfileStatusUpdate {
+        private final UUID uuid;
+        private final ProfileStatus status;
+
+        private ProfileStatusUpdate(UUID uuid, ProfileStatus status) {
+            this.uuid = uuid;
+            this.status = status;
         }
     }
 }

@@ -9,6 +9,7 @@ import io.github.mebsic.core.util.ChatEmoteUtil;
 import io.github.mebsic.core.util.DomainSettingsStore;
 import io.github.mebsic.core.util.HubMessageUtil;
 import io.github.mebsic.core.util.NetworkConstants;
+import io.github.mebsic.core.model.ProfileStatus;
 import io.github.mebsic.proxy.cache.MotdCache;
 import io.github.mebsic.proxy.command.BlockCommand;
 import io.github.mebsic.proxy.command.BoopCommand;
@@ -46,6 +47,7 @@ import io.github.mebsic.proxy.service.WatchdogAnnouncementService;
 import io.github.mebsic.proxy.util.Components;
 import io.github.mebsic.proxy.util.PartyComponents;
 import io.github.mebsic.core.manager.RedisManager;
+import io.github.mebsic.core.service.PubSubService;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
@@ -138,6 +140,7 @@ public class HycopyProxyPlugin {
     private MongoClient mongoClient;
     private MongoDatabase mongoDatabase;
     private RedisManager redis;
+    private PubSubService pubSub;
     private MotdCache motdCache;
     private Favicon defaultFavicon;
     private Favicon maintenanceFavicon;
@@ -208,6 +211,7 @@ public class HycopyProxyPlugin {
                     chatChannelService.setChannel(memberId, ChatChannelService.ChatChannel.ALL);
                 }
             });
+            subscribeProfileStatusUpdates();
             this.staffChatService = new StaffChatService(proxy, rankResolver, chatMessageService);
             CommandManager commands = proxy.getCommandManager();
             commands.unregister(DISABLED_PROXY_COMMAND);
@@ -441,7 +445,10 @@ public class HycopyProxyPlugin {
 
     @Subscribe
     public void onPluginMessage(PluginMessageEvent event) {
-        if (event == null || !PLAY_AGAIN_INTENT_CHANNEL.equals(event.getIdentifier())) {
+        if (event == null) {
+            return;
+        }
+        if (!PLAY_AGAIN_INTENT_CHANNEL.equals(event.getIdentifier())) {
             return;
         }
         event.setResult(PluginMessageEvent.ForwardResult.handled());
@@ -766,6 +773,7 @@ public class HycopyProxyPlugin {
             redis.close();
             redis = null;
         }
+        pubSub = null;
         if (mongoClient != null) {
             mongoClient.close();
             mongoClient = null;
@@ -783,7 +791,9 @@ public class HycopyProxyPlugin {
         }
         if (friendService != null) {
             friendService.track(event.getPlayer());
-            friendService.notifyFriendStatus(event.getPlayer().getUniqueId(), event.getPlayer().getUsername(), true);
+            if (!isAppearingOffline(event.getPlayer())) {
+                friendService.notifyFriendStatus(event.getPlayer().getUniqueId(), event.getPlayer().getUsername(), true);
+            }
         }
         if (partyService != null) {
             partyService.track(event.getPlayer());
@@ -832,6 +842,13 @@ public class HycopyProxyPlugin {
         }
     }
 
+    private boolean isAppearingOffline(Player player) {
+        if (player == null || rankResolver == null) {
+            return false;
+        }
+        return rankResolver.isAppearOffline(player.getUniqueId());
+    }
+
     @Subscribe
     public void onDisconnect(DisconnectEvent event) {
         UUID playerId = event.getPlayer().getUniqueId();
@@ -846,7 +863,7 @@ public class HycopyProxyPlugin {
         if (friendService != null) {
             friendService.markOffline(event.getPlayer());
         }
-        if (friendService != null) {
+        if (friendService != null && !isAppearingOffline(event.getPlayer())) {
             friendService.notifyFriendStatus(event.getPlayer().getUniqueId(), event.getPlayer().getUsername(), false);
         }
         if (partyService != null) {
@@ -1178,6 +1195,7 @@ public class HycopyProxyPlugin {
                 config.getRedisPort(),
                 config.getRedisPassword(),
                 config.getRedisDatabase());
+        this.pubSub = new PubSubService(redis);
     }
 
     private Favicon loadFavicon(String iconFile) {
@@ -1640,10 +1658,10 @@ public class HycopyProxyPlugin {
         if (!targetType.isGame()) {
             return;
         }
-        if (details != null && isPartyFollowBlockedGameState(details.getState())) {
+        if (details != null && !details.isJoinableGame()) {
             if (!retryAttempt) {
                 leader.sendMessage(Component.text(
-                        "Your party couldn't follow because that game is already in progress.",
+                        "Your party couldn't follow because that game is no longer accepting players.",
                         NamedTextColor.RED
                 ));
             }
@@ -1739,14 +1757,6 @@ public class HycopyProxyPlugin {
             required++;
         }
         return required;
-    }
-
-    private boolean isPartyFollowBlockedGameState(String state) {
-        if (state == null || state.trim().isEmpty()) {
-            return false;
-        }
-        String normalized = state.trim().toUpperCase(Locale.ROOT);
-        return normalized.equals("IN_GAME") || normalized.equals("ENDING");
     }
 
     private boolean isConnectionThrottle(String reason) {
@@ -1884,6 +1894,73 @@ public class HycopyProxyPlugin {
         }
     }
 
+    private void subscribeProfileStatusUpdates() {
+        if (pubSub == null) {
+            return;
+        }
+        pubSub.subscribe(NetworkConstants.PROFILE_STATUS_UPDATE_CHANNEL, this::handleProfileStatusUpdate);
+    }
+
+    private void handleProfileStatusUpdate(String payload) {
+        ProfileStatusUpdate update = parseProfileStatusUpdate(payload);
+        if (update == null) {
+            return;
+        }
+        proxy.getScheduler().buildTask(this, () -> applyProfileStatusUpdate(update.uuid, update.status)).schedule();
+    }
+
+    private ProfileStatusUpdate parseProfileStatusUpdate(String payload) {
+        if (payload == null || payload.trim().isEmpty()) {
+            return null;
+        }
+        String[] parts = payload.split(",", 2);
+        if (parts.length != 2) {
+            return null;
+        }
+        try {
+            UUID uuid = UUID.fromString(parts[0].trim());
+            ProfileStatus status = ProfileStatus.fromStoredName(parts[1]);
+            if (status == null) {
+                return null;
+            }
+            return new ProfileStatusUpdate(uuid, status);
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
+    }
+
+    private void applyProfileStatusUpdate(UUID playerId, ProfileStatus status) {
+        if (playerId == null || status == null) {
+            return;
+        }
+        proxy.getPlayer(playerId).ifPresent(player -> {
+            if (friendService != null) {
+                if (status == ProfileStatus.APPEAR_OFFLINE) {
+                    friendService.markOffline(player);
+                } else {
+                    friendService.track(player);
+                }
+            }
+            if (partyService != null) {
+                if (status == ProfileStatus.APPEAR_OFFLINE) {
+                    partyService.markOffline(player);
+                } else {
+                    partyService.track(player);
+                }
+            }
+        });
+    }
+
+    private static final class ProfileStatusUpdate {
+        private final UUID uuid;
+        private final ProfileStatus status;
+
+        private ProfileStatusUpdate(UUID uuid, ProfileStatus status) {
+            this.uuid = uuid;
+            this.status = status;
+        }
+    }
+
     private boolean consumeRecentPlayAgainIntent(UUID playerId) {
         if (playerId == null) {
             return false;
@@ -2006,21 +2083,8 @@ public class HycopyProxyPlugin {
             return false;
         }
         return registryService.findServerDetails(serverName)
-                .map(ServerRegistryService.ServerDetails::getState)
-                .map(this::isJoinBlockedState)
+                .map(details -> details.getType().isGame() && !details.isJoinableGame())
                 .orElse(false);
-    }
-
-    private boolean isJoinBlockedState(String state) {
-        if (state == null) {
-            return false;
-        }
-        String normalized = state.trim().toUpperCase(Locale.ROOT);
-        return normalized.equals("IN_GAME")
-                || normalized.equals("ENDING")
-                || normalized.equals("RESTARTING")
-                || normalized.equals("LOCKED")
-                || normalized.equals("WAITING_RESTART");
     }
 
     private boolean isUpdateJoinLockActive() {

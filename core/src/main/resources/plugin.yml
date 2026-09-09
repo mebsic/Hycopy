@@ -20,6 +20,8 @@ commands:
     usage: /rank <player> <rank> [duration]
   rankcolor:
     usage: /rankcolor
+  status:
+    usage: /status <status>
   networklevel:
     usage: /networklevel <player> <level>
   gold:
@@ -54,6 +56,8 @@ commands:
   firework:
     usage: /firework
     aliases: [fw]
+  kaboom:
+    usage: /kaboom <player/all>
   find:
     usage: /find
   displayendcredits:

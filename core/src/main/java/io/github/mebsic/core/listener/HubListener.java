@@ -1,6 +1,7 @@
 package io.github.mebsic.core.listener;
 
 import io.github.mebsic.core.model.Profile;
+import io.github.mebsic.core.model.ProfileStatus;
 import io.github.mebsic.core.model.Rank;
 import io.github.mebsic.core.service.CoreApi;
 import io.github.mebsic.core.util.RankFormatUtil;
@@ -159,6 +160,7 @@ public class HubListener implements Listener {
             }
             applyJoinFlight(online, refreshed);
             applySpeed(online, refreshed);
+            sendStatusJoinReminderIfNeeded(online, refreshedProfile);
             if (!pendingJoinAnnouncements.remove(uuid)) {
                 return;
             }
@@ -339,6 +341,22 @@ public class HubListener implements Listener {
         if (task != null) {
             task.cancel();
         }
+    }
+
+    private void sendStatusJoinReminderIfNeeded(Player player, Profile profile) {
+        if (player == null || profile == null) {
+            return;
+        }
+        ProfileStatus status = profile.getStatus();
+        if (status == null || status == ProfileStatus.ONLINE) {
+            return;
+        }
+        player.sendMessage("");
+        player.sendMessage(ChatColor.GOLD + "" + ChatColor.BOLD
+                + "REMINDER: "
+                + ChatColor.GOLD + "Your Online Status is currently set to "
+                + ChatColor.YELLOW + ChatColor.BOLD + status.getDisplayName());
+        player.sendMessage("");
     }
 
     private void teleportToHubSpawn(Player player, boolean randomizeHorizontal) {

@@ -18,6 +18,7 @@ public final class MongoManager {
     public static final String PROXY_SETTINGS_CONNECT_USING_DOMAIN_FIELD = "connectUsingDomain";
     public static final String PROFILE_CHAT_TYPE_FIELD = "chatType";
     public static final String PROFILE_RANKS_GIFTED_KEY = "ranksGifted";
+    public static final String PROFILE_STATUS_KEY = "status";
 
     private MongoManager() {
     }

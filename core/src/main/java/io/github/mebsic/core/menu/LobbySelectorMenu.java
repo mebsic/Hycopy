@@ -5,6 +5,7 @@ import com.mongodb.client.model.Filters;
 import io.github.mebsic.core.CorePlugin;
 import io.github.mebsic.core.manager.MongoManager;
 import io.github.mebsic.core.model.Profile;
+import io.github.mebsic.core.model.ProfileStatus;
 import io.github.mebsic.core.model.Rank;
 import io.github.mebsic.core.server.ServerType;
 import io.github.mebsic.core.util.HubMessageUtil;
@@ -554,11 +555,35 @@ public class LobbySelectorMenu extends Menu {
             } catch (IllegalArgumentException ignored) {
                 continue;
             }
-            if (friendUuids.contains(uuid)) {
+            if (friendUuids.contains(uuid) && !isAppearOffline(uuid)) {
                 names.add(formatRankColoredFriendName(uuid, rawName.trim()));
             }
         }
         return names;
+    }
+
+    private boolean isAppearOffline(UUID uuid) {
+        if (plugin == null || uuid == null) {
+            return false;
+        }
+        Profile profile = plugin.getProfile(uuid);
+        if (profile != null) {
+            return profile.getStatus() == ProfileStatus.APPEAR_OFFLINE;
+        }
+        MongoManager mongo = plugin.getMongoManager();
+        if (mongo == null) {
+            return false;
+        }
+        MongoCollection<Document> profiles = mongo.getProfiles();
+        if (profiles == null) {
+            return false;
+        }
+        Document doc = profiles.find(Filters.eq("uuid", uuid.toString()))
+                .projection(new Document(MongoManager.PROFILE_STATUS_KEY, 1))
+                .first();
+        String status = doc == null ? null : doc.getString(MongoManager.PROFILE_STATUS_KEY);
+        return status != null
+                && ProfileStatus.APPEAR_OFFLINE.name().equals(status.trim().toUpperCase(Locale.ROOT));
     }
 
     private String formatRankColoredFriendName(UUID uuid, String name) {

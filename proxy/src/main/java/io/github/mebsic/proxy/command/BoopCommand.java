@@ -81,6 +81,10 @@ public class BoopCommand implements SimpleCommand {
             sender.sendMessage(Component.text("You cannot boop this player!", NamedTextColor.RED));
             return;
         }
+        if (rankResolver != null && rankResolver.isAppearOffline(targetId)) {
+            sender.sendMessage(Component.text("That player is offline!", NamedTextColor.RED));
+            return;
+        }
         Optional<Player> target = proxy.getPlayer(targetId);
         if (!target.isPresent()) {
             sender.sendMessage(Component.text("That player is offline!", NamedTextColor.RED));

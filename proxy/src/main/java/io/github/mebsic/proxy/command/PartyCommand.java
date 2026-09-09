@@ -241,6 +241,23 @@ public class PartyCommand implements SimpleCommand {
                 lines.add(Component.text("You cannot invite yourself to your own party!", NamedTextColor.RED));
                 continue;
             }
+            if (rankResolver != null && rankResolver.isAppearOffline(targetId)) {
+                if (singleTarget) {
+                    sendInviteError(player, "You cannot invite that player since they're not online.");
+                    return;
+                }
+                lines.add(Component.text("You cannot invite that player since they're not online.", NamedTextColor.RED));
+                continue;
+            }
+            if (blocks != null && blocks.isEitherBlocked(playerId, targetId)) {
+                String blockedMessage = "You cannot invite that player!";
+                if (singleTarget) {
+                    sendInviteError(player, blockedMessage);
+                    return;
+                }
+                lines.add(Component.text(blockedMessage, NamedTextColor.RED));
+                continue;
+            }
             if (parties.isInParty(targetId)) {
                 lines.add(LEGACY.deserialize(formatNameWithRank(targetId, parties.getName(targetId)))
                         .append(Component.text(" is already in a party!", NamedTextColor.RED)));
@@ -699,9 +716,9 @@ public class PartyCommand implements SimpleCommand {
             if (details != null) {
                 ServerType type = details.getType();
                 targetIsGame = type.isGame();
-                if (type.isGame() && isWarpBlockedGameState(details.getState())) {
+                if (type.isGame() && !details.isJoinableGame()) {
                     sendFramed(player, Component.text(
-                            "You cannot warp because the game has started!",
+                            "You cannot warp because that game is no longer accepting players!",
                             NamedTextColor.RED
                     ));
                     return;
@@ -1300,14 +1317,6 @@ public class PartyCommand implements SimpleCommand {
         }
         int available = maxPlayers - details.getPlayers();
         return available >= neededSlots;
-    }
-
-    private boolean isWarpBlockedGameState(String state) {
-        if (state == null || state.trim().isEmpty()) {
-            return false;
-        }
-        String normalized = state.trim().toUpperCase(Locale.ROOT);
-        return normalized.equals("IN_GAME") || normalized.equals("ENDING");
     }
 
     private String cmd(String suffix) {

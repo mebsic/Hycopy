@@ -182,7 +182,7 @@ public class PartyService {
                 offlineSince.remove(memberId);
                 continue;
             }
-            if (proxy != null && proxy.getPlayer(memberId).isPresent()) {
+            if (isOnlineForOfflineExpiry(memberId)) {
                 offlineSince.remove(memberId);
                 continue;
             }
@@ -195,7 +195,7 @@ public class PartyService {
             if (memberId == null) {
                 continue;
             }
-            if (proxy != null && proxy.getPlayer(memberId).isPresent()) {
+            if (isOnlineForOfflineExpiry(memberId)) {
                 offlineSince.remove(memberId);
                 continue;
             }
@@ -241,6 +241,13 @@ public class PartyService {
 
     public boolean isInParty(UUID member) {
         return memberToLeader.containsKey(member);
+    }
+
+    private boolean isOnlineForOfflineExpiry(UUID memberId) {
+        if (proxy == null || memberId == null || !proxy.getPlayer(memberId).isPresent()) {
+            return false;
+        }
+        return rankResolver == null || !rankResolver.isAppearOffline(memberId);
     }
 
     public Party getParty(UUID member) {

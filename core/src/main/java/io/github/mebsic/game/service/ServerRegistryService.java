@@ -11,6 +11,7 @@ import com.mongodb.client.model.UpdateOptions;
 import io.github.mebsic.core.manager.MongoManager;
 import org.bson.conversions.Bson;
 import io.github.mebsic.core.server.ServerIdentityResolver;
+import io.github.mebsic.core.server.ServerRegistryStates;
 import io.github.mebsic.core.server.ServerType;
 import io.github.mebsic.core.server.ServerTypeResolver;
 import io.github.mebsic.game.manager.GameManager;
@@ -23,12 +24,14 @@ import org.bukkit.scheduler.BukkitTask;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ServerRegistryService {
     private static final long STALE_HEARTBEAT_MILLIS = 2 * 60 * 1000L;
     private static final long MONGO_CONNECT_TIMEOUT_SECONDS = 3L;
     private static final long MONGO_SOCKET_TIMEOUT_SECONDS = 5L;
     private static final long MONGO_SERVER_SELECTION_TIMEOUT_SECONDS = 3L;
+    private static final long RESTART_MARKER_MAX_AGE_MILLIS = 10L * 60L * 1000L;
     private final JavaPlugin plugin;
     private final GameManager gameManager;
     private final boolean mongoEnabled;
@@ -44,6 +47,7 @@ public class ServerRegistryService {
     private MongoClient client;
     private MongoCollection<Document> collection;
     private BukkitTask task;
+    private final AtomicBoolean immediateUpdateQueued;
 
     public ServerRegistryService(JavaPlugin plugin, FileConfiguration config, GameManager gameManager) {
         this.plugin = plugin;
@@ -59,6 +63,7 @@ public class ServerRegistryService {
         this.forcedMaxPlayers = parsePositiveInt(System.getenv("SERVER_MAX_PLAYERS"));
         this.mongoUri = config.getString("mongo.uri", "mongodb://mongo:27017");
         this.mongoDatabase = config.getString("mongo.database", "hycopy");
+        this.immediateUpdateQueued = new AtomicBoolean(false);
     }
 
     public void start() {
@@ -96,6 +101,29 @@ public class ServerRegistryService {
         collection = null;
     }
 
+    public void requestUpdate() {
+        if (!mongoEnabled || plugin == null || collection == null) {
+            return;
+        }
+        if (!immediateUpdateQueued.compareAndSet(false, true)) {
+            return;
+        }
+        try {
+            plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+                try {
+                    sendUpdate("online", false);
+                } catch (RuntimeException ex) {
+                    plugin.getLogger().warning("Failed to publish server registry update!\n" + ex.getMessage());
+                } finally {
+                    immediateUpdateQueued.set(false);
+                }
+            });
+        } catch (RuntimeException ex) {
+            immediateUpdateQueued.set(false);
+            plugin.getLogger().warning("Failed to schedule server registry update!\n" + ex.getMessage());
+        }
+    }
+
     private MongoClient createMongoClient(String uri) {
         ConnectionString connectionString = new ConnectionString(uri);
         MongoClientSettings settings = MongoClientSettings.builder()
@@ -129,7 +157,18 @@ public class ServerRegistryService {
             onlinePlayerUuids.add(player.getUniqueId().toString());
             onlinePlayerNames.add(player.getName());
         }
-        String state = gameManager == null ? "WAITING" : gameManager.getRegistryState();
+        long now = System.currentTimeMillis();
+        boolean restartMarkerActive = !clearRestartingFlag && hasActiveRestartMarker(now);
+        String state = gameManager == null ? "" : gameManager.getRegistryState();
+        if (restartMarkerActive) {
+            status = "restarting";
+            state = ServerRegistryStates.WAITING_RESTART;
+        }
+        boolean gameJoinable = gameManager != null && gameManager.isJoinable();
+        boolean joinable = status != null
+                && status.equalsIgnoreCase("online")
+                && !restartMarkerActive
+                && gameJoinable;
         Document doc = new Document("_id", serverId)
                 .append("type", type.getId())
                 .append("group", group)
@@ -140,14 +179,39 @@ public class ServerRegistryService {
                 .append("onlinePlayerUuids", onlinePlayerUuids)
                 .append("onlinePlayerNames", onlinePlayerNames)
                 .append("state", state)
+                .append("joinable", joinable)
                 .append("status", status)
-                .append("lastHeartbeat", System.currentTimeMillis());
+                .append("lastHeartbeat", now);
         Document update = new Document("$set", doc);
         if (clearRestartingFlag) {
             update.append("$unset", new Document("restarting", "")
                     .append("restartRequestedAt", ""));
         }
         collection.updateOne(new Document("_id", serverId), update, new UpdateOptions().upsert(true));
+    }
+
+    private boolean hasActiveRestartMarker(long now) {
+        if (collection == null || serverId == null || serverId.trim().isEmpty()) {
+            return false;
+        }
+        try {
+            Document doc = collection.find(Filters.eq("_id", serverId)).first();
+            if (doc == null) {
+                return false;
+            }
+            Object restartingValue = doc.get("restarting");
+            if (!(restartingValue instanceof Boolean) || !((Boolean) restartingValue)) {
+                return false;
+            }
+            Long requestedAt = doc.getLong("restartRequestedAt");
+            if (requestedAt == null || requestedAt <= 0L) {
+                return false;
+            }
+            long age = now - requestedAt;
+            return age >= 0L && age <= RESTART_MARKER_MAX_AGE_MILLIS;
+        } catch (RuntimeException ignored) {
+            return false;
+        }
     }
 
     private void cleanupStaleRecords() {

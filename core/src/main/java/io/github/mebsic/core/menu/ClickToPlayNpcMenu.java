@@ -4,6 +4,7 @@ import com.mongodb.client.MongoCollection;
 import com.mongodb.client.model.Filters;
 import io.github.mebsic.core.CorePlugin;
 import io.github.mebsic.core.manager.MongoManager;
+import io.github.mebsic.core.server.ServerRegistryStates;
 import io.github.mebsic.core.server.ServerType;
 import io.github.mebsic.core.service.QueueClient;
 import io.github.mebsic.core.util.HubMessageUtil;
@@ -17,7 +18,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 public class ClickToPlayNpcMenu extends Menu {
     private static final int SIZE = 36;
@@ -111,11 +111,33 @@ public class ClickToPlayNpcMenu extends Menu {
             if (!isAvailableGameServer(doc, now, group, staleSeconds, excludedServer)) {
                 continue;
             }
-            if (best == null || safeInt(doc.get("players")) < safeInt(best.get("players"))) {
+            if (isBetterGameCandidate(doc, best)) {
                 best = doc;
             }
         }
         return safeString(best == null ? null : best.getString("_id"));
+    }
+
+    private boolean isBetterGameCandidate(Document candidate, Document current) {
+        if (candidate == null) {
+            return false;
+        }
+        if (current == null) {
+            return true;
+        }
+        int candidatePlayers = safeInt(candidate.get("players"));
+        int currentPlayers = safeInt(current.get("players"));
+        boolean candidateHasPlayers = candidatePlayers > 0;
+        boolean currentHasPlayers = currentPlayers > 0;
+        if (candidateHasPlayers != currentHasPlayers) {
+            return candidateHasPlayers;
+        }
+        if (candidatePlayers != currentPlayers) {
+            return candidateHasPlayers
+                    ? candidatePlayers > currentPlayers
+                    : candidatePlayers < currentPlayers;
+        }
+        return safeString(candidate.getString("_id")).compareToIgnoreCase(safeString(current.getString("_id"))) < 0;
     }
 
     private boolean isAvailableGameServer(Document doc, long now, String group, int staleSeconds, String excludedServer) {
@@ -150,12 +172,14 @@ public class ClickToPlayNpcMenu extends Menu {
         if (maxPlayers > 0 && players >= maxPlayers) {
             return false;
         }
-        String state = safeString(doc.getString("state")).toUpperCase(Locale.ROOT);
-        return !state.equals("IN_GAME")
-                && !state.equals("ENDING")
-                && !state.equals("RESTARTING")
-                && !state.equals("LOCKED")
-                && !state.equals("WAITING_RESTART");
+        return ServerRegistryStates.isJoinableGameState(doc.getString("state"), readBoolean(doc.get("joinable")));
+    }
+
+    private Boolean readBoolean(Object value) {
+        if (value instanceof Boolean) {
+            return (Boolean) value;
+        }
+        return null;
     }
 
     private org.bukkit.inventory.ItemStack buildPlayItem() {

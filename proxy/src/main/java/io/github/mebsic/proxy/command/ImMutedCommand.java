@@ -80,6 +80,10 @@ public class ImMutedCommand implements SimpleCommand {
             sender.sendMessage(Component.text("You cannot message this player!", NamedTextColor.RED));
             return;
         }
+        if (rankResolver != null && rankResolver.isAppearOffline(targetId)) {
+            sender.sendMessage(Component.text("That player is offline!", NamedTextColor.RED));
+            return;
+        }
         String notificationKey = notificationKey(sender.getUniqueId(), targetId);
         long now = System.currentTimeMillis();
         Long lastNotifiedAt = notifiedPairs.get(notificationKey);

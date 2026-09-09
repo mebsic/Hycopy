@@ -6,6 +6,7 @@ import io.github.mebsic.core.CorePlugin;
 import io.github.mebsic.core.manager.MongoManager;
 import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.core.model.Rank;
+import io.github.mebsic.core.server.ServerRegistryStates;
 import io.github.mebsic.core.server.ServerType;
 import io.github.mebsic.core.util.ActionBarUtil;
 import io.github.mebsic.core.util.RankFormatUtil;
@@ -36,7 +37,6 @@ import org.bukkit.scheduler.BukkitTask;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -663,11 +663,35 @@ public class SpectatorListener implements Listener {
         if (latestByServerId.isEmpty()) {
             return null;
         }
-        List<Document> candidates = new ArrayList<>(latestByServerId.values());
-        candidates.sort(Comparator
-                .comparingInt((Document doc) -> safeInt(doc.get("players")))
-                .thenComparing(doc -> safeString(doc.getString("_id")).toLowerCase(Locale.ROOT)));
-        return safeString(candidates.get(0).getString("_id"));
+        Document best = null;
+        for (Document candidate : latestByServerId.values()) {
+            if (isBetterGameCandidate(candidate, best)) {
+                best = candidate;
+            }
+        }
+        return safeString(best == null ? null : best.getString("_id"));
+    }
+
+    private boolean isBetterGameCandidate(Document candidate, Document current) {
+        if (candidate == null) {
+            return false;
+        }
+        if (current == null) {
+            return true;
+        }
+        int candidatePlayers = safeInt(candidate.get("players"));
+        int currentPlayers = safeInt(current.get("players"));
+        boolean candidateHasPlayers = candidatePlayers > 0;
+        boolean currentHasPlayers = currentPlayers > 0;
+        if (candidateHasPlayers != currentHasPlayers) {
+            return candidateHasPlayers;
+        }
+        if (candidatePlayers != currentPlayers) {
+            return candidateHasPlayers
+                    ? candidatePlayers > currentPlayers
+                    : candidatePlayers < currentPlayers;
+        }
+        return safeString(candidate.getString("_id")).compareToIgnoreCase(safeString(current.getString("_id"))) < 0;
     }
 
     private boolean isGameEntryValid(Document doc, long now) {
@@ -695,12 +719,14 @@ public class SpectatorListener implements Listener {
         if (maxPlayers > 0 && players >= maxPlayers) {
             return false;
         }
-        String state = safeString(doc.getString("state")).toUpperCase(Locale.ROOT);
-        return !state.equals("IN_GAME")
-                && !state.equals("ENDING")
-                && !state.equals("RESTARTING")
-                && !state.equals("LOCKED")
-                && !state.equals("WAITING_RESTART");
+        return ServerRegistryStates.isJoinableGameState(doc.getString("state"), readBoolean(doc.get("joinable")));
+    }
+
+    private Boolean readBoolean(Object value) {
+        if (value instanceof Boolean) {
+            return (Boolean) value;
+        }
+        return null;
     }
 
     private boolean isDeadSpectator(Player player) {

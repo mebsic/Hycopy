@@ -1,6 +1,7 @@
 package io.github.mebsic.proxy.command;
 
 import io.github.mebsic.core.server.ServerType;
+import io.github.mebsic.core.model.ProfileStatus;
 import io.github.mebsic.core.util.ChatEmoteUtil;
 import io.github.mebsic.core.util.CommonMessages;
 import io.github.mebsic.core.util.MojangApi;
@@ -46,6 +47,7 @@ public class FriendCommand implements SimpleCommand {
     private static final long MILLIS_PER_MONTH = 30L * MILLIS_PER_DAY;
     private static final String NOTIFICATION_TOGGLE_COOLDOWN_MESSAGE = "Please wait before doing that again!";
     private static final String PROFILE_DISABLED_MESSAGE = "Profiles are currently disabled!";
+    private static final String BLOCKED_FRIEND_MESSAGE = "You cannot friend that player!";
     private static final Component COMMAND_SUGGEST_HOVER = Component.text("Click to put the command in chat.", NamedTextColor.GRAY);
 
     private final ProxyServer proxy;
@@ -202,7 +204,7 @@ public class FriendCommand implements SimpleCommand {
             return;
         }
         if (isEitherBlocked(player.getUniqueId(), targetId)) {
-            sendFramed(player, Component.text("You cannot send a friend request to this player!", NamedTextColor.RED));
+            sendFramed(player, Component.text(BLOCKED_FRIEND_MESSAGE, NamedTextColor.RED));
             return;
         }
         if (friends.hasPending(targetId, player.getUniqueId())) {
@@ -240,6 +242,10 @@ public class FriendCommand implements SimpleCommand {
         UUID targetId = resolveUuid(targetInput);
         if (targetId == null) {
             sendFramed(player, FriendComponents.noPlayerFound(targetInput));
+            return;
+        }
+        if (isEitherBlocked(player.getUniqueId(), targetId)) {
+            sendFramed(player, Component.text(BLOCKED_FRIEND_MESSAGE, NamedTextColor.RED));
             return;
         }
         if (!friends.accept(player.getUniqueId(), targetId)) {
@@ -632,6 +638,10 @@ public class FriendCommand implements SimpleCommand {
             sendFramed(sender, Component.text("You cannot message this player!", NamedTextColor.RED));
             return;
         }
+        if (rankResolver != null && rankResolver.isAppearOffline(targetId)) {
+            sendFramed(sender, Component.text("That player is offline!", NamedTextColor.RED));
+            return;
+        }
         friends.rememberName(sender.getUniqueId(), sender.getUsername());
         proxy.getPlayer(targetId).ifPresentOrElse(target -> {
             friends.rememberName(target.getUniqueId(), target.getUsername());
@@ -734,7 +744,8 @@ public class FriendCommand implements SimpleCommand {
         Map<UUID, Boolean> bestByFriend = new HashMap<UUID, Boolean>();
         for (UUID friendId : ordered) {
             FriendService.FriendPresence presence = friends.getPresence(friendId);
-            visibleOnlineByFriend.put(friendId, isVisibleAsOnlineInFriendList(friendId, presence));
+            ProfileStatus status = resolveProfileStatus(friendId);
+            visibleOnlineByFriend.put(friendId, isVisibleAsOnlineInFriendList(friendId, presence, status));
             bestByFriend.put(friendId, friends.isBestFriend(ownerId, friendId));
         }
         ordered.sort(Comparator
@@ -776,11 +787,20 @@ public class FriendCommand implements SimpleCommand {
                 ? friendId.toString()
                 : plainName;
         FriendService.FriendPresence presence = friends.getPresence(friendId);
-        boolean shownOnline = isVisibleAsOnlineInFriendList(friendId, presence);
+        ProfileStatus status = resolveProfileStatus(friendId);
+        boolean shownOnline = isVisibleAsOnlineInFriendList(friendId, presence, status);
         Component entry;
         if (!shownOnline) {
             entry = name.append(Component.text(" is currently offline", NamedTextColor.RED)
                     .decoration(TextDecoration.BOLD, false));
+        } else if (status == ProfileStatus.AWAY) {
+            entry = name.append(Component.text(" is currently Away", NamedTextColor.YELLOW)
+                    .decoration(TextDecoration.BOLD, false));
+        } else if (status == ProfileStatus.BUSY) {
+            entry = name.append(Component.text(" is currently ", NamedTextColor.YELLOW)
+                    .decoration(TextDecoration.BOLD, false))
+                    .append(Component.text("Busy", NamedTextColor.DARK_PURPLE)
+                            .decoration(TextDecoration.BOLD, false));
         } else {
             String safeLocation = describeOnlineLocation(friendId, presence);
             entry = name.append(Component.text(" is in a " + safeLocation, NamedTextColor.YELLOW)
@@ -846,12 +866,22 @@ public class FriendCommand implements SimpleCommand {
         return hover;
     }
 
-    private boolean isVisibleAsOnlineInFriendList(UUID friendId, FriendService.FriendPresence presence) {
+    private boolean isVisibleAsOnlineInFriendList(UUID friendId, FriendService.FriendPresence presence, ProfileStatus status) {
         if (presence == null || !presence.isOnline()) {
+            return false;
+        }
+        if (status == ProfileStatus.APPEAR_OFFLINE) {
             return false;
         }
         ServerType resolvedType = resolvePresenceServerType(friendId, presence);
         return resolvedType != ServerType.BUILD;
+    }
+
+    private ProfileStatus resolveProfileStatus(UUID friendId) {
+        if (rankResolver == null) {
+            return null;
+        }
+        return rankResolver.resolveProfileStatus(friendId);
     }
 
     private ServerType resolvePresenceServerType(UUID friendId, FriendService.FriendPresence presence) {

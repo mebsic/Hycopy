@@ -1,6 +1,7 @@
 package io.github.mebsic.proxy.service;
 
 import io.github.mebsic.core.server.ServerType;
+import io.github.mebsic.core.server.ServerRegistryStates;
 import io.github.mebsic.proxy.config.ProxyConfig;
 import com.mongodb.client.FindIterable;
 import com.mongodb.client.MongoCollection;
@@ -159,6 +160,7 @@ public class ServerRegistryService {
             Integer players = doc.getInteger("players");
             Integer maxPlayers = doc.getInteger("maxPlayers");
             String state = doc.getString("state");
+            Boolean joinable = readBoolean(doc.get("joinable"));
             String addressKey = normalizeLookupKey(address);
             if (address == null || port == null || typeRaw == null) {
                 continue;
@@ -182,7 +184,8 @@ public class ServerRegistryService {
             RegistryEntry entry = new RegistryEntry(serverId, id, serverId, address, port, type,
                     players == null ? 0 : players,
                     maxPlayers == null ? 0 : maxPlayers,
-                    state);
+                    state,
+                    joinable);
             long heartbeatValue = heartbeat == null ? Long.MIN_VALUE : heartbeat;
             Long current = heartbeatByServerId.get(idKey);
             if (current != null && current >= heartbeatValue) {
@@ -220,6 +223,13 @@ public class ServerRegistryService {
             return "";
         }
         return raw.trim().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private Boolean readBoolean(Object value) {
+        if (value instanceof Boolean) {
+            return (Boolean) value;
+        }
+        return null;
     }
 
     private void cleanupStaleRecords(MongoCollection<Document> collection, String group, long now) {
@@ -377,6 +387,7 @@ public class ServerRegistryService {
             long now = System.currentTimeMillis();
             Document update = new Document("$set", new Document("status", "restarting")
                     .append("state", "WAITING_RESTART")
+                    .append("joinable", false)
                     .append("restarting", true)
                     .append("restartRequestedAt", now)
                     .append("lastHeartbeat", now));
@@ -398,6 +409,7 @@ public class ServerRegistryService {
                         entry.name,
                         entry.type,
                         entry.state,
+                        entry.joinable,
                         entry.players,
                         entry.maxPlayers
                 ));
@@ -427,7 +439,8 @@ public class ServerRegistryService {
                     current.type,
                     current.players,
                     current.maxPlayers,
-                    "WAITING_RESTART"
+                    "WAITING_RESTART",
+                    Boolean.FALSE
             ));
             changed = true;
         }
@@ -471,14 +484,34 @@ public class ServerRegistryService {
             if (excludedName != null && entry.name.equalsIgnoreCase(excludedName)) {
                 continue;
             }
-            if (!entry.isAvailable(requiredOpenSlots)) {
+            if (!entry.isJoinableGame(requiredOpenSlots)) {
                 continue;
             }
-            if (best == null || entry.players < best.players) {
+            if (isBetterGameCandidate(entry, best)) {
                 best = entry;
             }
         }
         return best;
+    }
+
+    private boolean isBetterGameCandidate(RegistryEntry candidate, RegistryEntry current) {
+        if (candidate == null) {
+            return false;
+        }
+        if (current == null) {
+            return true;
+        }
+        boolean candidateHasPlayers = candidate.players > 0;
+        boolean currentHasPlayers = current.players > 0;
+        if (candidateHasPlayers != currentHasPlayers) {
+            return candidateHasPlayers;
+        }
+        if (candidate.players != current.players) {
+            return candidateHasPlayers
+                    ? candidate.players > current.players
+                    : candidate.players < current.players;
+        }
+        return candidate.name.compareToIgnoreCase(current.name) < 0;
     }
 
     private RegistryEntry pickBestHubEntry(ServerType preferredHubType, String excludedName) {
@@ -537,9 +570,10 @@ public class ServerRegistryService {
         private final int players;
         private final int maxPlayers;
         private final String state;
+        private final Boolean joinable;
 
         private RegistryEntry(String registryId, UUID id, String name, String address, int port, ServerType type,
-                              int players, int maxPlayers, String state) {
+                              int players, int maxPlayers, String state, Boolean joinable) {
             this.registryId = registryId == null ? "" : registryId.trim().toLowerCase(java.util.Locale.ROOT);
             this.id = id;
             this.name = name;
@@ -549,6 +583,7 @@ public class ServerRegistryService {
             this.players = players;
             this.maxPlayers = maxPlayers;
             this.state = state;
+            this.joinable = joinable;
         }
 
         private boolean equals(RegistryEntry other) {
@@ -561,21 +596,17 @@ public class ServerRegistryService {
                     && type == other.type;
         }
 
-        private boolean isAvailable(int requiredOpenSlots) {
+        private boolean hasOpenSlots(int requiredOpenSlots) {
             int needed = Math.max(1, requiredOpenSlots);
-            if (maxPlayers > 0 && players + needed > maxPlayers) {
-                return false;
-            }
-            if (state == null) {
-                return true;
-            }
-            String normalized = state.trim().toUpperCase(java.util.Locale.ROOT);
-            return !normalized.equals("IN_GAME")
-                    && !normalized.equals("ENDING")
-                    && !normalized.equals("RESTARTING")
-                    && !normalized.equals("LOCKED")
-                    && !normalized.equals("DRAINING")
-                    && !normalized.equals("WAITING_RESTART");
+            return maxPlayers <= 0 || players + needed <= maxPlayers;
+        }
+
+        private boolean isJoinableGame(int requiredOpenSlots) {
+            return hasOpenSlots(requiredOpenSlots) && ServerRegistryStates.isJoinableGameState(state, joinable);
+        }
+
+        private boolean isAvailable(int requiredOpenSlots) {
+            return hasOpenSlots(requiredOpenSlots) && ServerRegistryStates.isConnectableState(state);
         }
     }
 
@@ -583,13 +614,15 @@ public class ServerRegistryService {
         private final String name;
         private final ServerType type;
         private final String state;
+        private final Boolean joinable;
         private final int players;
         private final int maxPlayers;
 
-        private ServerDetails(String name, ServerType type, String state, int players, int maxPlayers) {
+        private ServerDetails(String name, ServerType type, String state, Boolean joinable, int players, int maxPlayers) {
             this.name = name;
             this.type = type == null ? ServerType.UNKNOWN : type;
             this.state = state == null ? "" : state;
+            this.joinable = joinable;
             this.players = Math.max(0, players);
             this.maxPlayers = Math.max(0, maxPlayers);
         }
@@ -604,6 +637,10 @@ public class ServerRegistryService {
 
         public String getState() {
             return state;
+        }
+
+        public boolean isJoinableGame() {
+            return ServerRegistryStates.isJoinableGameState(state, joinable);
         }
 
         public int getPlayers() {

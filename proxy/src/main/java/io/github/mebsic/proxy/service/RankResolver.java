@@ -2,6 +2,7 @@ package io.github.mebsic.proxy.service;
 
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
+import io.github.mebsic.core.model.ProfileStatus;
 import io.github.mebsic.core.util.HycopyExperienceUtil;
 import io.github.mebsic.proxy.manager.MongoManager;
 import org.bson.Document;
@@ -82,6 +83,27 @@ public class RankResolver {
         Document profile = loadProfile(uuid);
         Object raw = profile == null ? null : profile.get(MongoManager.PROFILE_RANKS_GIFTED_KEY);
         return raw instanceof Number && ((Number) raw).intValue() >= 1;
+    }
+
+    public ProfileStatus resolveProfileStatus(UUID uuid) {
+        if (database == null || uuid == null) {
+            return null;
+        }
+        MongoCollection<Document> collection = database.getCollection(MongoManager.PROFILES_COLLECTION);
+        Document profile;
+        try {
+            profile = collection.find(new Document("uuid", uuid.toString()))
+                    .projection(new Document(MongoManager.PROFILE_STATUS_KEY, 1))
+                    .first();
+        } catch (Exception ex) {
+            return null;
+        }
+        String status = profile == null ? null : profile.getString(MongoManager.PROFILE_STATUS_KEY);
+        return ProfileStatus.fromStoredName(status);
+    }
+
+    public boolean isAppearOffline(UUID uuid) {
+        return resolveProfileStatus(uuid) == ProfileStatus.APPEAR_OFFLINE;
     }
 
     public String formatNameWithRank(UUID uuid, String fallbackName) {

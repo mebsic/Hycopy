@@ -7,6 +7,7 @@ import io.github.mebsic.core.manager.MongoManager;
 import io.github.mebsic.core.model.GameResult;
 import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.core.server.MapConfigResolver;
+import io.github.mebsic.core.server.ServerRegistryStates;
 import io.github.mebsic.core.server.ServerType;
 import io.github.mebsic.core.service.CoreApi;
 import io.github.mebsic.core.store.MapConfigStore;
@@ -114,6 +115,7 @@ public class GameManager {
     private BukkitTask nonInGameCleanupTask;
     private volatile String mapConfigFingerprint;
     private String endingScoreboardMapName;
+    private Runnable registryUpdateCallback;
 
     public GameManager(CorePlugin plugin, BossBarService bossBarService) {
         this.plugin = plugin;
@@ -370,11 +372,19 @@ public class GameManager {
         return state;
     }
 
+    public void setRegistryUpdateCallback(Runnable registryUpdateCallback) {
+        this.registryUpdateCallback = registryUpdateCallback;
+    }
+
     public String getRegistryState() {
         if (joinLockedForRestart) {
             return "RESTARTING";
         }
         return state == null ? "WAITING" : state.name();
+    }
+
+    public boolean isJoinable() {
+        return ServerRegistryStates.isJoinableGameState(getRegistryState());
     }
 
     public int getPlayerCount() {
@@ -432,6 +442,7 @@ public class GameManager {
         }
         updateScoreboardAll();
         attemptStartCountdown();
+        publishRegistryUpdate();
     }
 
     public void handleQuit(Player player) {
@@ -459,6 +470,7 @@ public class GameManager {
             checkWinConditions();
         }
         updateScoreboardAll();
+        publishRegistryUpdate();
     }
 
     public void setLobby(Location lobby) {
@@ -1311,20 +1323,36 @@ public class GameManager {
         }
 
         Document best = null;
-        int bestPlayers = Integer.MAX_VALUE;
-        String bestServerId = "";
         for (Document candidate : latestByServerId.values()) {
-            int players = safeInt(candidate.get("players"));
-            String serverId = safeString(candidate.getString("_id"));
-            if (best == null
-                    || players < bestPlayers
-                    || (players == bestPlayers && serverId.compareToIgnoreCase(bestServerId) < 0)) {
+            if (isBetterQueueDestination(candidate, best)) {
                 best = candidate;
-                bestPlayers = players;
-                bestServerId = serverId;
             }
         }
         return safeString(best == null ? null : best.getString("_id"));
+    }
+
+    private boolean isBetterQueueDestination(Document candidate, Document current) {
+        if (candidate == null) {
+            return false;
+        }
+        if (current == null) {
+            return true;
+        }
+        int candidatePlayers = safeInt(candidate.get("players"));
+        int currentPlayers = safeInt(current.get("players"));
+        boolean candidateHasPlayers = candidatePlayers > 0;
+        boolean currentHasPlayers = currentPlayers > 0;
+        if (candidateHasPlayers != currentHasPlayers) {
+            return candidateHasPlayers;
+        }
+        if (candidatePlayers != currentPlayers) {
+            return candidateHasPlayers
+                    ? candidatePlayers > currentPlayers
+                    : candidatePlayers < currentPlayers;
+        }
+        String candidateServerId = safeString(candidate.getString("_id"));
+        String currentServerId = safeString(current.getString("_id"));
+        return candidateServerId.compareToIgnoreCase(currentServerId) < 0;
     }
 
     private String findBestHubTargetName(ServerType gameType) {
@@ -1431,16 +1459,7 @@ public class GameManager {
             return false;
         }
 
-        String stateValue = safeString(doc.getString("state"));
-        if (stateValue.isEmpty()) {
-            return true;
-        }
-        String normalizedState = stateValue.toUpperCase(Locale.ROOT);
-        return !normalizedState.equals("IN_GAME")
-                && !normalizedState.equals("ENDING")
-                && !normalizedState.equals("RESTARTING")
-                && !normalizedState.equals("LOCKED")
-                && !normalizedState.equals("WAITING_RESTART");
+        return ServerRegistryStates.isJoinableGameState(doc.getString("state"), readBoolean(doc.get("joinable")));
     }
 
     private boolean isHubDestinationCandidate(Document doc,
@@ -1479,15 +1498,7 @@ public class GameManager {
         if (maxPlayers > 0 && players >= maxPlayers) {
             return false;
         }
-        String stateValue = safeString(doc.getString("state"));
-        if (stateValue.isEmpty()) {
-            return true;
-        }
-        String normalizedState = stateValue.toUpperCase(Locale.ROOT);
-        return !normalizedState.equals("ENDING")
-                && !normalizedState.equals("RESTARTING")
-                && !normalizedState.equals("LOCKED")
-                && !normalizedState.equals("WAITING_RESTART");
+        return ServerRegistryStates.isConnectableState(doc.getString("state"));
     }
 
     private String safeString(String raw) {
@@ -1510,6 +1521,13 @@ public class GameManager {
         } catch (Exception ignored) {
             return 0;
         }
+    }
+
+    private Boolean readBoolean(Object value) {
+        if (value instanceof Boolean) {
+            return (Boolean) value;
+        }
+        return null;
     }
 
     private static final class TransferDestination {
@@ -1799,6 +1817,21 @@ public class GameManager {
             return;
         }
         plugin.setCurrentGameState(state);
+        publishRegistryUpdate();
+    }
+
+    private void publishRegistryUpdate() {
+        Runnable callback = registryUpdateCallback;
+        if (callback == null) {
+            return;
+        }
+        try {
+            callback.run();
+        } catch (RuntimeException ex) {
+            if (plugin != null) {
+                plugin.getLogger().warning("Failed to request game registry update!\n" + ex.getMessage());
+            }
+        }
     }
 
     protected boolean onGameTimerTick(int remainingSeconds) {

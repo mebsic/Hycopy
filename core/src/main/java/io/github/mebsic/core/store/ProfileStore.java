@@ -3,6 +3,7 @@ package io.github.mebsic.core.store;
 import io.github.mebsic.core.model.CosmeticType;
 import io.github.mebsic.core.model.KnifeSkinDefinition;
 import io.github.mebsic.core.model.Profile;
+import io.github.mebsic.core.model.ProfileStatus;
 import io.github.mebsic.core.model.Rank;
 import io.github.mebsic.core.model.Stats;
 import io.github.mebsic.core.util.RankColorUtil;
@@ -12,6 +13,7 @@ import com.mongodb.client.MongoCollection;
 import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.ReplaceOptions;
 import com.mongodb.client.model.Projections;
+import com.mongodb.client.result.UpdateResult;
 import org.bson.Document;
 
 import java.util.ArrayList;
@@ -147,6 +149,10 @@ public class ProfileStore {
         profile.setLastLogin(doc.getString(MongoManager.PROFILE_LAST_LOGIN_KEY));
         Boolean online = doc.getBoolean(MongoManager.PROFILE_ONLINE_KEY);
         profile.setOnline(online != null && online);
+        ProfileStatus status = ProfileStatus.fromStoredName(doc.getString(MongoManager.PROFILE_STATUS_KEY));
+        if (status != null) {
+            profile.setStatus(status);
+        }
         Boolean flightEnabled = doc.getBoolean("flightEnabled");
         if (flightEnabled != null) {
             profile.setFlightEnabled(flightEnabled);
@@ -364,6 +370,7 @@ public class ProfileStore {
                 .append(MongoManager.PROFILE_FIRST_LOGIN_KEY, profile.getFirstLogin())
                 .append(MongoManager.PROFILE_LAST_LOGIN_KEY, profile.getLastLogin())
                 .append(MongoManager.PROFILE_ONLINE_KEY, profile.isOnline())
+                .append(MongoManager.PROFILE_STATUS_KEY, profile.getStatus().name())
                 .append("flightEnabled", profile.isFlightEnabled())
                 .append("buildModeExpiresAt", profile.getBuildModeExpiresAt())
                 .append("playerVisibilityEnabled", profile.isPlayerVisibilityEnabled())
@@ -497,6 +504,18 @@ public class ProfileStore {
         collection.updateOne(eq("uuid", uuid.toString()),
                 new Document("$set", update).append("$setOnInsert", setOnInsert),
                 new com.mongodb.client.model.UpdateOptions().upsert(true));
+    }
+
+    public boolean updateStatus(UUID uuid, ProfileStatus status) {
+        if (uuid == null || status == null) {
+            return false;
+        }
+        MongoCollection<Document> collection = mongo.getProfiles();
+        UpdateResult result = collection.updateOne(
+                eq("uuid", uuid.toString()),
+                new Document("$set", new Document(MongoManager.PROFILE_STATUS_KEY, status.name()))
+        );
+        return result != null && result.getMatchedCount() > 0L;
     }
 
     public ProfileMeta loadProfileMeta(UUID uuid, String fallbackName) {
@@ -642,7 +661,8 @@ public class ProfileStore {
                 .append(MongoManager.PROFILE_SUBSCRIPTION_EXPIRES_AT_KEY, 0L)
                 .append(MongoManager.PROFILE_FIRST_LOGIN_KEY, null)
                 .append(MongoManager.PROFILE_LAST_LOGIN_KEY, null)
-                .append(MongoManager.PROFILE_ONLINE_KEY, false);
+                .append(MongoManager.PROFILE_ONLINE_KEY, false)
+                .append(MongoManager.PROFILE_STATUS_KEY, ProfileStatus.ONLINE.name());
     }
 
     private static boolean canUseMvpPlusPlusPrefixColor(Rank rank) {

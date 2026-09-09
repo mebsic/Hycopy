@@ -294,6 +294,9 @@ public class MurderMysteryPlugin extends JavaPlugin implements HubContext {
         if (corePlugin != null) {
             corePlugin.setHubParkourCommandHandler(null);
         }
+        if (gameManager != null) {
+            gameManager.setRegistryUpdateCallback(null);
+        }
         if (registryService != null) {
             registryService.stop();
             registryService = null;
@@ -340,6 +343,7 @@ public class MurderMysteryPlugin extends JavaPlugin implements HubContext {
         this.bossBarService.start();
         this.registryService = new io.github.mebsic.game.service.ServerRegistryService(this, corePlugin.getConfig(), gameManager);
         this.registryService.start();
+        this.gameManager.setRegistryUpdateCallback(this.registryService::requestUpdate);
         getServer().getPluginManager().registerEvents(new MurderMysteryListener(this, gameManager, queueService), this);
         getServer().getPluginManager().registerEvents(new SpectatorListener(corePlugin, gameManager), this);
         this.itemFrameListener = new ItemFrameListener(serverType, null);
