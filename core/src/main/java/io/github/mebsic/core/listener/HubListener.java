@@ -356,7 +356,6 @@ public class HubListener implements Listener {
                 + "REMINDER: "
                 + ChatColor.GOLD + "Your Online Status is currently set to "
                 + ChatColor.YELLOW + ChatColor.BOLD + status.getDisplayName());
-        player.sendMessage("");
     }
 
     private void teleportToHubSpawn(Player player, boolean randomizeHorizontal) {
