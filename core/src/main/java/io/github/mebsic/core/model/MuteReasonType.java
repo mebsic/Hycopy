@@ -5,11 +5,11 @@ import io.github.mebsic.core.util.NetworkConstants;
 import java.util.Locale;
 
 public enum MuteReasonType {
-    NEGATIVE_REFERENCE("Discussing important people or world events in a negative way", "NR"),
+    NEGATIVE_REFERENCE("Discussing important people or world events in a negative way", "NR", ChatInfractionGroup.EXTREME),
     USER_DISRESPECT("Acting in a manner that is disrespectful to members within the community", "UD"),
     STAFF_DISRESPECT("Disrespectful behaviour directed at staff members", "SD"),
-    INAPPROPRIATE_CONTENT_LVL1("Using adult concepts in public chat on the server", "IC1"),
-    DISCRIMINATION("Discrimination of a player or group of people", "DI"),
+    INAPPROPRIATE_CONTENT_LVL1("Using adult concepts in public chat on the server", "IC1", ChatInfractionGroup.EXTREME),
+    DISCRIMINATION("Discrimination of a player or group of people", "DI", ChatInfractionGroup.EXTREME),
     EXCESSIVE_SWEARING("Excessive use of swearing in chat", "ES"),
     UN_INTENTIONALLY_CAUSING_DISTRESS("intentionally or unintentionally causing distress", "UI", "Unintentionally/Intentionally Causing distress"),
     ENCOURAGING_CHEATING_LVL1("Discussing or actively promoting cheating or breaking of rules on the server", "EC1"),
