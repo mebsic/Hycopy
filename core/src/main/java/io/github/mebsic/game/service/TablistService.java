@@ -25,6 +25,7 @@ public class TablistService {
     private static final String NAME_TAG_TEAM_PREFIX = "gt";
     private static final int SORT_NAME_PART_LENGTH = 8;
     private static final int SORT_ID_PART_LENGTH = 4;
+    private static final int MAX_PLAYER_LIST_NAME_LENGTH = 16;
     private static final int MAX_TEAM_TEXT_LENGTH = 16;
     private final CoreApi coreApi;
     private boolean nameTagsHidden;
@@ -132,8 +133,9 @@ public class TablistService {
         String name = resolveRankPrefix(uuid, rank)
                 + nameColorCode
                 + player.getName();
-        if (stripLength(name) > 16) {
-            return nameColorCode + player.getName();
+        if (stripLength(name) > MAX_PLAYER_LIST_NAME_LENGTH || name.length() > MAX_PLAYER_LIST_NAME_LENGTH) {
+            // Let scoreboard teams render long rank prefixes in the legacy tab list.
+            return player.getName();
         }
         return name;
     }

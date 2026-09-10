@@ -415,6 +415,17 @@ public class GameManager {
         if (player == null) {
             return;
         }
+        UUID uuid = player.getUniqueId();
+        if (players.containsKey(uuid)) {
+            scoreboardTitleAnimators.remove(uuid);
+            titleService.reset(player);
+            if (bossBarService != null) {
+                bossBarService.show(player);
+            }
+            updateScoreboardAll();
+            publishRegistryUpdate();
+            return;
+        }
         if (joinLockedForRestart) {
             player.kickPlayer(RESTARTING_KICK_MESSAGE);
             return;
@@ -423,9 +434,9 @@ public class GameManager {
             player.kickPlayer(ChatColor.RED + "Game is full!");
             return;
         }
-        scoreboardTitleAnimators.remove(player.getUniqueId());
-        GamePlayer gamePlayer = createGamePlayer(player.getUniqueId());
-        players.put(player.getUniqueId(), gamePlayer);
+        scoreboardTitleAnimators.remove(uuid);
+        GamePlayer gamePlayer = createGamePlayer(uuid);
+        players.put(uuid, gamePlayer);
         titleService.reset(player);
         if (bossBarService != null) {
             bossBarService.show(player);
@@ -517,7 +528,11 @@ public class GameManager {
         if (players.size() < minPlayers) {
             return;
         }
-        startCountdown(false, true);
+        startCountdown(false, shouldMovePlayersToPregameOnAutomaticCountdownStart());
+    }
+
+    protected boolean shouldMovePlayersToPregameOnAutomaticCountdownStart() {
+        return true;
     }
 
     public boolean canForceStart() {

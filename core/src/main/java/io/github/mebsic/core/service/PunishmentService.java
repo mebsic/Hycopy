@@ -181,8 +181,9 @@ public class PunishmentService {
             reason = "No reason provided";
         }
         MuteReasonType reasonType = MuteReasonType.resolve(reason);
+        String findOutMoreUrl = resolveMuteFindOutMoreUrl(reason);
         if (reasonType != null) {
-            reason = reasonType.getDescription();
+            reason = reasonType.getChatInfractionReason();
         }
         Long expiresAt = punishment == null ? null : punishment.getExpiresAt();
         boolean permanent = expiresAt == null || expiresAt <= 0L;
@@ -197,7 +198,7 @@ public class PunishmentService {
         }
         String space = ChatColor.RESET + " " + "\n";
         String urlInfo = ChatColor.GRAY + "Find out more here: "
-                + ChatColor.YELLOW + resolveMuteFindOutMoreUrl(reason) + "\n";
+                + ChatColor.YELLOW + findOutMoreUrl + "\n";
         String muteId = formatMuteId(punishment == null ? null : punishment.getId());
         String footer = ChatColor.GRAY + "Mute ID: " + ChatColor.WHITE + muteId;
         return line + header + time + space + urlInfo + footer + line;

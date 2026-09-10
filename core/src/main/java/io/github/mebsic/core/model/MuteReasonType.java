@@ -14,7 +14,7 @@ public enum MuteReasonType {
     UN_INTENTIONALLY_CAUSING_DISTRESS("intentionally or unintentionally causing distress", "UI", "Unintentionally/Intentionally Causing distress"),
     ENCOURAGING_CHEATING_LVL1("Discussing or actively promoting cheating or breaking of rules on the server", "EC1"),
     MEDIA_ADVERTISING("Media Advertising", "MA"),
-    PUBLIC_SHAMING("Publicly revealing information about a player", "PS"),
+    PUBLIC_SHAMING("Publicly revealing information about a player", "PS", ChatInfractionGroup.EXTREME),
     RUDE("Being rude or inappropriate", "RU"),
     EXCESSIVE_SPAMMING("Repeatedly posting unnecessary messages or content", "SP"),
     MISLEADING_INFORMATION("misleading other players into actions that disrupt their game", "MI", "Trolling", "Misleading other players to carry out actions that disrupts their game"),
@@ -23,11 +23,17 @@ public enum MuteReasonType {
 
     private final String description;
     private final String code;
+    private final ChatInfractionGroup chatInfractionGroup;
     private final String[] aliases;
 
     MuteReasonType(String description, String code, String... aliases) {
+        this(description, code, ChatInfractionGroup.MAJOR, aliases);
+    }
+
+    MuteReasonType(String description, String code, ChatInfractionGroup chatInfractionGroup, String... aliases) {
         this.description = description;
         this.code = code;
+        this.chatInfractionGroup = chatInfractionGroup == null ? ChatInfractionGroup.MAJOR : chatInfractionGroup;
         this.aliases = aliases == null ? new String[0] : aliases;
     }
 
@@ -37,6 +43,10 @@ public enum MuteReasonType {
 
     public String getCode() {
         return code;
+    }
+
+    public String getChatInfractionReason() {
+        return chatInfractionGroup.reason;
     }
 
     public String getFindOutMoreUrl() {
@@ -94,6 +104,10 @@ public enum MuteReasonType {
                 && normalizedInput.equals(normalize(description))) {
             return true;
         }
+        if (normalizedInput.equals(normalize(chatInfractionGroup.displayName))
+                || normalizedInput.equals(normalize(chatInfractionGroup.reason))) {
+            return true;
+        }
         if (code != null && !code.trim().isEmpty() && normalizedInput.equals(normalize(code))) {
             return true;
         }
@@ -115,5 +129,18 @@ public enum MuteReasonType {
             }
         }
         return builder.toString();
+    }
+
+    private enum ChatInfractionGroup {
+        MAJOR("Major Chat Infraction", "a Major Chat Infraction"),
+        EXTREME("Extreme Chat Infraction", "an Extreme Chat Infraction");
+
+        private final String displayName;
+        private final String reason;
+
+        ChatInfractionGroup(String displayName, String reason) {
+            this.displayName = displayName;
+            this.reason = reason;
+        }
     }
 }

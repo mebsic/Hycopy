@@ -73,8 +73,8 @@ public class GetRoleCommand implements CommandExecutor {
         if (mmPlayer.getRole() == MurderMysteryRole.MURDERER) {
             return rankedName + ChatColor.GREEN + " is the " + ChatColor.RED + "Murderer" + ChatColor.GREEN + "!";
         }
-        if (mmPlayer.getRole() == MurderMysteryRole.DETECTIVE
-                || (mmPlayer.getRole() == MurderMysteryRole.HERO && mmPlayer.hasDetectiveBow())) {
+        MurderMysteryGamePlayer currentDetective = gameManager == null ? null : gameManager.getCurrentDetective();
+        if (currentDetective != null && currentDetective.getUuid().equals(mmPlayer.getUuid())) {
             return rankedName + ChatColor.GREEN + " is the " + ChatColor.AQUA + "Detective" + ChatColor.GREEN + "!";
         }
         return rankedName + ChatColor.GREEN + " is Innocent!";

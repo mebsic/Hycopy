@@ -61,8 +61,9 @@ public class ChatRestrictionService {
             reason = "No reason provided";
         }
         MuteReasonType reasonType = MuteReasonType.resolve(reason);
+        String findOutMoreUrl = resolveMuteFindOutMoreUrl(reason);
         if (reasonType != null) {
-            reason = reasonType.getDescription();
+            reason = reasonType.getChatInfractionReason();
         }
         Long expiresAt = doc.getLong("expiresAt");
         boolean permanent = expiresAt == null || expiresAt <= 0L;
@@ -75,7 +76,7 @@ public class ChatRestrictionService {
             time = "§7Your mute will expire in §c" + formatPrettyTimeLeft(expiresAt) + "\n";
         }
         String space = "§r \n";
-        String urlInfo = "§7Find out more here: §e" + resolveMuteFindOutMoreUrl(reason) + "\n";
+        String urlInfo = "§7Find out more here: §e" + findOutMoreUrl + "\n";
         String footer = "§7Mute ID: §f" + formatMuteId(doc.getString("_id"));
         return line + header + time + space + urlInfo + footer + line;
     }

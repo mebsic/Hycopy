@@ -278,6 +278,11 @@ public class MurderMysteryGameManager extends GameManager {
     }
 
     @Override
+    protected boolean shouldMovePlayersToPregameOnAutomaticCountdownStart() {
+        return false;
+    }
+
+    @Override
     protected void onGameStarted(GameMap activeMap) {
         participantRankColors.clear();
         for (MurderMysteryGamePlayer mmPlayer : getMmPlayers()) {
@@ -2389,6 +2394,14 @@ public class MurderMysteryGameManager extends GameManager {
     }
 
     public MurderMysteryGamePlayer getCurrentDetective() {
+        for (MurderMysteryGamePlayer mmPlayer : getMmPlayers()) {
+            if (!mmPlayer.isAlive() || !mmPlayer.hasDetectiveBow()) {
+                continue;
+            }
+            if (mmPlayer.getRole() == MurderMysteryRole.DETECTIVE || mmPlayer.getRole() == MurderMysteryRole.HERO) {
+                return mmPlayer;
+            }
+        }
         MurderMysteryGamePlayer detective = findPlayerByRole(MurderMysteryRole.DETECTIVE);
         if (detective != null) {
             return detective;
