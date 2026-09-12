@@ -53,16 +53,20 @@ public final class FriendComponents {
         String safeTitle = title == null ? "Friends" : title;
         boolean friendsListTitle = "Friends".equalsIgnoreCase(safeTitle) || "Best Friends".equalsIgnoreCase(safeTitle);
         String leading = friendsListTitle ? repeatSpaces(25) : "";
-        Component header = Component.text(leading + safeTitle + " (Page " + safePage + " of " + safeTotal + ")", NamedTextColor.GOLD);
+        Component titleText = Component.text(
+                leading + safeTitle + " (Page " + safePage + " of " + safeTotal + ")",
+                NamedTextColor.GOLD
+        ).decoration(TextDecoration.BOLD, false);
+        Component header = Component.empty();
         if (safePage > 1) {
             int previous = safePage - 1;
-            header = previousButton(previous, commandPrefix)
-                    .append(Component.space())
-                    .append(header);
+            header = header.append(previousButton(previous, commandPrefix))
+                    .append(Component.space().decoration(TextDecoration.BOLD, false));
         }
+        header = header.append(titleText);
         if (safePage < safeTotal) {
             int next = safePage + 1;
-            header = header.append(Component.space())
+            header = header.append(Component.space().decoration(TextDecoration.BOLD, false))
                     .append(nextButton(next, commandPrefix));
         }
         return header;

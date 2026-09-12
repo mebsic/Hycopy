@@ -3,6 +3,7 @@ package io.github.mebsic.core.listener;
 import io.github.mebsic.core.CorePlugin;
 import io.github.mebsic.core.server.ServerType;
 import io.github.mebsic.game.model.GameState;
+import org.bukkit.Achievement;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -100,11 +101,15 @@ public class GameplayRulesListener implements Listener {
     public void onJoin(PlayerJoinEvent event) {
         applyRules(event.getPlayer());
         applyVanillaAchievementRules(event.getPlayer());
+        grantDisabledServerAchievements(event.getPlayer());
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onAchievementAwarded(PlayerAchievementAwardedEvent event) {
         if (event == null) {
+            return;
+        }
+        if (isDisabledServerAchievement()) {
             return;
         }
         if (!shouldDisableVanillaAchievements() && vanillaAchievementsEnabled) {
@@ -363,6 +368,21 @@ public class GameplayRulesListener implements Listener {
         String value = Boolean.toString(!shouldDisableVanillaAchievements() && vanillaAchievementsEnabled);
         player.getWorld().setGameRuleValue("announceAchievements", value);
         player.getWorld().setGameRuleValue("announceAdvancements", value);
+    }
+
+    private void grantDisabledServerAchievements(Player player) {
+        if (player == null || !shouldDisableVanillaAchievements()) {
+            return;
+        }
+        for (Achievement achievement : Achievement.values()) {
+            if (!player.hasAchievement(achievement)) {
+                player.awardAchievement(achievement);
+            }
+        }
+    }
+
+    private boolean isDisabledServerAchievement() {
+        return shouldDisableVanillaAchievements();
     }
 
     private boolean shouldDisableVanillaAchievements() {

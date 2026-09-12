@@ -821,7 +821,7 @@ public class PartyCommand implements SimpleCommand {
         Component combined = Component.empty();
         for (int i = 0; i < memberIds.size(); i++) {
             if (i > 0) {
-                combined = combined.append(Component.text(", ", NamedTextColor.WHITE));
+                combined = combined.append(Component.space());
             }
             combined = combined.append(formatPartyListMember(memberIds.get(i)));
         }

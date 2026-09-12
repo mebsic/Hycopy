@@ -10,6 +10,8 @@ commands:
     usage: /start
   token:
     usage: /token <player> <amount>
+  kills:
+    usage: /kills <player> <amount>
   wins:
     usage: /wins <player> <amount>
   image:
