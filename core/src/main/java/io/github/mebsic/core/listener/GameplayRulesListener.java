@@ -33,7 +33,10 @@ import org.bukkit.event.weather.ThunderChangeEvent;
 import org.bukkit.event.weather.WeatherChangeEvent;
 import org.bukkit.inventory.ItemStack;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.Locale;
+import java.util.Map;
 
 public class GameplayRulesListener implements Listener {
     private final CorePlugin plugin;
@@ -107,9 +110,6 @@ public class GameplayRulesListener implements Listener {
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onAchievementAwarded(PlayerAchievementAwardedEvent event) {
         if (event == null) {
-            return;
-        }
-        if (isDisabledServerAchievement()) {
             return;
         }
         if (!shouldDisableVanillaAchievements() && vanillaAchievementsEnabled) {
@@ -374,15 +374,60 @@ public class GameplayRulesListener implements Listener {
         if (player == null || !shouldDisableVanillaAchievements()) {
             return;
         }
-        for (Achievement achievement : Achievement.values()) {
-            if (!player.hasAchievement(achievement)) {
-                player.awardAchievement(achievement);
+        silentlyGrantAchievements(player);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void silentlyGrantAchievements(Player player) {
+        try {
+            String version = player.getServer().getClass().getPackage().getName().split("\\.")[3];
+            Class<?> craftPlayerClass = Class.forName("org.bukkit.craftbukkit." + version + ".entity.CraftPlayer");
+            Object handle = craftPlayerClass.getMethod("getHandle").invoke(player);
+            Object statisticManager = handle.getClass().getMethod("getStatisticManager").invoke(handle);
+            Class<?> craftStatisticClass = Class.forName("org.bukkit.craftbukkit." + version + ".CraftStatistic");
+            Method getNmsAchievement = craftStatisticClass.getMethod("getNMSAchievement", Achievement.class);
+            Class<?> statisticManagerClass = Class.forName("net.minecraft.server." + version + ".StatisticManager");
+            Field statisticsField = statisticManagerClass.getDeclaredField("a");
+            statisticsField.setAccessible(true);
+            Map<Object, Object> statistics = (Map<Object, Object>) statisticsField.get(statisticManager);
+            Class<?> statisticWrapperClass = Class.forName("net.minecraft.server." + version + ".StatisticWrapper");
+            Method setStatisticValue = statisticWrapperClass.getMethod("a", int.class);
+            boolean changed = false;
+
+            for (Achievement achievement : Achievement.values()) {
+                if (player.hasAchievement(achievement)) {
+                    continue;
+                }
+                Object nmsAchievement = getNmsAchievement.invoke(null, achievement);
+                if (nmsAchievement == null) {
+                    continue;
+                }
+                Object statisticWrapper = statistics.get(nmsAchievement);
+                if (statisticWrapper == null) {
+                    statisticWrapper = statisticWrapperClass.getConstructor().newInstance();
+                    statistics.put(nmsAchievement, statisticWrapper);
+                }
+                setStatisticValue.invoke(statisticWrapper, 1);
+                changed = true;
             }
+
+            if (!changed) {
+                return;
+            }
+            statisticManager.getClass().getMethod("updateStatistics", handle.getClass()).invoke(statisticManager, handle);
+            saveStatistics(statisticManager);
+        } catch (Exception ignored) {
         }
     }
 
-    private boolean isDisabledServerAchievement() {
-        return shouldDisableVanillaAchievements();
+    private void saveStatistics(Object statisticManager) {
+        if (statisticManager == null) {
+            return;
+        }
+        try {
+            statisticManager.getClass().getMethod("b").invoke(statisticManager);
+        } catch (Exception ignored) {
+        }
     }
 
     private boolean shouldDisableVanillaAchievements() {
