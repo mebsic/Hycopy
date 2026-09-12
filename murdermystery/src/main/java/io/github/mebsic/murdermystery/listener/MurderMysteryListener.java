@@ -543,10 +543,18 @@ public class MurderMysteryListener implements Listener {
                 }
                 if (victimData.getRole() == MurderMysteryRole.MURDERER) {
                     shooterData.addKill();
+                    gameManager.sendProjectileKillDistanceMessage(shooter, victim, distanceMeters);
+                    setEliminatedHealth(victim);
+                    gameManager.handleDeath(victim, shooter, "A player killed you! " + distanceSuffix, MurderMysteryGameManager.KillType.BOW);
+                    return;
                 }
                 gameManager.sendProjectileKillDistanceMessage(shooter, victim, distanceMeters);
                 setEliminatedHealth(victim);
                 gameManager.handleDeath(victim, shooter, "A player killed you! " + distanceSuffix, MurderMysteryGameManager.KillType.BOW);
+                if (gameManager.getState() == GameState.IN_GAME && shooterData.isAlive()) {
+                    setEliminatedHealth(shooter);
+                    gameManager.handleDeath(shooter, null, "You shot an innocent player!", MurderMysteryGameManager.KillType.BOW);
+                }
                 return;
             }
             if (shooterData.getRole() == MurderMysteryRole.MURDERER) {

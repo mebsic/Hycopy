@@ -414,6 +414,28 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
         }
     }
 
+    private void hideOtherPersonalBestHologramsFromViewer(Player viewer) {
+        if (viewer == null || !viewer.isOnline() || viewer.getUniqueId() == null) {
+            return;
+        }
+        UUID viewerUuid = viewer.getUniqueId();
+        for (Map.Entry<UUID, List<UUID>> entry : new ArrayList<Map.Entry<UUID, List<UUID>>>(personalBestHologramUuidsByPlayer.entrySet())) {
+            if (entry == null || entry.getKey() == null || viewerUuid.equals(entry.getKey())) {
+                continue;
+            }
+            List<UUID> hologramUuids = entry.getValue();
+            if (hologramUuids == null || hologramUuids.isEmpty()) {
+                continue;
+            }
+            for (UUID hologramUuid : new ArrayList<UUID>(hologramUuids)) {
+                Entity entity = resolveEntity(hologramUuid);
+                if (entity != null) {
+                    hideEntityFromViewer(viewer, entity);
+                }
+            }
+        }
+    }
+
     private void hideEntityFromNonViewer(UUID viewerUuid, Entity entity) {
         if (viewerUuid == null || entity == null) {
             return;
@@ -660,12 +682,13 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
             return;
         }
         UUID uuid = event.getPlayer().getUniqueId();
-        for (long delay : new long[]{20L, 60L, 120L}) {
+        for (long delay : new long[]{1L, 20L, 60L, 120L}) {
             plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
                 Player online = uuid == null ? null : Bukkit.getPlayer(uuid);
                 if (online == null || !online.isOnline()) {
                     return;
                 }
+                hideOtherPersonalBestHologramsFromViewer(online);
                 refreshPersonalBestHolograms(online);
             }, delay);
         }

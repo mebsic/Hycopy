@@ -964,13 +964,24 @@ public class MurderMysteryGameManager extends GameManager {
         }
         awardTokens(player, getGoldPickupTokenReward(), TOKEN_REASON_PICKED_UP_GOLD);
         mmPlayer.addGold(amount);
-        if (mmPlayer.getRole() == MurderMysteryRole.INNOCENT && mmPlayer.getGold() >= GOLD_FOR_BOW) {
-            grantArrowsFromGold(player, mmPlayer, BOW_HOTBAR_SLOT, ARROW_HOTBAR_SLOT);
+        if (isSurvivorGoldBowHolder(mmPlayer) && mmPlayer.getGold() >= GOLD_FOR_BOW) {
+            int arrowsAdded = grantArrowsFromGold(player, mmPlayer, BOW_HOTBAR_SLOT, ARROW_HOTBAR_SLOT);
+            if (arrowsAdded > 0 && mmPlayer.getRole() == MurderMysteryRole.INNOCENT) {
+                convertToHero(player, true);
+            }
         } else if (mmPlayer.getRole() == MurderMysteryRole.MURDERER && mmPlayer.getGold() >= GOLD_FOR_BOW) {
             grantArrowsFromGold(player, mmPlayer, MURDERER_BOW_HOTBAR_SLOT, MURDERER_ARROW_HOTBAR_SLOT);
         }
         syncGoldHotbarItem(player, mmPlayer);
         updateScoreboard(player);
+    }
+
+    private boolean isSurvivorGoldBowHolder(MurderMysteryGamePlayer mmPlayer) {
+        if (mmPlayer == null) {
+            return false;
+        }
+        return mmPlayer.getRole() == MurderMysteryRole.INNOCENT
+                || (mmPlayer.getRole() == MurderMysteryRole.HERO && mmPlayer.isHeroFromGold());
     }
 
     private int grantArrowsFromGold(Player player,
