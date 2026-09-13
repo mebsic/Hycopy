@@ -7,13 +7,17 @@ import io.github.mebsic.core.manager.MongoManager;
 import io.github.mebsic.core.menu.CollectiblesMenu;
 import io.github.mebsic.core.menu.GameMenu;
 import io.github.mebsic.core.menu.LobbySelectorMenu;
+import io.github.mebsic.core.model.CosmeticType;
 import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.core.server.ServerType;
+import io.github.mebsic.core.service.LobbyCosmeticCatalog;
+import io.github.mebsic.core.service.LobbyCosmeticDefinition;
 import io.github.mebsic.core.service.QueueClient;
 import io.github.mebsic.core.service.ServerRegistrySnapshot;
 import io.github.mebsic.core.util.CommonMessages;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
@@ -22,6 +26,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerItemDamageEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerPortalEvent;
@@ -29,7 +34,11 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.LeatherArmorMeta;
 import org.bukkit.inventory.meta.SkullMeta;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
+import org.bukkit.scheduler.BukkitTask;
 import org.bson.Document;
 
 import java.io.ByteArrayOutputStream;
@@ -62,9 +71,24 @@ public class HubItemListener implements Listener {
     private static final String LOBBY_SELECTOR_NAME = ChatColor.GREEN + "Lobby Selector " + ChatColor.GRAY + "(Right Click)";
     private static final long TOGGLE_COOLDOWN_MS = 3000L;
     private static final long FRIEND_REFRESH_MS = 10_000L;
+    private static final String FROG_SUIT_ID = "frog";
+    private static final String DISCO_SUIT_ID = "disco";
+    private static final long SUIT_EFFECT_REFRESH_TICKS = 10L;
+    private static final int FROG_FULL_SET_JUMP_AMPLIFIER = 5;
+    private static final Color[] DISCO_RAINBOW_COLORS = new Color[]{
+            Color.RED,
+            Color.ORANGE,
+            Color.YELLOW,
+            Color.LIME,
+            Color.AQUA,
+            Color.BLUE,
+            Color.FUCHSIA,
+            Color.PURPLE
+    };
     private static final int GAME_MENU_SLOT = 0;
     private static final int PROFILE_SLOT = 1;
     private static final int COLLECTIBLES_SLOT = 4;
+    private static final int SELECTED_GADGET_SLOT = 5;
     private static final int TOGGLE_SLOT = 7;
     private static final int LOBBY_SELECTOR_SLOT = 8;
     private static final int PORTAL_TRIGGER_RADIUS_BLOCKS = 2;
@@ -90,10 +114,13 @@ public class HubItemListener implements Listener {
     private final Set<UUID> friendRefreshInProgress;
     private final Set<UUID> playersInPortalZone;
     private final Map<UUID, Long> portalMenuReopenAllowedAt;
+    private final Map<UUID, Integer> frogJumpAmplifiers;
     private final ServerType hubType;
     private final String group;
     private final String currentServerId;
     private final int staleSeconds;
+    private BukkitTask suitEffectTask;
+    private int discoColorIndex;
 
     public HubItemListener(CorePlugin plugin, QueueClient queueClient, ServerRegistrySnapshot registrySnapshot) {
         this.plugin = plugin;
@@ -108,12 +135,15 @@ public class HubItemListener implements Listener {
         this.friendRefreshInProgress = ConcurrentHashMap.newKeySet();
         this.playersInPortalZone = ConcurrentHashMap.newKeySet();
         this.portalMenuReopenAllowedAt = new ConcurrentHashMap<>();
+        this.frogJumpAmplifiers = new ConcurrentHashMap<UUID, Integer>();
+        this.discoColorIndex = 0;
         ServerType currentType = plugin == null ? ServerType.UNKNOWN : plugin.getServerType();
         this.hubType = currentType == null ? ServerType.UNKNOWN : currentType.toHubType();
         this.group = plugin == null ? "" : plugin.getConfig().getString("server.group", "");
         this.currentServerId = plugin == null ? "" : plugin.getConfig().getString("server.id", "");
         this.staleSeconds = plugin == null ? 20 : Math.max(0, plugin.getConfig().getInt("registry.staleSeconds", 20));
         subscribeToFriendVisibilityUpdates();
+        startSuitEffectTask();
     }
 
     @EventHandler
@@ -144,6 +174,7 @@ public class HubItemListener implements Listener {
         friendRefreshInProgress.remove(uuid);
         playersInPortalZone.remove(uuid);
         portalMenuReopenAllowedAt.remove(uuid);
+        frogJumpAmplifiers.remove(uuid);
         lobbySelectorMenu.clear(event.getPlayer());
     }
 
@@ -235,12 +266,31 @@ public class HubItemListener implements Listener {
         }
     }
 
+    @EventHandler(ignoreCancelled = true)
+    public void onItemDamage(PlayerItemDamageEvent event) {
+        if (event == null || isNpcPlayer(event.getPlayer())) {
+            return;
+        }
+        ItemStack item = event.getItem();
+        if (!isSelectedGadgetItem(event.getPlayer(), item) && !isSelectedSuitArmor(event.getPlayer(), item)) {
+            return;
+        }
+        event.setCancelled(true);
+        event.setDamage(0);
+        if (item != null) {
+            item.setDurability(baseDurability(event.getPlayer(), item));
+        }
+        event.getPlayer().updateInventory();
+    }
+
     private void giveItems(Player player) {
         player.getInventory().setItem(GAME_MENU_SLOT, buildGameMenuItem());
         player.getInventory().setItem(PROFILE_SLOT, buildProfileItem(player));
         player.getInventory().setItem(COLLECTIBLES_SLOT, buildCollectiblesItem(player));
+        player.getInventory().setItem(SELECTED_GADGET_SLOT, buildSelectedGadgetItem(player));
         player.getInventory().setItem(TOGGLE_SLOT, buildVisibilityItem(isVisible(player)));
         player.getInventory().setItem(LOBBY_SELECTOR_SLOT, buildLobbySelectorItem());
+        refreshSelectedSuitItems(player);
     }
 
     private void applyExistingVisibility(Player joining) {
@@ -305,7 +355,32 @@ public class HubItemListener implements Listener {
         player.updateInventory();
     }
 
+    public void refreshSelectedGadgetItem(Player player) {
+        if (player == null || isNpcPlayer(player)) {
+            return;
+        }
+        player.getInventory().setItem(SELECTED_GADGET_SLOT, buildSelectedGadgetItem(player));
+        player.updateInventory();
+    }
+
+    public void refreshSelectedSuitItems(Player player) {
+        if (player == null || isNpcPlayer(player)) {
+            return;
+        }
+        Color discoColor = currentDiscoColor();
+        player.getInventory().setHelmet(buildSelectedSuitPiece(player, CosmeticType.SUIT_HELMET, discoColor));
+        player.getInventory().setChestplate(buildSelectedSuitPiece(player, CosmeticType.SUIT_CHESTPLATE, discoColor));
+        player.getInventory().setLeggings(buildSelectedSuitPiece(player, CosmeticType.SUIT_LEGGINGS, discoColor));
+        player.getInventory().setBoots(buildSelectedSuitPiece(player, CosmeticType.SUIT_BOOTS, discoColor));
+        applyFrogSuitEffect(player);
+        player.updateInventory();
+    }
+
     public void shutdown() {
+        if (suitEffectTask != null) {
+            suitEffectTask.cancel();
+            suitEffectTask = null;
+        }
         visibility.clear();
         toggleCooldown.clear();
         cachedFriendUuids.clear();
@@ -313,6 +388,7 @@ public class HubItemListener implements Listener {
         friendRefreshInProgress.clear();
         playersInPortalZone.clear();
         portalMenuReopenAllowedAt.clear();
+        frogJumpAmplifiers.clear();
         gameMenu.shutdown();
         lobbySelectorMenu.shutdown();
     }
@@ -509,6 +585,284 @@ public class HubItemListener implements Listener {
         }
         Profile profile = plugin.getProfile(player.getUniqueId());
         return profile == null || profile.isPlayerVisibilityEnabled();
+    }
+
+    private ItemStack buildSelectedGadgetItem(Player player) {
+        if (player == null || plugin == null) {
+            return null;
+        }
+        Profile profile = plugin.getProfile(player.getUniqueId());
+        if (profile == null) {
+            return null;
+        }
+        String selected = LobbyCosmeticCatalog.normalizeId(profile.getSelected().get(CosmeticType.GADGET));
+        if (selected.isEmpty()) {
+            return null;
+        }
+        if (!profile.getUnlocked().get(CosmeticType.GADGET).contains(selected)) {
+            return null;
+        }
+        LobbyCosmeticDefinition definition = LobbyCosmeticCatalog.definition(CosmeticType.GADGET, selected);
+        if (definition == null || definition.getMaterial() == null) {
+            return null;
+        }
+        ItemStack stack = new ItemStack(definition.getMaterial());
+        stack.setDurability(definition.getDurability());
+        ItemMeta meta = stack.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(selectedGadgetItemName(definition));
+            if (!definition.getDescription().isEmpty()) {
+                List<String> lore = new ArrayList<String>();
+                for (String line : definition.getDescription()) {
+                    lore.add(ChatColor.GRAY + line);
+                }
+                meta.setLore(lore);
+            }
+            stack.setItemMeta(meta);
+        }
+        return stack;
+    }
+
+    private boolean isSelectedGadgetItem(Player player, ItemStack item) {
+        if (player == null || item == null || item.getType() == Material.AIR || plugin == null) {
+            return false;
+        }
+        LobbyCosmeticDefinition definition = selectedGadgetDefinition(player);
+        if (definition == null || item.getType() != definition.getMaterial()) {
+            return false;
+        }
+        ItemMeta meta = item.getItemMeta();
+        return meta != null && selectedGadgetItemName(definition).equals(meta.getDisplayName());
+    }
+
+    private short baseDurability(Player player, ItemStack item) {
+        LobbyCosmeticDefinition definition = selectedGadgetDefinition(player);
+        if (definition != null && item != null && item.getType() == definition.getMaterial()) {
+            return definition.getDurability();
+        }
+        return 0;
+    }
+
+    private LobbyCosmeticDefinition selectedGadgetDefinition(Player player) {
+        if (player == null || plugin == null) {
+            return null;
+        }
+        Profile profile = plugin.getProfile(player.getUniqueId());
+        if (profile == null) {
+            return null;
+        }
+        String selected = LobbyCosmeticCatalog.normalizeId(profile.getSelected().get(CosmeticType.GADGET));
+        if (selected.isEmpty() || !profile.getUnlocked().get(CosmeticType.GADGET).contains(selected)) {
+            return null;
+        }
+        return LobbyCosmeticCatalog.definition(CosmeticType.GADGET, selected);
+    }
+
+    private boolean isSelectedSuitArmor(Player player, ItemStack item) {
+        if (player == null || item == null || item.getType() == Material.AIR || plugin == null) {
+            return false;
+        }
+        if (!isArmor(item.getType())) {
+            return false;
+        }
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null || meta.getDisplayName() == null) {
+            return false;
+        }
+        for (CosmeticType type : LobbyCosmeticCatalog.suitPieceTypes()) {
+            LobbyCosmeticDefinition definition = selectedSuitPieceDefinition(player, type);
+            if (definition != null
+                    && item.getType() == definition.getMaterial()
+                    && (definition.getDisplayColor() + definition.getDisplayName()).equals(meta.getDisplayName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isArmor(Material material) {
+        if (material == null) {
+            return false;
+        }
+        String name = material.name();
+        return name.endsWith("_HELMET")
+                || name.endsWith("_CHESTPLATE")
+                || name.endsWith("_LEGGINGS")
+                || name.endsWith("_BOOTS");
+    }
+
+    private String selectedGadgetItemName(LobbyCosmeticDefinition definition) {
+        return ChatColor.GREEN + gadgetInventoryDisplayName(definition)
+                + ChatColor.GRAY + " (Right Click)";
+    }
+
+    private void startSuitEffectTask() {
+        if (plugin == null) {
+            return;
+        }
+        suitEffectTask = Bukkit.getScheduler().runTaskTimer(
+                plugin,
+                this::tickSuitEffects,
+                SUIT_EFFECT_REFRESH_TICKS,
+                SUIT_EFFECT_REFRESH_TICKS
+        );
+    }
+
+    private void tickSuitEffects() {
+        advanceDiscoColor();
+        Color discoColor = currentDiscoColor();
+        for (Player player : plugin.getServer().getOnlinePlayers()) {
+            if (player == null || !player.isOnline() || isNpcPlayer(player)) {
+                continue;
+            }
+            applyFrogSuitEffect(player);
+            if (cycleDiscoSuitColors(player, discoColor)) {
+                player.updateInventory();
+            }
+        }
+    }
+
+    private void advanceDiscoColor() {
+        discoColorIndex = (discoColorIndex + 1) % DISCO_RAINBOW_COLORS.length;
+    }
+
+    private Color currentDiscoColor() {
+        return DISCO_RAINBOW_COLORS[discoColorIndex % DISCO_RAINBOW_COLORS.length];
+    }
+
+    private boolean cycleDiscoSuitColors(Player player, Color color) {
+        boolean changed = false;
+        changed |= cycleDiscoSuitPiece(player, CosmeticType.SUIT_HELMET, color);
+        changed |= cycleDiscoSuitPiece(player, CosmeticType.SUIT_CHESTPLATE, color);
+        changed |= cycleDiscoSuitPiece(player, CosmeticType.SUIT_LEGGINGS, color);
+        changed |= cycleDiscoSuitPiece(player, CosmeticType.SUIT_BOOTS, color);
+        return changed;
+    }
+
+    private boolean cycleDiscoSuitPiece(Player player, CosmeticType type, Color color) {
+        LobbyCosmeticDefinition definition = selectedSuitPieceDefinition(player, type);
+        if (!isSuitPiece(definition, DISCO_SUIT_ID)) {
+            return false;
+        }
+        setArmorPiece(player, type, buildSelectedSuitPiece(player, type, color));
+        return true;
+    }
+
+    private void applyFrogSuitEffect(Player player) {
+        if (player == null || isNpcPlayer(player)) {
+            return;
+        }
+        UUID uuid = player.getUniqueId();
+        int selectedFrogPieces = countSelectedSuitPieces(player, FROG_SUIT_ID);
+        if (selectedFrogPieces <= 0) {
+            if (frogJumpAmplifiers.remove(uuid) != null) {
+                player.removePotionEffect(PotionEffectType.JUMP);
+            }
+            return;
+        }
+        int amplifier = frogJumpAmplifier(selectedFrogPieces);
+        frogJumpAmplifiers.put(uuid, amplifier);
+        player.addPotionEffect(
+                new PotionEffect(PotionEffectType.JUMP, Integer.MAX_VALUE, amplifier, false, false),
+                true
+        );
+    }
+
+    private int countSelectedSuitPieces(Player player, String suitId) {
+        int selectedPieces = 0;
+        for (CosmeticType type : LobbyCosmeticCatalog.suitPieceTypes()) {
+            if (isSuitPiece(selectedSuitPieceDefinition(player, type), suitId)) {
+                selectedPieces++;
+            }
+        }
+        return selectedPieces;
+    }
+
+    private int frogJumpAmplifier(int selectedPieces) {
+        if (selectedPieces >= 4) {
+            return FROG_FULL_SET_JUMP_AMPLIFIER;
+        }
+        return Math.max(0, selectedPieces - 1);
+    }
+
+    private boolean isSuitPiece(LobbyCosmeticDefinition definition, String suitId) {
+        return definition != null
+                && suitId != null
+                && suitId.equals(LobbyCosmeticCatalog.normalizeId(definition.getCategory()));
+    }
+
+    private void setArmorPiece(Player player, CosmeticType type, ItemStack stack) {
+        if (player == null || type == null) {
+            return;
+        }
+        if (type == CosmeticType.SUIT_HELMET) {
+            player.getInventory().setHelmet(stack);
+        } else if (type == CosmeticType.SUIT_CHESTPLATE) {
+            player.getInventory().setChestplate(stack);
+        } else if (type == CosmeticType.SUIT_LEGGINGS) {
+            player.getInventory().setLeggings(stack);
+        } else if (type == CosmeticType.SUIT_BOOTS) {
+            player.getInventory().setBoots(stack);
+        }
+    }
+
+    private ItemStack buildSelectedSuitPiece(Player player, CosmeticType type, Color discoColor) {
+        LobbyCosmeticDefinition definition = selectedSuitPieceDefinition(player, type);
+        if (definition == null || definition.getMaterial() == null) {
+            return null;
+        }
+        ItemStack stack = new ItemStack(definition.getMaterial());
+        stack.setDurability(definition.getDurability());
+        ItemMeta meta = stack.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(definition.getDisplayColor() + definition.getDisplayName());
+            stack.setItemMeta(meta);
+        }
+        Color leatherColor = isSuitPiece(definition, DISCO_SUIT_ID) ? discoColor : definition.getLeatherColor();
+        applyLeatherColor(stack, leatherColor);
+        return stack;
+    }
+
+    private LobbyCosmeticDefinition selectedSuitPieceDefinition(Player player, CosmeticType type) {
+        if (player == null || plugin == null || !LobbyCosmeticCatalog.isSuitPieceType(type)) {
+            return null;
+        }
+        Profile profile = plugin.getProfile(player.getUniqueId());
+        if (profile == null) {
+            return null;
+        }
+        String selected = LobbyCosmeticCatalog.normalizeId(profile.getSelected().get(type));
+        if (selected.isEmpty() || !profile.getUnlocked().get(type).contains(selected)) {
+            return null;
+        }
+        return LobbyCosmeticCatalog.definition(type, selected);
+    }
+
+    private void applyLeatherColor(ItemStack stack, Color color) {
+        if (stack == null || color == null) {
+            return;
+        }
+        ItemMeta meta = stack.getItemMeta();
+        if (!(meta instanceof LeatherArmorMeta)) {
+            return;
+        }
+        ((LeatherArmorMeta) meta).setColor(color);
+        stack.setItemMeta(meta);
+    }
+
+    private String gadgetInventoryDisplayName(LobbyCosmeticDefinition definition) {
+        if (definition == null) {
+            return "Gadget";
+        }
+        String displayName = definition.getDisplayName();
+        if (displayName == null || displayName.trim().isEmpty()) {
+            return "Gadget";
+        }
+        String trimmed = displayName.trim();
+        if (trimmed.toLowerCase(Locale.ROOT).endsWith("gadget")) {
+            return trimmed;
+        }
+        return trimmed + " Gadget";
     }
 
     private void applyVisibilityState(Player player, boolean visible) {

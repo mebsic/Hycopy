@@ -95,6 +95,9 @@ public class CosmeticService {
             options.add(2, RANDOM_FAVORITE_PREFIX_ID);
             return Collections.unmodifiableList(options);
         }
+        if (LobbyCosmeticCatalog.isLobbyType(type)) {
+            return LobbyCosmeticCatalog.options(type);
+        }
         return Collections.emptyList();
     }
 
@@ -136,6 +139,13 @@ public class CosmeticService {
                 return false;
             }
             if (PrefixCosmeticCatalog.definition(type, normalized) == null) {
+                return false;
+            }
+            return profile.getUnlocked().get(type).add(normalized);
+        }
+        if (LobbyCosmeticCatalog.isSelectableLobbyType(type)) {
+            String normalized = LobbyCosmeticCatalog.normalizeId(id);
+            if (normalized.isEmpty() || LobbyCosmeticCatalog.definition(type, normalized) == null) {
                 return false;
             }
             return profile.getUnlocked().get(type).add(normalized);
@@ -188,6 +198,17 @@ public class CosmeticService {
             profile.getSelected().put(type, normalized);
             return true;
         }
+        if (LobbyCosmeticCatalog.isSelectableLobbyType(type)) {
+            String normalized = LobbyCosmeticCatalog.normalizeId(id);
+            if (normalized.isEmpty() || LobbyCosmeticCatalog.definition(type, normalized) == null) {
+                return false;
+            }
+            if (!containsLobbyId(profile.getUnlocked().get(type), normalized)) {
+                return false;
+            }
+            profile.getSelected().put(type, normalized);
+            return true;
+        }
         return false;
     }
 
@@ -229,6 +250,22 @@ public class CosmeticService {
             favorites.add(normalized);
             return true;
         }
+        if (LobbyCosmeticCatalog.isSelectableLobbyType(type)) {
+            String normalized = LobbyCosmeticCatalog.normalizeId(id);
+            if (normalized.isEmpty() || LobbyCosmeticCatalog.definition(type, normalized) == null) {
+                return false;
+            }
+            if (!containsLobbyId(profile.getUnlocked().get(type), normalized)) {
+                return false;
+            }
+            Set<String> favorites = profile.getFavorites().get(type);
+            if (containsLobbyId(favorites, normalized)) {
+                removeLobbyId(favorites, normalized);
+                return true;
+            }
+            favorites.add(normalized);
+            return true;
+        }
         return false;
     }
 
@@ -249,6 +286,13 @@ public class CosmeticService {
                 return false;
             }
             return containsPrefixId(profile.getFavorites().get(type), normalized);
+        }
+        if (LobbyCosmeticCatalog.isLobbyType(type)) {
+            String normalized = LobbyCosmeticCatalog.normalizeId(id);
+            if (normalized.isEmpty()) {
+                return false;
+            }
+            return containsLobbyId(profile.getFavorites().get(type), normalized);
         }
         return false;
     }
@@ -405,6 +449,38 @@ public class CosmeticService {
         java.util.Iterator<String> iterator = values.iterator();
         while (iterator.hasNext()) {
             if (normalizedTarget.equals(PrefixCosmeticCatalog.normalizeId(iterator.next()))) {
+                iterator.remove();
+            }
+        }
+    }
+
+    private boolean containsLobbyId(Set<String> values, String targetNormalized) {
+        if (values == null || values.isEmpty()) {
+            return false;
+        }
+        String normalizedTarget = LobbyCosmeticCatalog.normalizeId(targetNormalized);
+        if (normalizedTarget.isEmpty()) {
+            return false;
+        }
+        for (String value : values) {
+            if (normalizedTarget.equals(LobbyCosmeticCatalog.normalizeId(value))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void removeLobbyId(Set<String> values, String targetNormalized) {
+        if (values == null || values.isEmpty()) {
+            return;
+        }
+        String normalizedTarget = LobbyCosmeticCatalog.normalizeId(targetNormalized);
+        if (normalizedTarget.isEmpty()) {
+            return;
+        }
+        java.util.Iterator<String> iterator = values.iterator();
+        while (iterator.hasNext()) {
+            if (normalizedTarget.equals(LobbyCosmeticCatalog.normalizeId(iterator.next()))) {
                 iterator.remove();
             }
         }

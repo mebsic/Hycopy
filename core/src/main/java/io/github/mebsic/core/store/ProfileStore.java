@@ -222,9 +222,15 @@ public class ProfileStore {
         profile.setHasActiveSubscription(readActiveSubscription(doc));
         profile.setSubscriptionExpiresAt(readSubscriptionExpiresAt(doc));
         Document cosmeticsRoot = doc.get(MongoManager.PROFILE_COSMETICS_KEY, Document.class);
-        Document cosmetics = cosmeticsRoot == null ? null : cosmeticsRoot.get(MongoManager.MURDER_MYSTERY_GAME_KEY, Document.class);
-        if (cosmetics != null) {
+        if (cosmeticsRoot != null) {
             for (CosmeticType type : CosmeticType.values()) {
+                if (!isStoredCosmeticType(type)) {
+                    continue;
+                }
+                Document cosmetics = cosmeticsRoot.get(cosmeticScope(type), Document.class);
+                if (cosmetics == null) {
+                    continue;
+                }
                 Document typeDoc = cosmetics.get(type.name().toLowerCase(), Document.class);
                 if (typeDoc == null) {
                     continue;
@@ -297,8 +303,12 @@ public class ProfileStore {
             murderMysteryStats.append(entry.getKey(), Math.max(0, value));
         }
         Document stats = new Document(MongoManager.MURDER_MYSTERY_GAME_KEY, murderMysteryStats);
-        Document cosmeticsByType = new Document();
+        Document murderMysteryCosmeticsByType = new Document();
+        Document hubCosmeticsByType = new Document();
         for (CosmeticType typeKey : CosmeticType.values()) {
+            if (!isStoredCosmeticType(typeKey)) {
+                continue;
+            }
             Document typeDoc = new Document();
             String selected = profile.getSelected().get(typeKey);
             if (selected != null) {
@@ -346,9 +356,11 @@ public class ProfileStore {
                 }
                 typeDoc.append(MongoManager.PROFILE_COSMETIC_META_KEY, meta);
             }
-            cosmeticsByType.append(typeKey.name().toLowerCase(), typeDoc);
+            cosmeticsByScope(typeKey, murderMysteryCosmeticsByType, hubCosmeticsByType)
+                    .append(typeKey.name().toLowerCase(), typeDoc);
         }
-        Document cosmetics = new Document(MongoManager.MURDER_MYSTERY_GAME_KEY, cosmeticsByType);
+        Document cosmetics = new Document(MongoManager.MURDER_MYSTERY_GAME_KEY, murderMysteryCosmeticsByType)
+                .append(MongoManager.PROFILE_HUB_COSMETICS_KEY, hubCosmeticsByType);
         Rank rank = profile.getRank() == null ? Rank.DEFAULT : profile.getRank();
         String mvpPlusPlusPrefixColor = null;
         if (canUseMvpPlusPlusPrefixColor(rank)) {
@@ -395,6 +407,28 @@ public class ProfileStore {
                 .append("description", def.getDescription())
                 .append("cost", def.getCost())
                 .append("rarity", def.getRarity());
+    }
+
+    private Document cosmeticsByScope(CosmeticType type, Document murderMystery, Document hub) {
+        if (cosmeticScope(type).equals(MongoManager.PROFILE_HUB_COSMETICS_KEY)) {
+            return hub;
+        }
+        return murderMystery;
+    }
+
+    private String cosmeticScope(CosmeticType type) {
+        if (type == CosmeticType.GADGET
+                || type == CosmeticType.SUIT_HELMET
+                || type == CosmeticType.SUIT_CHESTPLATE
+                || type == CosmeticType.SUIT_LEGGINGS
+                || type == CosmeticType.SUIT_BOOTS) {
+            return MongoManager.PROFILE_HUB_COSMETICS_KEY;
+        }
+        return MongoManager.MURDER_MYSTERY_GAME_KEY;
+    }
+
+    private boolean isStoredCosmeticType(CosmeticType type) {
+        return type != CosmeticType.SUIT;
     }
 
     private KnifeSkinDefinition resolveKnife(String id) {

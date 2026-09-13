@@ -51,6 +51,7 @@ import io.github.mebsic.core.model.Rank;
 import io.github.mebsic.core.book.BookPromptService;
 import io.github.mebsic.core.service.CoreApi;
 import io.github.mebsic.core.service.CosmeticService;
+import io.github.mebsic.core.service.LobbyCosmeticCatalog;
 import io.github.mebsic.core.manager.MongoManager;
 import io.github.mebsic.core.service.ProfileService;
 import io.github.mebsic.core.service.ProfileCommandSyncService;
@@ -1238,6 +1239,8 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
             if (hubItemListener != null) {
                 hubItemListener.applyProfileVisibility(profile);
                 hubItemListener.refreshCollectiblesItem(player);
+                hubItemListener.refreshSelectedGadgetItem(player);
+                hubItemListener.refreshSelectedSuitItems(player);
             }
             refreshBuildTablist();
         };
@@ -1841,11 +1844,17 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
 
     @Override
     public java.util.List<String> getAvailableCosmetics(CosmeticType type) {
+        if (isHubCosmeticType(type) && !isHubServer()) {
+            return Collections.emptyList();
+        }
         return cosmetics.getOptions(type);
     }
 
     @Override
     public boolean unlockCosmetic(UUID uuid, CosmeticType type, String id) {
+        if (isHubCosmeticType(type) && !isHubServer()) {
+            return false;
+        }
         Profile profile = profileService.getProfile(uuid);
         if (profile == null) {
             return false;
@@ -1859,6 +1868,9 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
 
     @Override
     public boolean selectCosmetic(UUID uuid, CosmeticType type, String id) {
+        if (isHubCosmeticType(type) && !isHubServer()) {
+            return false;
+        }
         Profile profile = profileService.getProfile(uuid);
         if (profile == null) {
             return false;
@@ -1866,12 +1878,48 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
         boolean result = cosmetics.select(profile, type, id);
         if (result) {
             profileService.saveProfile(profile);
+            if (type == CosmeticType.GADGET) {
+                refreshSelectedGadgetItem(uuid);
+            } else if (LobbyCosmeticCatalog.isSuitPieceType(type)) {
+                refreshSelectedSuitItems(uuid);
+            }
         }
         return result;
     }
 
     @Override
+    public boolean resetCosmetic(UUID uuid, CosmeticType type) {
+        if (!isHubCosmeticType(type) || !isHubServer()) {
+            return false;
+        }
+        Profile profile = profileService.getProfile(uuid);
+        if (profile == null) {
+            return false;
+        }
+        boolean changed = false;
+        if (type == CosmeticType.SUIT) {
+            for (CosmeticType suitPieceType : LobbyCosmeticCatalog.suitPieceTypes()) {
+                changed |= profile.getSelected().remove(suitPieceType) != null;
+            }
+        } else {
+            changed = profile.getSelected().remove(type) != null;
+        }
+        if (changed) {
+            profileService.saveProfile(profile);
+        }
+        if (type == CosmeticType.GADGET) {
+            refreshSelectedGadgetItem(uuid);
+        } else if (type == CosmeticType.SUIT || LobbyCosmeticCatalog.isSuitPieceType(type)) {
+            refreshSelectedSuitItems(uuid);
+        }
+        return true;
+    }
+
+    @Override
     public boolean toggleFavoriteCosmetic(UUID uuid, CosmeticType type, String id) {
+        if (isHubCosmeticType(type) && !isHubServer()) {
+            return false;
+        }
         Profile profile = profileService.getProfile(uuid);
         if (profile == null) {
             return false;
@@ -1885,11 +1933,52 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
 
     @Override
     public boolean isFavoriteCosmetic(UUID uuid, CosmeticType type, String id) {
+        if (isHubCosmeticType(type) && !isHubServer()) {
+            return false;
+        }
         Profile profile = profileService.getProfile(uuid);
         if (profile == null) {
             return false;
         }
         return cosmetics.isFavorite(profile, type, id);
+    }
+
+    private boolean isHubCosmeticType(CosmeticType type) {
+        return LobbyCosmeticCatalog.isLobbyType(type);
+    }
+
+    private void refreshSelectedGadgetItem(UUID uuid) {
+        if (uuid == null || hubItemListener == null) {
+            return;
+        }
+        Runnable refresh = () -> {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player != null && player.isOnline() && hubItemListener != null) {
+                hubItemListener.refreshSelectedGadgetItem(player);
+            }
+        };
+        if (Bukkit.isPrimaryThread()) {
+            refresh.run();
+            return;
+        }
+        Bukkit.getScheduler().runTask(this, refresh);
+    }
+
+    private void refreshSelectedSuitItems(UUID uuid) {
+        if (uuid == null || hubItemListener == null) {
+            return;
+        }
+        Runnable refresh = () -> {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player != null && player.isOnline() && hubItemListener != null) {
+                hubItemListener.refreshSelectedSuitItems(player);
+            }
+        };
+        if (Bukkit.isPrimaryThread()) {
+            refresh.run();
+            return;
+        }
+        Bukkit.getScheduler().runTask(this, refresh);
     }
 
     @Override

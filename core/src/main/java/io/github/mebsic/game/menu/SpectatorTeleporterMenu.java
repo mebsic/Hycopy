@@ -163,22 +163,17 @@ public class SpectatorTeleporterMenu extends Menu {
         if (meta instanceof SkullMeta) {
             ((SkullMeta) meta).setOwner(target.getName());
         }
-        String displayName = target.getDisplayName();
-        if (displayName == null || displayName.trim().isEmpty()) {
-            displayName = ChatColor.GREEN + target.getName();
-        }
-        meta.setDisplayName(displayName);
-        List<String> lore = new ArrayList<>(2);
-        lore.add(rankLore(target));
+        meta.setDisplayName(formatPlayerName(target));
+        List<String> lore = new ArrayList<>(1);
         lore.add(PLAYER_CLICK_LORE);
         meta.setLore(lore);
         stack.setItemMeta(meta);
         return stack;
     }
 
-    private String rankLore(Player target) {
+    private String formatPlayerName(Player target) {
         if (target == null || plugin == null) {
-            return ChatColor.GRAY + "Default";
+            return ChatColor.GRAY + "Unknown";
         }
         UUID uuid = target.getUniqueId();
         Profile profile = plugin.getProfile(uuid);
@@ -189,13 +184,14 @@ public class SpectatorTeleporterMenu extends Menu {
             rank = Rank.DEFAULT;
         }
         if (rank == Rank.DEFAULT) {
-            return ChatColor.GRAY + "Default";
+            return ChatColor.GRAY + target.getName();
         }
         int networkLevel = profile == null ? plugin.getNetworkLevel(uuid) : profile.getNetworkLevel();
         String plusColor = profile == null ? null : profile.getPlusColor();
         String mvpPlusPlusPrefixColor = profile == null ? null : profile.getMvpPlusPlusPrefixColor();
         String prefix = RankFormatUtil.buildPrefix(rank, Math.max(0, networkLevel), plusColor, mvpPlusPlusPrefixColor);
-        return prefix == null || prefix.trim().isEmpty() ? rank.getColor() + rank.name() : prefix.trim();
+        ChatColor nameColor = RankFormatUtil.baseColor(rank, mvpPlusPlusPrefixColor);
+        return prefix + nameColor + target.getName();
     }
 
     private Material resolveHeadMaterial() {

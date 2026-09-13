@@ -54,6 +54,8 @@ public interface CoreApi {
 
     boolean selectCosmetic(UUID uuid, CosmeticType type, String id);
 
+    boolean resetCosmetic(UUID uuid, CosmeticType type);
+
     boolean toggleFavoriteCosmetic(UUID uuid, CosmeticType type, String id);
 
     boolean isFavoriteCosmetic(UUID uuid, CosmeticType type, String id);
