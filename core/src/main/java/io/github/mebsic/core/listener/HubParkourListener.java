@@ -90,7 +90,7 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
     private final List<ParkourMarkerBlock> markerBlocks;
     private final List<UUID> markerHologramUuids;
     private final List<ParkourStartMarker> startMarkers;
-    private final Map<UUID, List<UUID>> personalBestHologramUuidsByPlayer;
+    private final Map<UUID, List<Integer>> personalBestHologramEntityIdsByPlayer;
     private final String bestTimeCounterKey;
     private final String lastTimeCounterKey;
     private final String completionCounterKey;
@@ -106,7 +106,7 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
         this.markerBlocks = new ArrayList<ParkourMarkerBlock>();
         this.markerHologramUuids = new ArrayList<UUID>();
         this.startMarkers = new ArrayList<ParkourStartMarker>();
-        this.personalBestHologramUuidsByPlayer = new ConcurrentHashMap<UUID, List<UUID>>();
+        this.personalBestHologramEntityIdsByPlayer = new ConcurrentHashMap<UUID, List<Integer>>();
 
         String typeKey = this.serverType.name().toLowerCase(Locale.ROOT);
         this.bestTimeCounterKey = MongoManager.PARKOUR_BEST_COUNTER_PREFIX + typeKey;
@@ -190,7 +190,7 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
             markerHologramUuids.add(titleUuid);
         }
         String startLine = route.startColor.toString() + ChatColor.BOLD + "Start";
-        Location startLocation = startHologramLineLocation(blockLocation, 1);
+        Location startLocation = startHologramLineLocation(blockLocation, 2);
         UUID startUuid = spawnHologramLine(startLocation, startLine);
         if (startUuid != null) {
             markerHologramUuids.add(startUuid);
@@ -246,10 +246,6 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
     }
 
     private UUID spawnHologramLine(Location location, String line) {
-        return spawnHologramLine(location, line, true);
-    }
-
-    private UUID spawnHologramLine(Location location, String line, boolean customNameVisible) {
         if (location == null || location.getWorld() == null) {
             return null;
         }
@@ -259,26 +255,15 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
         stand.setBasePlate(false);
         stand.setCanPickupItems(false);
         stand.setCustomName(line == null ? "" : line);
-        stand.setCustomNameVisible(customNameVisible);
+        stand.setCustomNameVisible(true);
         return stand.getUniqueId();
     }
 
-    private UUID spawnViewerHologramLine(Player viewer, Location location, String line) {
+    private Integer spawnViewerHologramLine(Player viewer, Location location, String line) {
         if (viewer == null || location == null || location.getWorld() == null) {
             return null;
         }
-        UUID uuid = spawnHologramLine(location, line, false);
-        if (uuid == null) {
-            return null;
-        }
-        if (!showViewerHologramLine(viewer.getUniqueId(), uuid, line)) {
-            removeEntity(uuid);
-            return null;
-        }
-        if (plugin != null) {
-            plugin.getServer().getScheduler().runTask(plugin, () -> showViewerHologramLine(viewer.getUniqueId(), uuid, line));
-        }
-        return uuid;
+        return spawnClientSideHologramLine(viewer, location, line);
     }
 
     private void removeEntity(UUID uuid) {
@@ -380,25 +365,25 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
             return;
         }
 
-        List<UUID> spawned = new ArrayList<UUID>();
+        List<Integer> spawned = new ArrayList<Integer>();
         String bestLine = ChatColor.GOLD.toString() + ChatColor.BOLD + "Your best time: "
                 + ChatColor.YELLOW + ChatColor.BOLD + formatDuration(bestMillis);
         for (ParkourStartMarker marker : startMarkers) {
             if (marker == null || marker.blockLocation == null) {
                 continue;
             }
-            UUID bestUuid = spawnViewerHologramLine(player, startHologramLineLocation(marker.blockLocation, 2), bestLine);
-            if (bestUuid != null) {
-                spawned.add(bestUuid);
+            Integer bestEntityId = spawnViewerHologramLine(player, startHologramLineLocation(marker.blockLocation, 1), bestLine);
+            if (bestEntityId != null) {
+                spawned.add(bestEntityId);
             }
         }
         if (!spawned.isEmpty()) {
-            personalBestHologramUuidsByPlayer.put(uuid, spawned);
+            personalBestHologramEntityIdsByPlayer.put(uuid, spawned);
         }
     }
 
     private void clearPersonalBestHolograms() {
-        for (UUID playerUuid : new ArrayList<UUID>(personalBestHologramUuidsByPlayer.keySet())) {
+        for (UUID playerUuid : new ArrayList<UUID>(personalBestHologramEntityIdsByPlayer.keySet())) {
             clearPersonalBestHolograms(playerUuid);
         }
     }
@@ -407,74 +392,118 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
         if (playerUuid == null) {
             return;
         }
-        List<UUID> hologramUuids = personalBestHologramUuidsByPlayer.remove(playerUuid);
-        if (hologramUuids == null || hologramUuids.isEmpty()) {
+        List<Integer> hologramEntityIds = personalBestHologramEntityIdsByPlayer.remove(playerUuid);
+        if (hologramEntityIds == null || hologramEntityIds.isEmpty()) {
             return;
         }
-        for (UUID hologramUuid : new ArrayList<UUID>(hologramUuids)) {
-            removeEntity(hologramUuid);
-        }
-    }
-
-    private boolean showViewerHologramLine(UUID viewerUuid, UUID hologramUuid, String line) {
-        if (viewerUuid == null || hologramUuid == null) {
-            return false;
-        }
-        Player viewer = Bukkit.getPlayer(viewerUuid);
+        Player viewer = Bukkit.getPlayer(playerUuid);
         if (viewer == null || !viewer.isOnline()) {
-            return false;
+            return;
         }
-        Entity entity = resolveEntity(hologramUuid);
-        if (entity == null) {
-            return false;
+        for (Integer entityId : new ArrayList<Integer>(hologramEntityIds)) {
+            if (entityId != null) {
+                sendClientSideEntityDestroy(viewer, entityId.intValue());
+            }
         }
-        return sendHologramNameMetadata(viewer, entity, line);
     }
 
-    private boolean sendHologramNameMetadata(Player viewer, Entity entity, String line) {
-        if (viewer == null || entity == null) {
-            return false;
-        }
-        int entityId = entity.getEntityId();
-        if (entityId <= 0) {
-            return false;
+    private Integer spawnClientSideHologramLine(Player viewer, Location location, String line) {
+        if (viewer == null || !viewer.isOnline() || location == null || location.getWorld() == null) {
+            return null;
         }
         String version = resolveNmsVersion();
         if (version.isEmpty()) {
-            return false;
+            return null;
         }
         try {
             Class<?> craftPlayerClass = Class.forName("org.bukkit.craftbukkit." + version + ".entity.CraftPlayer");
-            Class<?> craftEntityClass = Class.forName("org.bukkit.craftbukkit." + version + ".entity.CraftEntity");
+            Class<?> craftWorldClass = Class.forName("org.bukkit.craftbukkit." + version + ".CraftWorld");
+            Class<?> worldClass = Class.forName("net.minecraft.server." + version + ".World");
             Class<?> nmsEntityClass = Class.forName("net.minecraft.server." + version + ".Entity");
+            Class<?> entityLivingClass = Class.forName("net.minecraft.server." + version + ".EntityLiving");
+            Class<?> armorStandClass = Class.forName("net.minecraft.server." + version + ".EntityArmorStand");
             Class<?> dataWatcherClass = Class.forName("net.minecraft.server." + version + ".DataWatcher");
             Class<?> packetClass = Class.forName("net.minecraft.server." + version + ".Packet");
+            Class<?> spawnPacketClass = Class.forName("net.minecraft.server." + version + ".PacketPlayOutSpawnEntityLiving");
             Class<?> metadataPacketClass = Class.forName("net.minecraft.server." + version + ".PacketPlayOutEntityMetadata");
 
-            Object entityHandle = craftEntityClass.getMethod("getHandle").invoke(craftEntityClass.cast(entity));
-            Object dataWatcher = dataWatcherClass.getConstructor(nmsEntityClass).newInstance(entityHandle);
-            Method registerWatcherObject = dataWatcherClass.getMethod("a", int.class, Object.class);
-            registerWatcherObject.invoke(dataWatcher, 2, line == null ? "" : line);
-            registerWatcherObject.invoke(dataWatcher, 3, Byte.valueOf((byte) 1));
+            Object worldHandle = craftWorldClass.getMethod("getHandle").invoke(craftWorldClass.cast(location.getWorld()));
+            Object hologram = armorStandClass.getConstructor(worldClass).newInstance(worldHandle);
+            nmsEntityClass.getMethod("setLocation", double.class, double.class, double.class, float.class, float.class)
+                    .invoke(hologram, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
+            nmsEntityClass.getMethod("setInvisible", boolean.class).invoke(hologram, true);
+            nmsEntityClass.getMethod("setCustomName", String.class).invoke(hologram, line == null ? "" : line);
+            nmsEntityClass.getMethod("setCustomNameVisible", boolean.class).invoke(hologram, true);
+            trySetNoGravity(armorStandClass, hologram);
 
-            Object packet = metadataPacketClass
-                    .getConstructor(int.class, dataWatcherClass, boolean.class)
+            int entityId = ((Number) nmsEntityClass.getMethod("getId").invoke(hologram)).intValue();
+            Object spawnPacket = spawnPacketClass.getConstructor(entityLivingClass).newInstance(hologram);
+            Object dataWatcher = nmsEntityClass.getMethod("getDataWatcher").invoke(hologram);
+            Object metadataPacket = metadataPacketClass.getConstructor(int.class, dataWatcherClass, boolean.class)
                     .newInstance(entityId, dataWatcher, true);
+
             Object craftPlayer = craftPlayerClass.cast(viewer);
             Method getHandle = craftPlayerClass.getMethod("getHandle");
             Object handle = getHandle.invoke(craftPlayer);
             if (handle == null) {
-                return false;
+                return null;
             }
             Object connection = handle.getClass().getField("playerConnection").get(handle);
             if (connection == null) {
-                return false;
+                return null;
             }
             Method sendPacket = connection.getClass().getMethod("sendPacket", packetClass);
-            sendPacket.invoke(connection, packet);
-            return true;
+            sendPacket.invoke(connection, spawnPacket);
+            sendPacket.invoke(connection, metadataPacket);
+            return Integer.valueOf(entityId);
         } catch (Throwable ignored) {
-            return false;
+            return null;
+        }
+    }
+
+    private void trySetNoGravity(Class<?> armorStandClass, Object hologram) {
+        if (armorStandClass == null || hologram == null) {
+            return;
+        }
+        try {
+            armorStandClass.getMethod("setGravity", boolean.class).invoke(hologram, Boolean.FALSE);
+            return;
+        } catch (Throwable ignored) {
+            // Try the newer API method name.
+        }
+        try {
+            armorStandClass.getMethod("setNoGravity", boolean.class).invoke(hologram, Boolean.TRUE);
+        } catch (Throwable ignored) {
+            // The fake entity may still render correctly on older clients.
+        }
+    }
+
+    private void sendClientSideEntityDestroy(Player viewer, int entityId) {
+        if (viewer == null || !viewer.isOnline() || entityId <= 0) {
+            return;
+        }
+        String version = resolveNmsVersion();
+        if (version.isEmpty()) {
+            return;
+        }
+        try {
+            Class<?> craftPlayerClass = Class.forName("org.bukkit.craftbukkit." + version + ".entity.CraftPlayer");
+            Class<?> packetClass = Class.forName("net.minecraft.server." + version + ".Packet");
+            Class<?> destroyPacketClass = Class.forName("net.minecraft.server." + version + ".PacketPlayOutEntityDestroy");
+            Object craftPlayer = craftPlayerClass.cast(viewer);
+            Object handle = craftPlayerClass.getMethod("getHandle").invoke(craftPlayer);
+            if (handle == null) {
+                return;
+            }
+            Object connection = handle.getClass().getField("playerConnection").get(handle);
+            if (connection == null) {
+                return;
+            }
+            Object packet = destroyPacketClass.getConstructor(int[].class).newInstance(new int[]{entityId});
+            Method sendPacket = connection.getClass().getMethod("sendPacket", packetClass);
+            sendPacket.invoke(connection, packet);
+        } catch (Throwable ignored) {
+            // The client will forget fake holograms on disconnect even if cleanup fails.
         }
     }
 

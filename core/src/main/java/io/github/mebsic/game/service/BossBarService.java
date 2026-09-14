@@ -32,7 +32,7 @@ import java.util.logging.Level;
 public class BossBarService {
     private static final long TICK_INTERVAL = 1L; // Minimum Bukkit interval (1 tick = 50ms).
     private static final long TICK_MILLIS = 50L;
-    private static final long DOMAIN_COLOR_CYCLE_INTERVAL_TICKS = 8L; // 0.4 seconds
+    private static final long DOMAIN_COLOR_CYCLE_INTERVAL_TICKS = 6L; // 0.3 seconds
     private static final long GAME_MESSAGE_ROTATION_INTERVAL_TICKS = 100L; // 5 seconds
     private static final long HUB_MESSAGE_PRE_ANIMATION_DELAY_TICKS = 20L; // 1 second
     private static final long HUB_MESSAGE_ANIMATION_WINDOW_TICKS = 60L; // 3 seconds

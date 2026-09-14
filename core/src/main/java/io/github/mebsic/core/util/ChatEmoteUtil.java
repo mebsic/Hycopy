@@ -70,7 +70,7 @@ public final class ChatEmoteUtil {
         emotes.add(new ChatEmote(":arrow:", YELLOW + "➜"));
         emotes.add(new ChatEmote(":shrug:", YELLOW + "¯\\_(ツ)_/¯"));
         emotes.add(new ChatEmote(":tableflip:", RED + "(╯°□°）╯" + WHITE + "︵ " + GRAY + "┻━┻"));
-        emotes.add(new ChatEmote("o/", LIGHT_PURPLE + "(ﾟ◡ﾟ)/"));
+        emotes.add(new ChatEmote("o/", LIGHT_PURPLE + "( ﾟ◡ﾟ)/"));
         emotes.add(new ChatEmote(":123:", GREEN + "1" + YELLOW + "2" + RED + "3"));
         emotes.add(new ChatEmote(":totem:", AQUA + "◎" + YELLOW + "_" + AQUA + "◎"));
         emotes.add(new ChatEmote(":typing:", YELLOW + "✎" + GOLD + "..."));
