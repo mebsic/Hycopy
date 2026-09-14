@@ -5,6 +5,7 @@ import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.core.service.CoreApi;
 import io.github.mebsic.core.service.LobbyCosmeticCatalog;
 import io.github.mebsic.core.service.LobbyCosmeticDefinition;
+import io.github.mebsic.core.util.CustomHeadUtil;
 import org.bukkit.ChatColor;
 import org.bukkit.Color;
 import org.bukkit.inventory.ItemStack;
@@ -190,6 +191,15 @@ final class CollectiblesCosmeticSupport {
         }
         ((LeatherArmorMeta) meta).setColor(color);
         stack.setItemMeta(meta);
+    }
+
+    static void applyDefinitionAppearance(ItemStack stack, LobbyCosmeticDefinition definition) {
+        if (stack == null || definition == null) {
+            return;
+        }
+        stack.setDurability(definition.getDurability());
+        CustomHeadUtil.applyTexture(stack, definition.getHeadTexture());
+        applyLeatherColor(stack, definition.getLeatherColor());
     }
 
     static String formatDust(int amount) {

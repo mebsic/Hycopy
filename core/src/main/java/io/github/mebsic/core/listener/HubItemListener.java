@@ -9,15 +9,18 @@ import io.github.mebsic.core.menu.GameMenu;
 import io.github.mebsic.core.menu.LobbySelectorMenu;
 import io.github.mebsic.core.model.CosmeticType;
 import io.github.mebsic.core.model.Profile;
+import io.github.mebsic.core.model.Rank;
 import io.github.mebsic.core.server.ServerType;
 import io.github.mebsic.core.service.LobbyCosmeticCatalog;
 import io.github.mebsic.core.service.LobbyCosmeticDefinition;
 import io.github.mebsic.core.service.QueueClient;
 import io.github.mebsic.core.service.ServerRegistrySnapshot;
 import io.github.mebsic.core.util.CommonMessages;
+import io.github.mebsic.core.util.CustomHeadUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Color;
+import org.bukkit.Effect;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
@@ -25,6 +28,8 @@ import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.Action;
+import org.bukkit.event.player.PlayerFishEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerItemDamageEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -39,6 +44,7 @@ import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitTask;
+import org.bukkit.util.Vector;
 import org.bson.Document;
 
 import java.io.ByteArrayOutputStream;
@@ -59,6 +65,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class HubItemListener implements Listener {
     private static final String FRIEND_VISIBILITY_UPDATE_CHANNEL = "friend_visibility_update";
+    private static final String GRAPPLING_HOOK_GADGET_ID = "grappling_hook";
     private static final String VISIBILITY_ENABLED_MESSAGE = ChatColor.GREEN + "Player visibility enabled!";
     private static final String VISIBILITY_DISABLED_MESSAGE = ChatColor.RED + "Player visibility disabled!";
     private static final String GAME_MENU_NAME = ChatColor.GREEN + "Game Menu " + ChatColor.GRAY + "(Right Click)";
@@ -72,19 +79,20 @@ public class HubItemListener implements Listener {
     private static final long TOGGLE_COOLDOWN_MS = 3000L;
     private static final long FRIEND_REFRESH_MS = 10_000L;
     private static final String FROG_SUIT_ID = "frog";
-    private static final String DISCO_SUIT_ID = "disco";
-    private static final long SUIT_EFFECT_REFRESH_TICKS = 10L;
+    private static final String SPEEDSTER_SUIT_ID = "speedster";
+    private static final long SUIT_EFFECT_REFRESH_TICKS = 5L;
     private static final int FROG_FULL_SET_JUMP_AMPLIFIER = 5;
-    private static final Color[] DISCO_RAINBOW_COLORS = new Color[]{
-            Color.RED,
-            Color.ORANGE,
-            Color.YELLOW,
-            Color.LIME,
-            Color.AQUA,
-            Color.BLUE,
-            Color.FUCHSIA,
-            Color.PURPLE
-    };
+    private static final int SPEEDSTER_FULL_SET_SPEED_AMPLIFIER = 4;
+    private static final int SPEEDSTER_SPEED_DURATION_TICKS = Integer.MAX_VALUE;
+    private static final int SPEEDSTER_CLOUD_TRAIL_PUFFS = 5;
+    private static final int SPEEDSTER_CLOUD_PARTICLES_PER_PUFF = 28;
+    private static final int SPEEDSTER_CLOUD_VIEW_RADIUS = 32;
+    private static final float SPEEDSTER_CLOUD_HORIZONTAL_RADIUS = 0.65F;
+    private static final float SPEEDSTER_CLOUD_VERTICAL_RADIUS = 0.24F;
+    private static final float SPEEDSTER_CLOUD_SPEED = 0.015F;
+    private static final double SPEEDSTER_MIN_HORIZONTAL_DISTANCE_SQUARED = 0.000001D;
+    private static final double GRAPPLING_HOOK_LAUNCH_POWER = 3.0D;
+    private static final double GRAPPLING_HOOK_GROUNDED_UPWARD_VELOCITY = 0.85D;
     private static final int GAME_MENU_SLOT = 0;
     private static final int PROFILE_SLOT = 1;
     private static final int COLLECTIBLES_SLOT = 4;
@@ -115,12 +123,15 @@ public class HubItemListener implements Listener {
     private final Set<UUID> playersInPortalZone;
     private final Map<UUID, Long> portalMenuReopenAllowedAt;
     private final Map<UUID, Integer> frogJumpAmplifiers;
+    private final Map<UUID, Integer> speedsterSpeedAmplifiers;
+    private final Map<UUID, PotionEffect> speedsterReplacedSpeedEffects;
+    private final Map<UUID, Location> speedsterCloudLocations;
+    private final Set<UUID> parkourSuitSuspended;
     private final ServerType hubType;
     private final String group;
     private final String currentServerId;
     private final int staleSeconds;
     private BukkitTask suitEffectTask;
-    private int discoColorIndex;
 
     public HubItemListener(CorePlugin plugin, QueueClient queueClient, ServerRegistrySnapshot registrySnapshot) {
         this.plugin = plugin;
@@ -136,7 +147,10 @@ public class HubItemListener implements Listener {
         this.playersInPortalZone = ConcurrentHashMap.newKeySet();
         this.portalMenuReopenAllowedAt = new ConcurrentHashMap<>();
         this.frogJumpAmplifiers = new ConcurrentHashMap<UUID, Integer>();
-        this.discoColorIndex = 0;
+        this.speedsterSpeedAmplifiers = new ConcurrentHashMap<UUID, Integer>();
+        this.speedsterReplacedSpeedEffects = new ConcurrentHashMap<UUID, PotionEffect>();
+        this.speedsterCloudLocations = new ConcurrentHashMap<UUID, Location>();
+        this.parkourSuitSuspended = ConcurrentHashMap.newKeySet();
         ServerType currentType = plugin == null ? ServerType.UNKNOWN : plugin.getServerType();
         this.hubType = currentType == null ? ServerType.UNKNOWN : currentType.toHubType();
         this.group = plugin == null ? "" : plugin.getConfig().getString("server.group", "");
@@ -175,6 +189,10 @@ public class HubItemListener implements Listener {
         playersInPortalZone.remove(uuid);
         portalMenuReopenAllowedAt.remove(uuid);
         frogJumpAmplifiers.remove(uuid);
+        speedsterSpeedAmplifiers.remove(uuid);
+        speedsterReplacedSpeedEffects.remove(uuid);
+        speedsterCloudLocations.remove(uuid);
+        parkourSuitSuspended.remove(uuid);
         lobbySelectorMenu.clear(event.getPlayer());
     }
 
@@ -240,6 +258,11 @@ public class HubItemListener implements Listener {
             return;
         }
         String name = meta.getDisplayName();
+        LobbyCosmeticDefinition selectedGadget = selectedGadgetDefinition(event.getPlayer());
+        if (isSelectedGadgetItem(event.getPlayer(), item, selectedGadget)) {
+            handleSelectedGadgetUse(event, selectedGadget);
+            return;
+        }
         if (GAME_MENU_NAME.equals(name) && item.getType() == Material.COMPASS) {
             event.setCancelled(true);
             gameMenu.open(event.getPlayer());
@@ -264,6 +287,25 @@ public class HubItemListener implements Listener {
             event.setCancelled(true);
             toggleVisibility(event.getPlayer());
         }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onFish(PlayerFishEvent event) {
+        if (event == null || isNpcPlayer(event.getPlayer())) {
+            return;
+        }
+        if (event.getState() == PlayerFishEvent.State.FISHING) {
+            return;
+        }
+        Player player = event.getPlayer();
+        LobbyCosmeticDefinition selectedGadget = selectedGadgetDefinition(player);
+        if (selectedGadget == null || !GRAPPLING_HOOK_GADGET_ID.equals(selectedGadget.getId())) {
+            return;
+        }
+        if (!isSelectedGadgetItem(player, player.getItemInHand(), selectedGadget)) {
+            return;
+        }
+        launchWithGrapplingHook(player);
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -367,13 +409,32 @@ public class HubItemListener implements Listener {
         if (player == null || isNpcPlayer(player)) {
             return;
         }
-        Color discoColor = currentDiscoColor();
-        player.getInventory().setHelmet(buildSelectedSuitPiece(player, CosmeticType.SUIT_HELMET, discoColor));
-        player.getInventory().setChestplate(buildSelectedSuitPiece(player, CosmeticType.SUIT_CHESTPLATE, discoColor));
-        player.getInventory().setLeggings(buildSelectedSuitPiece(player, CosmeticType.SUIT_LEGGINGS, discoColor));
-        player.getInventory().setBoots(buildSelectedSuitPiece(player, CosmeticType.SUIT_BOOTS, discoColor));
+        player.getInventory().setHelmet(buildSelectedSuitPiece(player, CosmeticType.SUIT_HELMET));
+        player.getInventory().setChestplate(buildSelectedSuitPiece(player, CosmeticType.SUIT_CHESTPLATE));
+        player.getInventory().setLeggings(buildSelectedSuitPiece(player, CosmeticType.SUIT_LEGGINGS));
+        player.getInventory().setBoots(buildSelectedSuitPiece(player, CosmeticType.SUIT_BOOTS));
         applyFrogSuitEffect(player);
+        applySpeedsterSuitEffect(player);
         player.updateInventory();
+    }
+
+    public void suspendSelectedSuitForParkour(Player player) {
+        if (player == null || isNpcPlayer(player)) {
+            return;
+        }
+        parkourSuitSuspended.add(player.getUniqueId());
+        refreshSelectedSuitItems(player);
+    }
+
+    public void restoreSelectedSuitAfterParkour(Player player, UUID uuid) {
+        if (uuid == null) {
+            return;
+        }
+        boolean changed = parkourSuitSuspended.remove(uuid);
+        if (!changed || player == null || !player.isOnline() || isNpcPlayer(player)) {
+            return;
+        }
+        refreshSelectedSuitItems(player);
     }
 
     public void shutdown() {
@@ -389,6 +450,10 @@ public class HubItemListener implements Listener {
         playersInPortalZone.clear();
         portalMenuReopenAllowedAt.clear();
         frogJumpAmplifiers.clear();
+        speedsterSpeedAmplifiers.clear();
+        speedsterReplacedSpeedEffects.clear();
+        speedsterCloudLocations.clear();
+        parkourSuitSuspended.clear();
         gameMenu.shutdown();
         lobbySelectorMenu.shutdown();
     }
@@ -611,23 +676,19 @@ public class HubItemListener implements Listener {
         ItemMeta meta = stack.getItemMeta();
         if (meta != null) {
             meta.setDisplayName(selectedGadgetItemName(definition));
-            if (!definition.getDescription().isEmpty()) {
-                List<String> lore = new ArrayList<String>();
-                for (String line : definition.getDescription()) {
-                    lore.add(ChatColor.GRAY + line);
-                }
-                meta.setLore(lore);
-            }
             stack.setItemMeta(meta);
         }
         return stack;
     }
 
     private boolean isSelectedGadgetItem(Player player, ItemStack item) {
+        return isSelectedGadgetItem(player, item, selectedGadgetDefinition(player));
+    }
+
+    private boolean isSelectedGadgetItem(Player player, ItemStack item, LobbyCosmeticDefinition definition) {
         if (player == null || item == null || item.getType() == Material.AIR || plugin == null) {
             return false;
         }
-        LobbyCosmeticDefinition definition = selectedGadgetDefinition(player);
         if (definition == null || item.getType() != definition.getMaterial()) {
             return false;
         }
@@ -656,6 +717,36 @@ public class HubItemListener implements Listener {
             return null;
         }
         return LobbyCosmeticCatalog.definition(CosmeticType.GADGET, selected);
+    }
+
+    private void handleSelectedGadgetUse(PlayerInteractEvent event, LobbyCosmeticDefinition definition) {
+        if (event == null || definition == null || !isRightClick(event.getAction())) {
+            return;
+        }
+        if (GRAPPLING_HOOK_GADGET_ID.equals(definition.getId())) {
+            return;
+        }
+        event.setCancelled(true);
+    }
+
+    private boolean isRightClick(Action action) {
+        return action == Action.RIGHT_CLICK_AIR || action == Action.RIGHT_CLICK_BLOCK;
+    }
+
+    private void launchWithGrapplingHook(Player player) {
+        if (player == null) {
+            return;
+        }
+        Vector direction = player.getEyeLocation().getDirection();
+        if (direction == null || direction.lengthSquared() <= 0.0D) {
+            return;
+        }
+        Vector velocity = direction.normalize().multiply(GRAPPLING_HOOK_LAUNCH_POWER);
+        if (player.isOnGround() && velocity.getY() < GRAPPLING_HOOK_GROUNDED_UPWARD_VELOCITY) {
+            velocity.setY(GRAPPLING_HOOK_GROUNDED_UPWARD_VELOCITY);
+        }
+        player.setFallDistance(0.0F);
+        player.setVelocity(velocity);
     }
 
     private boolean isSelectedSuitArmor(Player player, ItemStack item) {
@@ -709,43 +800,13 @@ public class HubItemListener implements Listener {
     }
 
     private void tickSuitEffects() {
-        advanceDiscoColor();
-        Color discoColor = currentDiscoColor();
         for (Player player : plugin.getServer().getOnlinePlayers()) {
             if (player == null || !player.isOnline() || isNpcPlayer(player)) {
                 continue;
             }
             applyFrogSuitEffect(player);
-            if (cycleDiscoSuitColors(player, discoColor)) {
-                player.updateInventory();
-            }
+            applySpeedsterSuitEffect(player);
         }
-    }
-
-    private void advanceDiscoColor() {
-        discoColorIndex = (discoColorIndex + 1) % DISCO_RAINBOW_COLORS.length;
-    }
-
-    private Color currentDiscoColor() {
-        return DISCO_RAINBOW_COLORS[discoColorIndex % DISCO_RAINBOW_COLORS.length];
-    }
-
-    private boolean cycleDiscoSuitColors(Player player, Color color) {
-        boolean changed = false;
-        changed |= cycleDiscoSuitPiece(player, CosmeticType.SUIT_HELMET, color);
-        changed |= cycleDiscoSuitPiece(player, CosmeticType.SUIT_CHESTPLATE, color);
-        changed |= cycleDiscoSuitPiece(player, CosmeticType.SUIT_LEGGINGS, color);
-        changed |= cycleDiscoSuitPiece(player, CosmeticType.SUIT_BOOTS, color);
-        return changed;
-    }
-
-    private boolean cycleDiscoSuitPiece(Player player, CosmeticType type, Color color) {
-        LobbyCosmeticDefinition definition = selectedSuitPieceDefinition(player, type);
-        if (!isSuitPiece(definition, DISCO_SUIT_ID)) {
-            return false;
-        }
-        setArmorPiece(player, type, buildSelectedSuitPiece(player, type, color));
-        return true;
     }
 
     private void applyFrogSuitEffect(Player player) {
@@ -768,6 +829,169 @@ public class HubItemListener implements Listener {
         );
     }
 
+    private void applySpeedsterSuitEffect(Player player) {
+        if (player == null || isNpcPlayer(player)) {
+            return;
+        }
+        UUID uuid = player.getUniqueId();
+        int selectedSpeedsterPieces = countSelectedSuitPieces(player, SPEEDSTER_SUIT_ID);
+        if (selectedSpeedsterPieces <= 0) {
+            speedsterCloudLocations.remove(uuid);
+            stopSpeedsterSuitEffect(player, uuid);
+            return;
+        }
+        Location location = player.getLocation();
+        Location previousLocation = previousSpeedsterCloudLocation(uuid, location);
+        int amplifier = speedsterSpeedAmplifier(selectedSpeedsterPieces);
+        if (!speedsterSpeedAmplifiers.containsKey(uuid)) {
+            PotionEffect currentSpeed = activePotionEffect(player, PotionEffectType.SPEED);
+            if (currentSpeed != null) {
+                speedsterReplacedSpeedEffects.put(uuid, currentSpeed);
+            } else {
+                speedsterReplacedSpeedEffects.remove(uuid);
+            }
+        }
+        speedsterSpeedAmplifiers.put(uuid, amplifier);
+        player.addPotionEffect(
+                new PotionEffect(PotionEffectType.SPEED, SPEEDSTER_SPEED_DURATION_TICKS,
+                        amplifier, false, false),
+                true
+        );
+        if (previousLocation != null) {
+            spawnSpeedsterTrail(previousLocation, location);
+        }
+    }
+
+    private Location previousSpeedsterCloudLocation(UUID uuid, Location current) {
+        if (uuid == null || current == null) {
+            return null;
+        }
+        Location previous = speedsterCloudLocations.put(uuid, current.clone());
+        if (previous == null || previous.getWorld() == null || current.getWorld() == null) {
+            return null;
+        }
+        if (!previous.getWorld().equals(current.getWorld())) {
+            return null;
+        }
+        if (horizontalDistanceSquared(previous, current) <= SPEEDSTER_MIN_HORIZONTAL_DISTANCE_SQUARED) {
+            return null;
+        }
+        return previous;
+    }
+
+    private double horizontalDistanceSquared(Location from, Location to) {
+        if (from == null || to == null) {
+            return 0.0D;
+        }
+        double x = to.getX() - from.getX();
+        double z = to.getZ() - from.getZ();
+        return (x * x) + (z * z);
+    }
+
+    private void spawnSpeedsterTrail(Location previous, Location current) {
+        if (previous == null || current == null || previous.getWorld() == null || current.getWorld() == null) {
+            return;
+        }
+        if (!previous.getWorld().equals(current.getWorld())) {
+            return;
+        }
+        for (int i = 0; i < SPEEDSTER_CLOUD_TRAIL_PUFFS; i++) {
+            double progress = SPEEDSTER_CLOUD_TRAIL_PUFFS <= 1
+                    ? 0.0D
+                    : (double) i / (double) (SPEEDSTER_CLOUD_TRAIL_PUFFS - 1);
+            double x = current.getX() + ((previous.getX() - current.getX()) * progress);
+            double z = current.getZ() + ((previous.getZ() - current.getZ()) * progress);
+            Location puff = current.clone();
+            puff.setX(x);
+            puff.setY(current.getY());
+            puff.setZ(z);
+            spawnSpeedsterCloud(puff);
+        }
+    }
+
+    private void spawnSpeedsterCloud(Location location) {
+        if (location == null) {
+            return;
+        }
+        World world = location.getWorld();
+        if (world == null) {
+            return;
+        }
+        Location center = location.clone().add(0.0D, 0.05D, 0.0D);
+        world.spigot().playEffect(
+                center,
+                Effect.CLOUD,
+                0,
+                0,
+                SPEEDSTER_CLOUD_HORIZONTAL_RADIUS,
+                SPEEDSTER_CLOUD_VERTICAL_RADIUS,
+                SPEEDSTER_CLOUD_HORIZONTAL_RADIUS,
+                SPEEDSTER_CLOUD_SPEED,
+                SPEEDSTER_CLOUD_PARTICLES_PER_PUFF,
+                SPEEDSTER_CLOUD_VIEW_RADIUS
+        );
+    }
+
+    private void stopSpeedsterSuitEffect(Player player, UUID uuid) {
+        if (player == null || uuid == null) {
+            return;
+        }
+        Integer amplifier = speedsterSpeedAmplifiers.remove(uuid);
+        if (amplifier == null) {
+            return;
+        }
+        PotionEffect currentSpeed = activePotionEffect(player, PotionEffectType.SPEED);
+        if (!isSpeedsterSpeedEffect(currentSpeed, amplifier.intValue())) {
+            speedsterReplacedSpeedEffects.remove(uuid);
+            return;
+        }
+        player.removePotionEffect(PotionEffectType.SPEED);
+        PotionEffect replaced = speedsterReplacedSpeedEffects.remove(uuid);
+        if (replaced != null) {
+            player.addPotionEffect(replaced, true);
+            return;
+        }
+        restoreBaseHubSpeed(player);
+    }
+
+    private boolean isSpeedsterSpeedEffect(PotionEffect effect, int amplifier) {
+        return effect != null
+                && PotionEffectType.SPEED.equals(effect.getType())
+                && effect.getAmplifier() == amplifier
+                && effect.getDuration() <= SPEEDSTER_SPEED_DURATION_TICKS;
+    }
+
+    private PotionEffect activePotionEffect(Player player, PotionEffectType type) {
+        if (player == null || type == null) {
+            return null;
+        }
+        for (PotionEffect effect : player.getActivePotionEffects()) {
+            if (effect != null && type.equals(effect.getType())) {
+                return effect;
+            }
+        }
+        return null;
+    }
+
+    private void restoreBaseHubSpeed(Player player) {
+        if (player == null || plugin == null) {
+            return;
+        }
+        Rank rank = Rank.DEFAULT;
+        Profile profile = plugin.getProfile(player.getUniqueId());
+        if (profile != null && profile.getRank() != null) {
+            rank = profile.getRank();
+        } else {
+            Rank resolved = plugin.getRank(player.getUniqueId());
+            if (resolved != null) {
+                rank = resolved;
+            }
+        }
+        player.removePotionEffect(PotionEffectType.SPEED);
+        int amplifier = rank.isAtLeast(Rank.MVP_PLUS_PLUS) ? 1 : 0;
+        player.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, Integer.MAX_VALUE, amplifier, false, false), true);
+    }
+
     private int countSelectedSuitPieces(Player player, String suitId) {
         int selectedPieces = 0;
         for (CosmeticType type : LobbyCosmeticCatalog.suitPieceTypes()) {
@@ -785,28 +1009,20 @@ public class HubItemListener implements Listener {
         return Math.max(0, selectedPieces - 1);
     }
 
+    private int speedsterSpeedAmplifier(int selectedPieces) {
+        if (selectedPieces >= 4) {
+            return SPEEDSTER_FULL_SET_SPEED_AMPLIFIER;
+        }
+        return Math.max(0, selectedPieces - 1);
+    }
+
     private boolean isSuitPiece(LobbyCosmeticDefinition definition, String suitId) {
         return definition != null
                 && suitId != null
                 && suitId.equals(LobbyCosmeticCatalog.normalizeId(definition.getCategory()));
     }
 
-    private void setArmorPiece(Player player, CosmeticType type, ItemStack stack) {
-        if (player == null || type == null) {
-            return;
-        }
-        if (type == CosmeticType.SUIT_HELMET) {
-            player.getInventory().setHelmet(stack);
-        } else if (type == CosmeticType.SUIT_CHESTPLATE) {
-            player.getInventory().setChestplate(stack);
-        } else if (type == CosmeticType.SUIT_LEGGINGS) {
-            player.getInventory().setLeggings(stack);
-        } else if (type == CosmeticType.SUIT_BOOTS) {
-            player.getInventory().setBoots(stack);
-        }
-    }
-
-    private ItemStack buildSelectedSuitPiece(Player player, CosmeticType type, Color discoColor) {
+    private ItemStack buildSelectedSuitPiece(Player player, CosmeticType type) {
         LobbyCosmeticDefinition definition = selectedSuitPieceDefinition(player, type);
         if (definition == null || definition.getMaterial() == null) {
             return null;
@@ -818,13 +1034,16 @@ public class HubItemListener implements Listener {
             meta.setDisplayName(definition.getDisplayColor() + definition.getDisplayName());
             stack.setItemMeta(meta);
         }
-        Color leatherColor = isSuitPiece(definition, DISCO_SUIT_ID) ? discoColor : definition.getLeatherColor();
-        applyLeatherColor(stack, leatherColor);
+        CustomHeadUtil.applyTexture(stack, definition.getHeadTexture());
+        applyLeatherColor(stack, definition.getLeatherColor());
         return stack;
     }
 
     private LobbyCosmeticDefinition selectedSuitPieceDefinition(Player player, CosmeticType type) {
         if (player == null || plugin == null || !LobbyCosmeticCatalog.isSuitPieceType(type)) {
+            return null;
+        }
+        if (parkourSuitSuspended.contains(player.getUniqueId())) {
             return null;
         }
         Profile profile = plugin.getProfile(player.getUniqueId());

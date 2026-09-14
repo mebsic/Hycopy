@@ -6,11 +6,13 @@ import io.github.mebsic.core.service.CoreApi;
 import io.github.mebsic.core.service.LobbyCosmeticCatalog;
 import io.github.mebsic.core.service.LobbyCosmeticDefinition;
 import io.github.mebsic.core.util.CommonMessages;
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.Plugin;
 
 import java.text.NumberFormat;
 import java.util.HashMap;
@@ -113,8 +115,7 @@ public class CollectiblesSuitPiecesMenu extends Menu {
         ChatColor nameColor = unlocked ? definition.getDisplayColor() : ChatColor.RED;
         ItemStack stack = item(definition.getMaterial(), nameColor + definition.getDisplayName(), lore);
         if (stack != null) {
-            stack.setDurability(definition.getDurability());
-            CollectiblesCosmeticSupport.applyLeatherColor(stack, definition.getLeatherColor());
+            CollectiblesCosmeticSupport.applyDefinitionAppearance(stack, definition);
         }
         return selected ? GiftSupport.addGlow(stack) : stack;
     }
@@ -151,13 +152,13 @@ public class CollectiblesSuitPiecesMenu extends Menu {
                 if (coreApi.resetCosmetic(player.getUniqueId(), definition.getType())) {
                     player.sendMessage(ChatColor.GREEN + "Reset your "
                             + CollectiblesCosmeticSupport.coloredDisplayName(definition));
-                    open(player);
+                    closeAndReopen(player);
                 }
                 return;
             }
             if (coreApi.selectCosmetic(player.getUniqueId(), definition.getType(), definition.getId())) {
                 player.sendMessage(CollectiblesCosmeticSupport.selectedMessage(definition));
-                open(player);
+                closeAndReopen(player);
             }
             return;
         }
@@ -201,15 +202,25 @@ public class CollectiblesSuitPiecesMenu extends Menu {
             return;
         }
         if (!changed) {
-            player.sendMessage(ChatColor.RED + "You already have all unlocked pieces of "
-                    + CollectiblesCosmeticSupport.coloredDisplayName(suit)
-                    + ChatColor.RED + " selected!");
+            player.sendMessage(ChatColor.RED + "You don't have any suit pieces to equip!");
             return;
         }
         player.sendMessage(ChatColor.GREEN + "You equipped " + equippedPieces + " "
                 + pieceLabel(equippedPieces) + " of the "
                 + CollectiblesCosmeticSupport.coloredDisplayName(suit));
-        open(player);
+        closeAndReopen(player);
+    }
+
+    private void closeAndReopen(Player player) {
+        if (player == null) {
+            return;
+        }
+        player.closeInventory();
+        Bukkit.getScheduler().runTask((Plugin) coreApi, () -> {
+            if (player.isOnline()) {
+                open(player);
+            }
+        });
     }
 
     private String pieceLabel(int count) {

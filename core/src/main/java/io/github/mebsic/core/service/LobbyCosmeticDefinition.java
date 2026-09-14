@@ -18,6 +18,7 @@ public final class LobbyCosmeticDefinition {
     private final short durability;
     private final ChatColor displayColor;
     private final Color leatherColor;
+    private final String headTexture;
     private final String displayName;
     private final int cost;
     private final List<String> description;
@@ -31,7 +32,7 @@ public final class LobbyCosmeticDefinition {
                                    String displayName,
                                    int cost,
                                    List<String> description) {
-        this(type, id, category, material, durability, displayColor, null, displayName, cost, description);
+        this(type, id, category, material, durability, displayColor, null, "", displayName, cost, description);
     }
 
     public LobbyCosmeticDefinition(CosmeticType type,
@@ -44,6 +45,20 @@ public final class LobbyCosmeticDefinition {
                                    String displayName,
                                    int cost,
                                    List<String> description) {
+        this(type, id, category, material, durability, displayColor, leatherColor, "", displayName, cost, description);
+    }
+
+    public LobbyCosmeticDefinition(CosmeticType type,
+                                   String id,
+                                   String category,
+                                   Material material,
+                                   int durability,
+                                   ChatColor displayColor,
+                                   Color leatherColor,
+                                   String headTexture,
+                                   String displayName,
+                                   int cost,
+                                   List<String> description) {
         this.type = type;
         this.id = normalize(id);
         this.category = normalize(category);
@@ -51,6 +66,7 @@ public final class LobbyCosmeticDefinition {
         this.durability = (short) Math.max(0, durability);
         this.displayColor = displayColor == null ? ChatColor.GREEN : displayColor;
         this.leatherColor = leatherColor;
+        this.headTexture = safe(headTexture);
         this.displayName = safe(displayName);
         this.cost = Math.max(0, cost);
         this.description = immutableDescription(description);
@@ -82,6 +98,10 @@ public final class LobbyCosmeticDefinition {
 
     public Color getLeatherColor() {
         return leatherColor;
+    }
+
+    public String getHeadTexture() {
+        return headTexture;
     }
 
     public String getDisplayName() {

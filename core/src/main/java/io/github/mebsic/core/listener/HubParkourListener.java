@@ -246,6 +246,10 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
     }
 
     private UUID spawnHologramLine(Location location, String line) {
+        return spawnHologramLine(location, line, true);
+    }
+
+    private UUID spawnHologramLine(Location location, String line, boolean customNameVisible) {
         if (location == null || location.getWorld() == null) {
             return null;
         }
@@ -254,8 +258,8 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
         stand.setVisible(false);
         stand.setBasePlate(false);
         stand.setCanPickupItems(false);
-        stand.setCustomNameVisible(true);
         stand.setCustomName(line == null ? "" : line);
+        stand.setCustomNameVisible(customNameVisible);
         return stand.getUniqueId();
     }
 
@@ -263,10 +267,16 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
         if (viewer == null || location == null || location.getWorld() == null) {
             return null;
         }
-        UUID uuid = spawnHologramLine(location, line);
-        Entity entity = resolveEntity(uuid);
-        if (entity != null) {
-            hideEntityFromNonViewer(viewer.getUniqueId(), entity);
+        UUID uuid = spawnHologramLine(location, line, false);
+        if (uuid == null) {
+            return null;
+        }
+        if (!showViewerHologramLine(viewer.getUniqueId(), uuid, line)) {
+            removeEntity(uuid);
+            return null;
+        }
+        if (plugin != null) {
+            plugin.getServer().getScheduler().runTask(plugin, () -> showViewerHologramLine(viewer.getUniqueId(), uuid, line));
         }
         return uuid;
     }
@@ -377,17 +387,9 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
             if (marker == null || marker.blockLocation == null) {
                 continue;
             }
-            Entity globalStartLine = resolveEntity(marker.globalStartLineUuid);
-            if (globalStartLine != null) {
-                hideEntityFromViewer(player, globalStartLine);
-            }
-            UUID bestUuid = spawnViewerHologramLine(player, startHologramLineLocation(marker.blockLocation, 1), bestLine);
+            UUID bestUuid = spawnViewerHologramLine(player, startHologramLineLocation(marker.blockLocation, 2), bestLine);
             if (bestUuid != null) {
                 spawned.add(bestUuid);
-            }
-            UUID startUuid = spawnViewerHologramLine(player, startHologramLineLocation(marker.blockLocation, 2), marker.startLine);
-            if (startUuid != null) {
-                spawned.add(startUuid);
             }
         }
         if (!spawned.isEmpty()) {
@@ -414,44 +416,22 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
         }
     }
 
-    private void hideOtherPersonalBestHologramsFromViewer(Player viewer) {
-        if (viewer == null || !viewer.isOnline() || viewer.getUniqueId() == null) {
-            return;
+    private boolean showViewerHologramLine(UUID viewerUuid, UUID hologramUuid, String line) {
+        if (viewerUuid == null || hologramUuid == null) {
+            return false;
         }
-        UUID viewerUuid = viewer.getUniqueId();
-        for (Map.Entry<UUID, List<UUID>> entry : new ArrayList<Map.Entry<UUID, List<UUID>>>(personalBestHologramUuidsByPlayer.entrySet())) {
-            if (entry == null || entry.getKey() == null || viewerUuid.equals(entry.getKey())) {
-                continue;
-            }
-            List<UUID> hologramUuids = entry.getValue();
-            if (hologramUuids == null || hologramUuids.isEmpty()) {
-                continue;
-            }
-            for (UUID hologramUuid : new ArrayList<UUID>(hologramUuids)) {
-                Entity entity = resolveEntity(hologramUuid);
-                if (entity != null) {
-                    hideEntityFromViewer(viewer, entity);
-                }
-            }
+        Player viewer = Bukkit.getPlayer(viewerUuid);
+        if (viewer == null || !viewer.isOnline()) {
+            return false;
         }
+        Entity entity = resolveEntity(hologramUuid);
+        if (entity == null) {
+            return false;
+        }
+        return sendHologramNameMetadata(viewer, entity, line);
     }
 
-    private void hideEntityFromNonViewer(UUID viewerUuid, Entity entity) {
-        if (viewerUuid == null || entity == null) {
-            return;
-        }
-        for (Player online : Bukkit.getOnlinePlayers()) {
-            if (online == null || !online.isOnline() || online.getUniqueId() == null) {
-                continue;
-            }
-            if (viewerUuid.equals(online.getUniqueId())) {
-                continue;
-            }
-            hideEntityFromViewer(online, entity);
-        }
-    }
-
-    private boolean hideEntityFromViewer(Player viewer, Entity entity) {
+    private boolean sendHologramNameMetadata(Player viewer, Entity entity, String line) {
         if (viewer == null || entity == null) {
             return false;
         }
@@ -465,8 +445,21 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
         }
         try {
             Class<?> craftPlayerClass = Class.forName("org.bukkit.craftbukkit." + version + ".entity.CraftPlayer");
+            Class<?> craftEntityClass = Class.forName("org.bukkit.craftbukkit." + version + ".entity.CraftEntity");
+            Class<?> nmsEntityClass = Class.forName("net.minecraft.server." + version + ".Entity");
+            Class<?> dataWatcherClass = Class.forName("net.minecraft.server." + version + ".DataWatcher");
             Class<?> packetClass = Class.forName("net.minecraft.server." + version + ".Packet");
-            Class<?> destroyPacketClass = Class.forName("net.minecraft.server." + version + ".PacketPlayOutEntityDestroy");
+            Class<?> metadataPacketClass = Class.forName("net.minecraft.server." + version + ".PacketPlayOutEntityMetadata");
+
+            Object entityHandle = craftEntityClass.getMethod("getHandle").invoke(craftEntityClass.cast(entity));
+            Object dataWatcher = dataWatcherClass.getConstructor(nmsEntityClass).newInstance(entityHandle);
+            Method registerWatcherObject = dataWatcherClass.getMethod("a", int.class, Object.class);
+            registerWatcherObject.invoke(dataWatcher, 2, line == null ? "" : line);
+            registerWatcherObject.invoke(dataWatcher, 3, Byte.valueOf((byte) 1));
+
+            Object packet = metadataPacketClass
+                    .getConstructor(int.class, dataWatcherClass, boolean.class)
+                    .newInstance(entityId, dataWatcher, true);
             Object craftPlayer = craftPlayerClass.cast(viewer);
             Method getHandle = craftPlayerClass.getMethod("getHandle");
             Object handle = getHandle.invoke(craftPlayer);
@@ -477,7 +470,6 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
             if (connection == null) {
                 return false;
             }
-            Object packet = destroyPacketClass.getConstructor(int[].class).newInstance(new int[]{entityId});
             Method sendPacket = connection.getClass().getMethod("sendPacket", packetClass);
             sendPacket.invoke(connection, packet);
             return true;
@@ -682,13 +674,15 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
             return;
         }
         UUID uuid = event.getPlayer().getUniqueId();
-        for (long delay : new long[]{1L, 20L, 60L, 120L}) {
+        if (corePlugin != null) {
+            corePlugin.restoreSelectedSuitAfterParkour(event.getPlayer(), uuid);
+        }
+        for (long delay : new long[]{20L, 60L, 120L}) {
             plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
                 Player online = uuid == null ? null : Bukkit.getPlayer(uuid);
                 if (online == null || !online.isOnline()) {
                     return;
                 }
-                hideOtherPersonalBestHologramsFromViewer(online);
                 refreshPersonalBestHolograms(online);
             }, delay);
         }
@@ -908,6 +902,9 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
             run.previousProfileFlightEnabled = profile.isFlightEnabled();
         }
 
+        if (corePlugin != null) {
+            corePlugin.suspendSelectedSuitForParkour(player);
+        }
         clearPotionEffects(player);
 
         if (run.hadProfileFlightState && corePlugin != null) {
@@ -936,6 +933,9 @@ public class HubParkourListener implements Listener, HubParkourCommandHandler {
         }
         if (player != null) {
             restoreHubSpeedState(player, uuid, run);
+        }
+        if (corePlugin != null) {
+            corePlugin.restoreSelectedSuitAfterParkour(player, uuid);
         }
     }
 

@@ -29,16 +29,21 @@ import org.bukkit.event.hanging.HangingBreakByEntityEvent;
 import org.bukkit.event.player.PlayerAchievementAwardedEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.weather.ThunderChangeEvent;
 import org.bukkit.event.weather.WeatherChangeEvent;
 import org.bukkit.inventory.ItemStack;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Collections;
 import java.util.Locale;
 import java.util.Map;
 
 public class GameplayRulesListener implements Listener {
+    private static final String SPAM_KICK_REASON = "disconnect.spam";
+    private static final String FLYING_DISABLED_KICK_REASON = "Flying is not enabled on this server";
+
     private final CorePlugin plugin;
     private final ServerType serverType;
     private final boolean hungerLossEnabled;
@@ -77,7 +82,7 @@ public class GameplayRulesListener implements Listener {
         this.weatherCycleEnabled = weatherEnabled;
         boolean resolvedVanillaAchievements =
                 resolveToggle(config, "gameplay.vanillaAchievements", this.serverType, serverName, false);
-        if (shouldDisableVanillaAchievements(this.serverType)) {
+        if (isHubOrGameServer(this.serverType)) {
             resolvedVanillaAchievements = false;
         }
         this.vanillaAchievementsEnabled = resolvedVanillaAchievements;
@@ -104,7 +109,7 @@ public class GameplayRulesListener implements Listener {
     public void onJoin(PlayerJoinEvent event) {
         applyRules(event.getPlayer());
         applyVanillaAchievementRules(event.getPlayer());
-        grantDisabledServerAchievements(event.getPlayer());
+        grantDisabledServerOpenInventoryAchievement(event.getPlayer());
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
@@ -112,10 +117,30 @@ public class GameplayRulesListener implements Listener {
         if (event == null) {
             return;
         }
-        if (!shouldDisableVanillaAchievements() && vanillaAchievementsEnabled) {
+        if (!isHubOrGameServer()) {
+            if (!vanillaAchievementsEnabled) {
+                event.setCancelled(true);
+            }
+            return;
+        }
+        if (event.getAchievement() == Achievement.OPEN_INVENTORY) {
+            if (areAchievementAnnouncementsEnabled(event.getPlayer())) {
+                event.setCancelled(true);
+                grantOpenInventoryAchievementWithPacket(event.getPlayer());
+            }
             return;
         }
         event.setCancelled(true);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onKick(PlayerKickEvent event) {
+        if (event == null || !isHubOrGameServer()) {
+            return;
+        }
+        if (isCancelledGameplayKickReason(event.getReason())) {
+            event.setCancelled(true);
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
@@ -365,59 +390,72 @@ public class GameplayRulesListener implements Listener {
         if (player == null || player.getWorld() == null) {
             return;
         }
-        String value = Boolean.toString(!shouldDisableVanillaAchievements() && vanillaAchievementsEnabled);
+        String value = Boolean.toString(!isHubOrGameServer() && vanillaAchievementsEnabled);
         player.getWorld().setGameRuleValue("announceAchievements", value);
         player.getWorld().setGameRuleValue("announceAdvancements", value);
     }
 
-    private void grantDisabledServerAchievements(Player player) {
-        if (player == null || !shouldDisableVanillaAchievements()) {
+    private void grantDisabledServerOpenInventoryAchievement(Player player) {
+        if (player == null || !isHubOrGameServer() || player.hasAchievement(Achievement.OPEN_INVENTORY)) {
             return;
         }
-        silentlyGrantAchievements(player);
+        if (areAchievementAnnouncementsEnabled(player)) {
+            grantOpenInventoryAchievementWithPacket(player);
+            return;
+        }
+        player.awardAchievement(Achievement.OPEN_INVENTORY);
     }
 
     @SuppressWarnings("unchecked")
-    private void silentlyGrantAchievements(Player player) {
+    private void grantOpenInventoryAchievementWithPacket(Player player) {
         try {
-            String version = player.getServer().getClass().getPackage().getName().split("\\.")[3];
+            if (player == null || player.hasAchievement(Achievement.OPEN_INVENTORY)) {
+                return;
+            }
+            String version = resolveNmsVersion(player);
+            if (version.isEmpty()) {
+                return;
+            }
             Class<?> craftPlayerClass = Class.forName("org.bukkit.craftbukkit." + version + ".entity.CraftPlayer");
             Object handle = craftPlayerClass.getMethod("getHandle").invoke(player);
             Object statisticManager = handle.getClass().getMethod("getStatisticManager").invoke(handle);
             Class<?> craftStatisticClass = Class.forName("org.bukkit.craftbukkit." + version + ".CraftStatistic");
             Method getNmsAchievement = craftStatisticClass.getMethod("getNMSAchievement", Achievement.class);
+            Object nmsAchievement = getNmsAchievement.invoke(null, Achievement.OPEN_INVENTORY);
+            if (nmsAchievement == null) {
+                return;
+            }
             Class<?> statisticManagerClass = Class.forName("net.minecraft.server." + version + ".StatisticManager");
             Field statisticsField = statisticManagerClass.getDeclaredField("a");
             statisticsField.setAccessible(true);
             Map<Object, Object> statistics = (Map<Object, Object>) statisticsField.get(statisticManager);
             Class<?> statisticWrapperClass = Class.forName("net.minecraft.server." + version + ".StatisticWrapper");
             Method setStatisticValue = statisticWrapperClass.getMethod("a", int.class);
-            boolean changed = false;
-
-            for (Achievement achievement : Achievement.values()) {
-                if (player.hasAchievement(achievement)) {
-                    continue;
-                }
-                Object nmsAchievement = getNmsAchievement.invoke(null, achievement);
-                if (nmsAchievement == null) {
-                    continue;
-                }
-                Object statisticWrapper = statistics.get(nmsAchievement);
-                if (statisticWrapper == null) {
-                    statisticWrapper = statisticWrapperClass.getConstructor().newInstance();
-                    statistics.put(nmsAchievement, statisticWrapper);
-                }
-                setStatisticValue.invoke(statisticWrapper, 1);
-                changed = true;
+            Object statisticWrapper = statistics.get(nmsAchievement);
+            if (statisticWrapper == null) {
+                statisticWrapper = statisticWrapperClass.getConstructor().newInstance();
+                statistics.put(nmsAchievement, statisticWrapper);
             }
-
-            if (!changed) {
-                return;
-            }
-            statisticManager.getClass().getMethod("updateStatistics", handle.getClass()).invoke(statisticManager, handle);
+            setStatisticValue.invoke(statisticWrapper, 1);
+            sendAchievementStatisticPacket(version, handle, nmsAchievement);
             saveStatistics(statisticManager);
         } catch (Exception ignored) {
         }
+    }
+
+    private void sendAchievementStatisticPacket(String version, Object handle, Object nmsAchievement) throws Exception {
+        if (version == null || version.isEmpty() || handle == null || nmsAchievement == null) {
+            return;
+        }
+        Class<?> packetClass = Class.forName("net.minecraft.server." + version + ".Packet");
+        Class<?> statisticPacketClass = Class.forName("net.minecraft.server." + version + ".PacketPlayOutStatistic");
+        Object packet = statisticPacketClass.getConstructor(Map.class)
+                .newInstance(Collections.singletonMap(nmsAchievement, Integer.valueOf(1)));
+        Object connection = handle.getClass().getField("playerConnection").get(handle);
+        if (connection == null) {
+            return;
+        }
+        connection.getClass().getMethod("sendPacket", packetClass).invoke(connection, packet);
     }
 
     private void saveStatistics(Object statisticManager) {
@@ -430,12 +468,44 @@ public class GameplayRulesListener implements Listener {
         }
     }
 
-    private boolean shouldDisableVanillaAchievements() {
-        return shouldDisableVanillaAchievements(serverType);
+    private boolean areAchievementAnnouncementsEnabled(Player player) {
+        if (player == null) {
+            return true;
+        }
+        try {
+            String version = resolveNmsVersion(player);
+            if (version.isEmpty()) {
+                return true;
+            }
+            Class<?> craftServerClass = Class.forName("org.bukkit.craftbukkit." + version + ".CraftServer");
+            Object craftServer = craftServerClass.cast(player.getServer());
+            Object minecraftServer = craftServerClass.getMethod("getServer").invoke(craftServer);
+            Object enabled = minecraftServer.getClass().getMethod("aB").invoke(minecraftServer);
+            return Boolean.TRUE.equals(enabled);
+        } catch (Exception ignored) {
+            return true;
+        }
     }
 
-    private boolean shouldDisableVanillaAchievements(ServerType type) {
+    private String resolveNmsVersion(Player player) {
+        if (player == null || player.getServer() == null || player.getServer().getClass().getPackage() == null) {
+            return "";
+        }
+        String packageName = player.getServer().getClass().getPackage().getName();
+        String[] parts = packageName.split("\\.");
+        return parts.length < 4 ? "" : parts[3];
+    }
+
+    private boolean isHubOrGameServer() {
+        return isHubOrGameServer(serverType);
+    }
+
+    private boolean isHubOrGameServer(ServerType type) {
         return type != null && (type.isHub() || type.isGame());
+    }
+
+    private boolean isCancelledGameplayKickReason(String reason) {
+        return SPAM_KICK_REASON.equals(reason) || FLYING_DISABLED_KICK_REASON.equals(reason);
     }
 
     private boolean isBlockedContainerInteractionMaterial(Material material) {

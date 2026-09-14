@@ -12,12 +12,18 @@ import java.util.Locale;
 
 public final class LobbyCosmeticCatalog {
     public static final String MOVEMENT_CATEGORY = "movement";
+    public static final String PEPE_HEAD_TEXTURE =
+            "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZjFlYmM3YWFkNWE2NTZkNTg0MmQ0ODExNjdiNWI3Yjk4ZWFmOWQ5MjRjMmRiYjkzNDhhMzEyMDMzMzAyNjMifX19";
+    public static final String FLASH_HEAD_TEXTURE =
+            "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvN2Y5MjMxZTkzOTkwZTQ0MzllMWJhZDIyNzI4ODQ2ZDQ5N2Q4ZDI4NzU2NDQ2NDg2MTljOWE1Nzg4YjM3In19fQ==";
+    public static final Color FROG_ARMOR_COLOR = Color.fromRGB(0, 85, 0);
     public static final int FIRST_MOVEMENT_GADGET_COST = 40;
     public static final int SECOND_MOVEMENT_GADGET_COST = 50;
     public static final int FROG_SUIT_TOTAL_COST = 180;
-    public static final int DISCO_SUIT_TOTAL_COST = 200;
+    public static final int SPEEDSTER_SUIT_TOTAL_COST = 200;
     public static final int FROG_SUIT_PIECE_COST = FROG_SUIT_TOTAL_COST / 4;
-    public static final int DISCO_SUIT_PIECE_COST = DISCO_SUIT_TOTAL_COST / 4;
+    public static final int SPEEDSTER_SUIT_PIECE_COST = SPEEDSTER_SUIT_TOTAL_COST / 4;
+    public static final Color SPEEDSTER_ARMOR_COLOR = Color.fromRGB(85, 0, 0);
 
     private static final List<CosmeticType> SUIT_PIECE_TYPES = Collections.unmodifiableList(Arrays.asList(
             CosmeticType.SUIT_HELMET,
@@ -65,10 +71,11 @@ public final class LobbyCosmeticCatalog {
                     CosmeticType.SUIT,
                     "frog",
                     "",
-                    Material.LEATHER_HELMET,
-                    0,
+                    Material.SKULL_ITEM,
+                    3,
                     ChatColor.GOLD,
-                    Color.GREEN,
+                    null,
+                    PEPE_HEAD_TEXTURE,
                     "Frog Suit",
                     FROG_SUIT_TOTAL_COST,
                     Arrays.asList(
@@ -81,41 +88,42 @@ public final class LobbyCosmeticCatalog {
             ),
             new LobbyCosmeticDefinition(
                     CosmeticType.SUIT,
-                    "disco",
+                    "speedster",
                     "",
-                    Material.LEATHER_HELMET,
-                    0,
+                    Material.SKULL_ITEM,
+                    3,
                     ChatColor.GOLD,
-                    Color.RED,
-                    "Disco Suit",
-                    DISCO_SUIT_TOTAL_COST,
+                    null,
+                    FLASH_HEAD_TEXTURE,
+                    "Speedster Suit",
+                    SPEEDSTER_SUIT_TOTAL_COST,
                     Arrays.asList(
-                            "It was your Dad's favourite dance",
-                            "movement - bring back the boogie",
-                            "with this Disco Suit!",
+                            "Nothing moves faster than the speed",
+                            "of light... except you when you're",
+                            "wearing this Speedster Suit!",
                             "",
-                            "Full Set Ability: Changes colors when",
-                            "equipped!"
+                            "Full Set Ability: Sprint to run",
+                            "extremely fast."
                     )
             )
     ));
     private static final List<LobbyCosmeticDefinition> SUIT_PIECES = Collections.unmodifiableList(Arrays.asList(
-            suitPiece("frog", "Frog", CosmeticType.SUIT_HELMET, "Helmet", Material.LEATHER_HELMET,
-                    Color.GREEN, FROG_SUIT_PIECE_COST),
+            suitPiece("frog", "Frog", CosmeticType.SUIT_HELMET, "Helmet", Material.SKULL_ITEM,
+                    3, null, PEPE_HEAD_TEXTURE, FROG_SUIT_PIECE_COST),
             suitPiece("frog", "Frog", CosmeticType.SUIT_CHESTPLATE, "Chestplate", Material.LEATHER_CHESTPLATE,
-                    Color.GREEN, FROG_SUIT_PIECE_COST),
+                    FROG_ARMOR_COLOR, FROG_SUIT_PIECE_COST),
             suitPiece("frog", "Frog", CosmeticType.SUIT_LEGGINGS, "Leggings", Material.LEATHER_LEGGINGS,
-                    Color.GREEN, FROG_SUIT_PIECE_COST),
+                    FROG_ARMOR_COLOR, FROG_SUIT_PIECE_COST),
             suitPiece("frog", "Frog", CosmeticType.SUIT_BOOTS, "Boots", Material.LEATHER_BOOTS,
-                    Color.GREEN, FROG_SUIT_PIECE_COST),
-            suitPiece("disco", "Disco", CosmeticType.SUIT_HELMET, "Helmet", Material.LEATHER_HELMET,
-                    Color.RED, DISCO_SUIT_PIECE_COST),
-            suitPiece("disco", "Disco", CosmeticType.SUIT_CHESTPLATE, "Chestplate", Material.LEATHER_CHESTPLATE,
-                    Color.YELLOW, DISCO_SUIT_PIECE_COST),
-            suitPiece("disco", "Disco", CosmeticType.SUIT_LEGGINGS, "Leggings", Material.LEATHER_LEGGINGS,
-                    Color.BLUE, DISCO_SUIT_PIECE_COST),
-            suitPiece("disco", "Disco", CosmeticType.SUIT_BOOTS, "Boots", Material.LEATHER_BOOTS,
-                    Color.GREEN, DISCO_SUIT_PIECE_COST)
+                    FROG_ARMOR_COLOR, FROG_SUIT_PIECE_COST),
+            suitPiece("speedster", "Speedster", CosmeticType.SUIT_HELMET, "Helmet", Material.SKULL_ITEM,
+                    3, null, FLASH_HEAD_TEXTURE, SPEEDSTER_SUIT_PIECE_COST),
+            suitPiece("speedster", "Speedster", CosmeticType.SUIT_CHESTPLATE, "Chestplate", Material.LEATHER_CHESTPLATE,
+                    SPEEDSTER_ARMOR_COLOR, SPEEDSTER_SUIT_PIECE_COST),
+            suitPiece("speedster", "Speedster", CosmeticType.SUIT_LEGGINGS, "Leggings", Material.LEATHER_LEGGINGS,
+                    SPEEDSTER_ARMOR_COLOR, SPEEDSTER_SUIT_PIECE_COST),
+            suitPiece("speedster", "Speedster", CosmeticType.SUIT_BOOTS, "Boots", Material.GOLD_BOOTS,
+                    null, SPEEDSTER_SUIT_PIECE_COST)
     ));
 
     private LobbyCosmeticCatalog() {
@@ -269,6 +277,18 @@ public final class LobbyCosmeticCatalog {
                                                      Material material,
                                                      Color leatherColor,
                                                      int cost) {
+        return suitPiece(suitId, suitName, type, pieceName, material, 0, leatherColor, "", cost);
+    }
+
+    private static LobbyCosmeticDefinition suitPiece(String suitId,
+                                                     String suitName,
+                                                     CosmeticType type,
+                                                     String pieceName,
+                                                     Material material,
+                                                     int durability,
+                                                     Color leatherColor,
+                                                     String headTexture,
+                                                     int cost) {
         String normalizedSuitId = normalizeId(suitId);
         String normalizedPieceName = normalizeId(pieceName);
         return new LobbyCosmeticDefinition(
@@ -276,9 +296,10 @@ public final class LobbyCosmeticCatalog {
                 normalizedSuitId + "_" + normalizedPieceName,
                 normalizedSuitId,
                 material,
-                0,
+                durability,
                 ChatColor.GOLD,
                 leatherColor,
+                headTexture,
                 safeDisplay(suitName) + " Suit " + safeDisplay(pieceName),
                 cost,
                 Collections.<String>emptyList()

@@ -1947,6 +1947,40 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
         return LobbyCosmeticCatalog.isLobbyType(type);
     }
 
+    public void suspendSelectedSuitForParkour(Player player) {
+        if (player == null || hubItemListener == null) {
+            return;
+        }
+        Runnable suspend = () -> {
+            Player online = Bukkit.getPlayer(player.getUniqueId());
+            if (online != null && online.isOnline() && hubItemListener != null) {
+                hubItemListener.suspendSelectedSuitForParkour(online);
+            }
+        };
+        if (Bukkit.isPrimaryThread()) {
+            suspend.run();
+            return;
+        }
+        Bukkit.getScheduler().runTask(this, suspend);
+    }
+
+    public void restoreSelectedSuitAfterParkour(Player player, UUID uuid) {
+        if (uuid == null || hubItemListener == null) {
+            return;
+        }
+        Runnable restore = () -> {
+            Player online = player != null && player.isOnline() ? player : Bukkit.getPlayer(uuid);
+            if (hubItemListener != null) {
+                hubItemListener.restoreSelectedSuitAfterParkour(online, uuid);
+            }
+        };
+        if (Bukkit.isPrimaryThread()) {
+            restore.run();
+            return;
+        }
+        Bukkit.getScheduler().runTask(this, restore);
+    }
+
     private void refreshSelectedGadgetItem(UUID uuid) {
         if (uuid == null || hubItemListener == null) {
             return;

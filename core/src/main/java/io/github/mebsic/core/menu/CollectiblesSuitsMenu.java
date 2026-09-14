@@ -93,7 +93,11 @@ public class CollectiblesSuitsMenu extends Menu {
         int totalPieces = pieces.size();
         java.util.List<String> lore = new java.util.ArrayList<String>();
         if (!definition.getDescription().isEmpty()) {
-            CollectiblesCosmeticSupport.appendDescriptionLore(lore, definition, ChatColor.GREEN);
+            ChatColor descriptionColor = totalPieces > 0 && unlockedPieces >= totalPieces
+                    ? ChatColor.GREEN
+                    : ChatColor.GRAY;
+            lore.add("");
+            CollectiblesCosmeticSupport.appendDescriptionLore(lore, definition, descriptionColor);
             lore.add("");
         }
         lore.add(ChatColor.YELLOW + "Click to customize outfit!");
@@ -104,8 +108,7 @@ public class CollectiblesSuitsMenu extends Menu {
                 lore
         );
         if (stack != null) {
-            stack.setDurability(definition.getDurability());
-            CollectiblesCosmeticSupport.applyLeatherColor(stack, definition.getLeatherColor());
+            CollectiblesCosmeticSupport.applyDefinitionAppearance(stack, definition);
         }
         return stack;
     }

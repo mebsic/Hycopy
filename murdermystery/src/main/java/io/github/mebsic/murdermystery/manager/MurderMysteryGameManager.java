@@ -1091,7 +1091,7 @@ public class MurderMysteryGameManager extends GameManager {
         UUID playerUuid = player.getUniqueId();
         MysteryPotionBlockRef blockRef = MysteryPotionBlockRef.from(block);
         UUID activeUser = activeMysteryPotionUsers.get(blockRef);
-        if (activeUser != null && !activeUser.equals(playerUuid)) {
+        if (activeUser != null) {
             sendMysteryPotionInUseFeedback(player);
             return true;
         }

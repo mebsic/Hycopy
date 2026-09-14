@@ -3,13 +3,16 @@ package io.github.mebsic.core.menu;
 import io.github.mebsic.core.model.CosmeticType;
 import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.core.service.CoreApi;
+import io.github.mebsic.core.service.LobbyCosmeticCatalog;
 import io.github.mebsic.core.service.LobbyCosmeticDefinition;
 import io.github.mebsic.core.util.CommonMessages;
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.Plugin;
 
 public class CollectiblesCosmeticConfirmMenu extends Menu {
     private static final String TITLE = "Confirm";
@@ -94,7 +97,23 @@ public class CollectiblesCosmeticConfirmMenu extends Menu {
             player.closeInventory();
             return;
         }
+        if (selected && LobbyCosmeticCatalog.isSuitPieceType(type)) {
+            closeAndOpenPreviousMenu(player);
+            return;
+        }
         openPreviousMenu(player);
+    }
+
+    private void closeAndOpenPreviousMenu(Player player) {
+        if (player == null) {
+            return;
+        }
+        player.closeInventory();
+        Bukkit.getScheduler().runTask((Plugin) coreApi, () -> {
+            if (player.isOnline()) {
+                previousMenu.open(player);
+            }
+        });
     }
 
     private void openPreviousMenu(Player player) {
