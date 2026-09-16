@@ -74,6 +74,9 @@ public class CollectiblesRankConfirmMenu extends Menu {
             player.sendMessage(ChatColor.RED + CommonMessages.PROFILE_LOADING);
             return;
         }
+        if (CollectiblesRankSupport.hasHigherCurrentRank(profile, rank)) {
+            return;
+        }
         if (!CollectiblesRankSupport.isUnlocked(profile, rank)) {
             int currentDust = Math.max(0, profile.getMysteryDust());
             if (currentDust < cost) {
@@ -93,6 +96,7 @@ public class CollectiblesRankConfirmMenu extends Menu {
                     + ChatColor.GREEN + " Mystery Dust!");
         }
         applyRank(player);
+        CollectiblesCosmeticSupport.playDing(player);
         openPreviousMenu(player);
     }
 

@@ -8,6 +8,8 @@ import io.github.mebsic.core.service.LobbyCosmeticDefinition;
 import io.github.mebsic.core.util.CustomHeadUtil;
 import org.bukkit.ChatColor;
 import org.bukkit.Color;
+import org.bukkit.Sound;
+import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.LeatherArmorMeta;
@@ -21,7 +23,16 @@ import java.util.Locale;
 import java.util.Set;
 
 final class CollectiblesCosmeticSupport {
+    private static final Sound COLLECTIBLE_DING_SOUND = Sound.NOTE_PLING;
+
     private CollectiblesCosmeticSupport() {
+    }
+
+    static void playDing(Player player) {
+        if (player == null) {
+            return;
+        }
+        player.playSound(player.getLocation(), COLLECTIBLE_DING_SOUND, 1.0f, 1.0f);
     }
 
     static String unlockedLore(Profile profile, CoreApi coreApi, CosmeticType type, ChatColor countColor) {

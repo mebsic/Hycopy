@@ -142,6 +142,7 @@ public class CollectiblesRanksMenu extends Menu {
         }
         coreApi.setRank(player.getUniqueId(), rank, true);
         player.sendMessage(ChatColor.GREEN + "You are now " + CollectiblesRankSupport.rawRankName(rank));
+        CollectiblesCosmeticSupport.playDing(player);
         open(player);
     }
 

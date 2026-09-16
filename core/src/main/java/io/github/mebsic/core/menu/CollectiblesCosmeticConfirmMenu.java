@@ -92,6 +92,7 @@ public class CollectiblesCosmeticConfirmMenu extends Menu {
         boolean selected = coreApi.selectCosmetic(player.getUniqueId(), type, id);
         if (selected) {
             player.sendMessage(CollectiblesCosmeticSupport.selectedMessage(definition));
+            CollectiblesCosmeticSupport.playDing(player);
         }
         if (selected && type == CosmeticType.GADGET) {
             player.closeInventory();

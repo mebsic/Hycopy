@@ -126,6 +126,7 @@ public class CollectiblesSuitsMenu extends Menu {
         }
         if (coreApi.resetCosmetic(player.getUniqueId(), CosmeticType.SUIT)) {
             player.sendMessage(ChatColor.GREEN + "Reset your " + ChatColor.YELLOW + "Suit");
+            CollectiblesCosmeticSupport.playDing(player);
             player.closeInventory();
         }
     }

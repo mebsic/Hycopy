@@ -152,12 +152,14 @@ public class CollectiblesSuitPiecesMenu extends Menu {
                 if (coreApi.resetCosmetic(player.getUniqueId(), definition.getType())) {
                     player.sendMessage(ChatColor.GREEN + "Reset your "
                             + CollectiblesCosmeticSupport.coloredDisplayName(definition));
+                    CollectiblesCosmeticSupport.playDing(player);
                     closeAndReopen(player);
                 }
                 return;
             }
             if (coreApi.selectCosmetic(player.getUniqueId(), definition.getType(), definition.getId())) {
                 player.sendMessage(CollectiblesCosmeticSupport.selectedMessage(definition));
+                CollectiblesCosmeticSupport.playDing(player);
                 closeAndReopen(player);
             }
             return;
@@ -208,6 +210,7 @@ public class CollectiblesSuitPiecesMenu extends Menu {
         player.sendMessage(ChatColor.GREEN + "You equipped " + equippedPieces + " "
                 + pieceLabel(equippedPieces) + " of the "
                 + CollectiblesCosmeticSupport.coloredDisplayName(suit));
+        CollectiblesCosmeticSupport.playDing(player);
         closeAndReopen(player);
     }
 
@@ -233,6 +236,7 @@ public class CollectiblesSuitPiecesMenu extends Menu {
         }
         if (coreApi.resetCosmetic(player.getUniqueId(), CosmeticType.SUIT)) {
             player.sendMessage(ChatColor.GREEN + "Reset your " + ChatColor.YELLOW + "Suit");
+            CollectiblesCosmeticSupport.playDing(player);
             player.closeInventory();
         }
     }
