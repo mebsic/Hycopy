@@ -32,7 +32,7 @@ final class CollectiblesCosmeticSupport {
         if (player == null) {
             return;
         }
-        player.playSound(player.getLocation(), COLLECTIBLE_DING_SOUND, 1.0f, 1.0f);
+        player.playSound(player.getLocation(), COLLECTIBLE_DING_SOUND, 1.0f, 2.0f);
     }
 
     static String unlockedLore(Profile profile, CoreApi coreApi, CosmeticType type, ChatColor countColor) {
