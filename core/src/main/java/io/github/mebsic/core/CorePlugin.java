@@ -1359,13 +1359,15 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
     }
 
     private String statusActionBarMessage(ProfileStatus status, boolean vanished) {
+        String message = ChatColor.WHITE + "You are currently ";
         if (vanished) {
-            if (status == null || status == ProfileStatus.ONLINE) {
-                return ChatColor.RED + "VANISHED";
+            message += ChatColor.RED + "VANISHED";
+            if (status != null && status != ProfileStatus.ONLINE) {
+                message += ChatColor.WHITE + ", " + ChatColor.RED + statusActionBarLabel(status);
             }
-            return ChatColor.RED + "VANISHED" + ChatColor.WHITE + ", " + ChatColor.RED + statusActionBarLabel(status);
+            return message;
         }
-        return ChatColor.WHITE + "You are currently " + ChatColor.RED + statusActionBarLabel(status);
+        return message + ChatColor.RED + statusActionBarLabel(status);
     }
 
     private String statusActionBarLabel(ProfileStatus status) {
