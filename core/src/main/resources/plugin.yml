@@ -22,6 +22,8 @@ commands:
     usage: /rankcolor
   status:
     usage: /status <status>
+  vanish:
+    usage: /vanish
   networklevel:
     usage: /networklevel <player> <level>
   gold:

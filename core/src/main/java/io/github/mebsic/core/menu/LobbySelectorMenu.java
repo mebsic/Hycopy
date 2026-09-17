@@ -555,20 +555,20 @@ public class LobbySelectorMenu extends Menu {
             } catch (IllegalArgumentException ignored) {
                 continue;
             }
-            if (friendUuids.contains(uuid) && !isAppearOffline(uuid)) {
+            if (friendUuids.contains(uuid) && !isHiddenFromLobbySelector(uuid)) {
                 names.add(formatRankColoredFriendName(uuid, rawName.trim()));
             }
         }
         return names;
     }
 
-    private boolean isAppearOffline(UUID uuid) {
+    private boolean isHiddenFromLobbySelector(UUID uuid) {
         if (plugin == null || uuid == null) {
             return false;
         }
         Profile profile = plugin.getProfile(uuid);
         if (profile != null) {
-            return profile.getStatus() == ProfileStatus.APPEAR_OFFLINE;
+            return profile.isVanished() || profile.getStatus() == ProfileStatus.APPEAR_OFFLINE;
         }
         MongoManager mongo = plugin.getMongoManager();
         if (mongo == null) {
@@ -579,10 +579,12 @@ public class LobbySelectorMenu extends Menu {
             return false;
         }
         Document doc = profiles.find(Filters.eq("uuid", uuid.toString()))
-                .projection(new Document(MongoManager.PROFILE_STATUS_KEY, 1))
+                .projection(new Document(MongoManager.PROFILE_STATUS_KEY, 1)
+                        .append(MongoManager.PROFILE_VANISHED_KEY, 1))
                 .first();
         String status = doc == null ? null : doc.getString(MongoManager.PROFILE_STATUS_KEY);
-        return status != null
+        boolean vanished = doc != null && Boolean.TRUE.equals(doc.getBoolean(MongoManager.PROFILE_VANISHED_KEY));
+        return vanished || status != null
                 && ProfileStatus.APPEAR_OFFLINE.name().equals(status.trim().toUpperCase(Locale.ROOT));
     }
 

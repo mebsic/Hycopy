@@ -110,6 +110,7 @@ public class MongoManager {
     public static final String PROFILE_LAST_LOGIN_KEY = "lastLogin";
     public static final String PROFILE_ONLINE_KEY = "online";
     public static final String PROFILE_STATUS_KEY = "status";
+    public static final String PROFILE_VANISHED_KEY = "vanished";
 
     public static final String PROXY_SETTINGS_DOMAIN_FIELD = "domain";
     public static final String PROXY_SETTINGS_DOMAIN_DOCUMENT_ID = PROXY_SETTINGS_DOMAIN_FIELD;

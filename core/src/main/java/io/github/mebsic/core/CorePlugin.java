@@ -32,6 +32,7 @@ import io.github.mebsic.core.command.TeleportCommand;
 import io.github.mebsic.core.command.Unlock100RanksGiftedCommand;
 import io.github.mebsic.core.command.UnbanCommand;
 import io.github.mebsic.core.command.UnmuteCommand;
+import io.github.mebsic.core.command.VanishCommand;
 import io.github.mebsic.core.command.WhereAmICommand;
 import io.github.mebsic.core.listener.ChatFormatListener;
 import io.github.mebsic.core.listener.CommandBlockListener;
@@ -241,6 +242,9 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
             StatusCommand statusCommand = new StatusCommand(this);
             getCommand("status").setExecutor(statusCommand);
             getCommand("status").setTabCompleter(statusCommand);
+        }
+        if (getCommand("vanish") != null) {
+            getCommand("vanish").setExecutor(new VanishCommand(this));
         }
         if (getCommand("networklevel") != null) {
             getCommand("networklevel").setExecutor(new NetworkLevelCommand(this));
@@ -1112,6 +1116,26 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
         return true;
     }
 
+    public boolean setVanished(UUID uuid, boolean vanished) {
+        if (uuid == null || profileService == null) {
+            return false;
+        }
+        Profile profile = profileService.getProfile(uuid);
+        if (profile == null || !isMongoEnabled() || profileStore == null) {
+            return false;
+        }
+        if (!profileStore.updateVanished(uuid, vanished)) {
+            return false;
+        }
+        profile.setVanished(vanished);
+        Player player = Bukkit.getPlayer(uuid);
+        applyStatusActionBar(player, profile);
+        if (hubItemListener != null && player != null) {
+            hubItemListener.refreshVanishVisibility(player);
+        }
+        return true;
+    }
+
     private void publishStatus(UUID uuid, ProfileStatus status) {
         if (uuid == null || status == null || pubSub == null) {
             return;
@@ -1172,7 +1196,12 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
     }
 
     public void updateStatusDisplay(Player player, ProfileStatus status) {
-        applyStatusActionBar(player, status);
+        if (player == null) {
+            return;
+        }
+        Profile profile = profileService == null ? null : profileService.getProfile(player.getUniqueId());
+        boolean vanished = profile != null && profile.isVanished();
+        applyStatusActionBar(player, status, vanished);
     }
 
     public boolean setMurderMysteryTenTimesModeEnabled(UUID uuid, boolean enabled) {
@@ -1235,7 +1264,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
             applyBuildModeState(player, profile, true);
             applyHubFlightState(player, profile);
             applyHubSpeedState(player, profile.getRank());
-            applyStatusActionBar(player, profile.getStatus());
+            applyStatusActionBar(player, profile);
             if (hubItemListener != null) {
                 hubItemListener.applyProfileVisibility(profile);
                 hubItemListener.refreshCollectiblesItem(player);
@@ -1251,18 +1280,24 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
         Bukkit.getScheduler().runTask(this, applyLoadedProfileState);
     }
 
-    private void applyStatusActionBar(Player player, ProfileStatus status) {
+    private void applyStatusActionBar(Player player, Profile profile) {
+        ProfileStatus status = profile == null ? ProfileStatus.ONLINE : profile.getStatus();
+        boolean vanished = profile != null && profile.isVanished();
+        applyStatusActionBar(player, status, vanished);
+    }
+
+    private void applyStatusActionBar(Player player, ProfileStatus status, boolean vanished) {
         if (player == null || !isHubServer()) {
             return;
         }
-        if (!showsStatusActionBar(status)) {
+        if (!showsStatusActionBar(status, vanished)) {
             statusActionBarPlayers.remove(player.getUniqueId());
             ActionBarUtil.send(player, " ");
             stopStatusActionBarTaskIfIdle();
             return;
         }
         statusActionBarPlayers.add(player.getUniqueId());
-        ActionBarUtil.send(player, statusActionBarMessage(status));
+        ActionBarUtil.send(player, statusActionBarMessage(status, vanished));
         ensureStatusActionBarTask();
     }
 
@@ -1308,21 +1343,28 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
             }
             Profile profile = profileService.getProfile(uuid);
             ProfileStatus status = profile == null ? ProfileStatus.ONLINE : profile.getStatus();
-            if (!showsStatusActionBar(status)) {
+            boolean vanished = profile != null && profile.isVanished();
+            if (!showsStatusActionBar(status, vanished)) {
                 statusActionBarPlayers.remove(uuid);
                 ActionBarUtil.send(player, " ");
                 continue;
             }
-            ActionBarUtil.send(player, statusActionBarMessage(status));
+            ActionBarUtil.send(player, statusActionBarMessage(status, vanished));
         }
         stopStatusActionBarTaskIfIdle();
     }
 
-    private boolean showsStatusActionBar(ProfileStatus status) {
-        return status != null && status != ProfileStatus.ONLINE;
+    private boolean showsStatusActionBar(ProfileStatus status, boolean vanished) {
+        return vanished || (status != null && status != ProfileStatus.ONLINE);
     }
 
-    private String statusActionBarMessage(ProfileStatus status) {
+    private String statusActionBarMessage(ProfileStatus status, boolean vanished) {
+        if (vanished) {
+            if (status == null || status == ProfileStatus.ONLINE) {
+                return ChatColor.RED + "VANISHED";
+            }
+            return ChatColor.RED + "VANISHED" + ChatColor.WHITE + ", " + ChatColor.RED + statusActionBarLabel(status);
+        }
         return ChatColor.WHITE + "You are currently " + ChatColor.RED + statusActionBarLabel(status);
     }
 

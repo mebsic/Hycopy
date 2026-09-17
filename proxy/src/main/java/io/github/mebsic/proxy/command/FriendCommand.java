@@ -38,7 +38,7 @@ public class FriendCommand implements SimpleCommand {
     private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacySection();
     private static final PlainTextComponentSerializer PLAIN = PlainTextComponentSerializer.plainText();
     private static final int MAX_FRIEND_NICKNAME_LENGTH = 16;
-    private static final int LIST_PAGE_SIZE = 10;
+    private static final int LIST_PAGE_SIZE = 8;
     private static final int REQUESTS_PAGE_SIZE = 10;
     private static final long NOTIFICATION_TOGGLE_COOLDOWN_MILLIS = 5_000L;
     private static final long MILLIS_PER_MINUTE = 60_000L;

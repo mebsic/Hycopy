@@ -383,6 +383,18 @@ public class HubItemListener implements Listener {
         boolean visible = profile.isPlayerVisibilityEnabled();
         visibility.put(player.getUniqueId(), visible);
         applyVisibilityState(player, visible);
+        refreshVanishVisibility(player);
+    }
+
+    public void refreshVanishVisibility(Player target) {
+        if (target == null || !target.isOnline() || isNpcPlayer(target)) {
+            return;
+        }
+        for (Player viewer : plugin.getServer().getOnlinePlayers()) {
+            if (!viewer.equals(target)) {
+                applyPairVisibility(viewer, target);
+            }
+        }
     }
 
     public void refreshCollectiblesItem(Player player) {
@@ -1119,11 +1131,31 @@ public class HubItemListener implements Listener {
         if (viewer.equals(target)) {
             return true;
         }
+        if (isVanished(target)) {
+            return canSeeVanishedPlayers(viewer);
+        }
         if (isVisible(viewer)) {
             return true;
         }
         Set<UUID> friendUuids = getFriendUuids(viewer.getUniqueId());
         return friendUuids.contains(target.getUniqueId());
+    }
+
+    private boolean isVanished(Player player) {
+        if (plugin == null || player == null) {
+            return false;
+        }
+        Profile profile = plugin.getProfile(player.getUniqueId());
+        return profile != null && profile.isVanished();
+    }
+
+    private boolean canSeeVanishedPlayers(Player player) {
+        if (plugin == null || player == null) {
+            return false;
+        }
+        Profile profile = plugin.getProfile(player.getUniqueId());
+        Rank rank = profile == null || profile.getRank() == null ? Rank.DEFAULT : profile.getRank();
+        return rank == Rank.YOUTUBE || rank == Rank.STAFF;
     }
 
     private Set<UUID> getFriendUuids(UUID playerUuid) {

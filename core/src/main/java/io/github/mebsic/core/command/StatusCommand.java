@@ -22,8 +22,7 @@ public class StatusCommand implements TabExecutor {
             "online",
             "away",
             "busy",
-            "offline",
-            "appear"
+            "offline"
     );
     private static final List<String> APPEAR_ARGUMENT_COMPLETIONS = Collections.singletonList("offline");
 

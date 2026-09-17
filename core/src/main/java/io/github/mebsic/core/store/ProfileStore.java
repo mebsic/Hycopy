@@ -153,6 +153,10 @@ public class ProfileStore {
         if (status != null) {
             profile.setStatus(status);
         }
+        Boolean vanished = doc.getBoolean(MongoManager.PROFILE_VANISHED_KEY);
+        if (vanished != null) {
+            profile.setVanished(vanished);
+        }
         Boolean flightEnabled = doc.getBoolean("flightEnabled");
         if (flightEnabled != null) {
             profile.setFlightEnabled(flightEnabled);
@@ -383,6 +387,7 @@ public class ProfileStore {
                 .append(MongoManager.PROFILE_LAST_LOGIN_KEY, profile.getLastLogin())
                 .append(MongoManager.PROFILE_ONLINE_KEY, profile.isOnline())
                 .append(MongoManager.PROFILE_STATUS_KEY, profile.getStatus().name())
+                .append(MongoManager.PROFILE_VANISHED_KEY, profile.isVanished())
                 .append("flightEnabled", profile.isFlightEnabled())
                 .append("buildModeExpiresAt", profile.getBuildModeExpiresAt())
                 .append("playerVisibilityEnabled", profile.isPlayerVisibilityEnabled())
@@ -548,6 +553,18 @@ public class ProfileStore {
         UpdateResult result = collection.updateOne(
                 eq("uuid", uuid.toString()),
                 new Document("$set", new Document(MongoManager.PROFILE_STATUS_KEY, status.name()))
+        );
+        return result != null && result.getMatchedCount() > 0L;
+    }
+
+    public boolean updateVanished(UUID uuid, boolean vanished) {
+        if (uuid == null) {
+            return false;
+        }
+        MongoCollection<Document> collection = mongo.getProfiles();
+        UpdateResult result = collection.updateOne(
+                eq("uuid", uuid.toString()),
+                new Document("$set", new Document(MongoManager.PROFILE_VANISHED_KEY, vanished))
         );
         return result != null && result.getMatchedCount() > 0L;
     }
