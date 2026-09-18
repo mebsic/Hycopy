@@ -477,6 +477,7 @@ public class ProfileStore {
                     "stats." + MongoManager.MURDER_MYSTERY_GAME_KEY + "." + MongoManager.MURDER_MYSTERY_TEN_TIMES_MODE_ENABLED_KEY,
                     false
             );
+            update.append(MongoManager.PROFILE_VANISHED_KEY, false);
         }
         if (hasActiveSubscription != null) {
             update.append(MongoManager.PROFILE_HAS_ACTIVE_SUBSCRIPTION_KEY, hasActiveSubscription);

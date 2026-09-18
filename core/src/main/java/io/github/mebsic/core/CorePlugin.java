@@ -1040,6 +1040,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
                 }
                 if (!canUseMurderMysteryTenTimesMode(rank)) {
                     profile.setMurderMysteryTenTimesModeEnabled(false);
+                    profile.setVanished(false);
                 }
             }
         }
@@ -1059,6 +1060,10 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
             Profile refreshedProfile = profileService.getProfile(uuid);
             applyHubFlightState(player, refreshedProfile);
             applyHubSpeedState(player, rank);
+            applyStatusActionBar(player, refreshedProfile);
+            if (hubItemListener != null) {
+                hubItemListener.refreshVanishVisibility(player);
+            }
         }
         refreshBuildTablist();
     }
