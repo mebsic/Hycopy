@@ -14,27 +14,36 @@ public final class MapWorldResolverCli {
         String mongoDatabase = arg(args, 1);
         String gameType = arg(args, 2);
         String serverKind = arg(args, 3);
+        String excludedMapName = arg(args, 4);
 
         if (mongoUri.isEmpty() || mongoDatabase.isEmpty()) {
             return;
         }
 
+        boolean hubServer = serverKind.toLowerCase(Locale.ROOT).contains("hub");
         String gameKey = MapConfigStore.normalizeGameKey(gameType);
-        if (gameKey.isEmpty()) {
+        if (gameKey.isEmpty() && hubServer) {
             gameKey = MongoManager.MAP_CONFIG_DEFAULT_GAME_KEY;
         }
-        boolean hubServer = serverKind.toLowerCase(Locale.ROOT).contains("hub");
+        if (gameKey.isEmpty()) {
+            return;
+        }
 
         MongoManager mongo = null;
         try {
             mongo = new MongoManager(mongoUri, mongoDatabase);
             MapConfigStore store = new MapConfigStore(mongo);
-            store.ensureDefaults(gameKey);
 
-            String worldDirectory = store.resolveWorldDirectory(gameKey, hubServer);
-            if (worldDirectory.isEmpty() && !MongoManager.MAP_CONFIG_DEFAULT_GAME_KEY.equals(gameKey)) {
+            String worldDirectory;
+            if (hubServer) {
+                store.ensureDefaults(gameKey);
+                worldDirectory = store.resolveWorldDirectory(gameKey, true);
+            } else {
+                worldDirectory = store.resolveRandomGameWorldDirectory(gameKey, excludedMapName);
+            }
+            if (hubServer && worldDirectory.isEmpty() && !MongoManager.MAP_CONFIG_DEFAULT_GAME_KEY.equals(gameKey)) {
                 store.ensureDefaults(MongoManager.MAP_CONFIG_DEFAULT_GAME_KEY);
-                worldDirectory = store.resolveWorldDirectory(MongoManager.MAP_CONFIG_DEFAULT_GAME_KEY, hubServer);
+                worldDirectory = store.resolveWorldDirectory(MongoManager.MAP_CONFIG_DEFAULT_GAME_KEY, true);
             }
             printIfNotBlank(worldDirectory);
         } catch (Exception ignored) {

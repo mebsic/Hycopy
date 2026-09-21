@@ -3,6 +3,7 @@ set -euo pipefail
 
 DATA_DIR="${DATA_DIR:-/data}"
 MAP_ROOT="${MAP_ROOT:-/maps}"
+MAP_ROOT_DEVELOPMENT="${MAP_ROOT_DEVELOPMENT:-}"
 GAME_TYPE="${GAME_TYPE:-murdermystery}"
 MAP_NAME="${MAP_NAME:-}"
 WORLD_NAME_RAW="${WORLD_NAME:-}"
@@ -758,6 +759,7 @@ extract_world_archive() {
 }
 
 resolve_map_name_from_mongo() {
+  local excluded_map_name="${1:-}"
   local mongo_uri="${MONGO_URI:-}"
   local mongo_database="${MONGO_DATABASE:-}"
   local core_jar="${DATA_DIR}/plugins/Hycopy.jar"
@@ -778,7 +780,7 @@ resolve_map_name_from_mongo() {
 
   resolved="$(
     java -cp "${core_jar}" io.github.mebsic.core.tool.MapWorldResolverCli \
-      "${mongo_uri}" "${mongo_database}" "${GAME_TYPE}" "${SERVER_KIND}" 2>/dev/null || true
+      "${mongo_uri}" "${mongo_database}" "${GAME_TYPE}" "${SERVER_KIND}" "${excluded_map_name}" 2>/dev/null || true
   )"
   resolved="${resolved//$'\r'/}"
   resolved="${resolved//$'\n'/}"
@@ -789,8 +791,34 @@ resolve_map_name_from_mongo() {
 
 stage_required_runtime_plugins
 
+next_map_selection_file="${DATA_DIR}/.hycopy-next-map"
+staged_map_selection="false"
+if [[ -z "${MAP_NAME}" && "${SERVER_KIND,,}" == "game" && -f "${next_map_selection_file}" ]]; then
+  pending_map_name="$(head -n 1 "${next_map_selection_file}" 2>/dev/null || true)"
+  pending_map_name="${pending_map_name//$'\r'/}"
+  pending_map_name="${pending_map_name//$'\n'/}"
+  if [[ -z "${pending_map_name}" || "${pending_map_name}" == */* \
+      || "${pending_map_name}" == "." || "${pending_map_name}" == ".." ]] \
+      || is_placeholder_map_name "${pending_map_name}"; then
+    echo "[bootstrap] Invalid staged game map selection; refusing to use a fallback map." >&2
+    exit 1
+  fi
+  MAP_NAME="${pending_map_name}"
+  staged_map_selection="true"
+  echo "[bootstrap] Using game-end map selection ${GAME_TYPE}/${MAP_NAME}."
+fi
+
 if [[ -z "${MAP_NAME}" && "${SERVER_KIND,,}" != "build" ]]; then
-  resolved_map_name="$(resolve_map_name_from_mongo)"
+  excluded_map_name=""
+  if [[ "${SERVER_KIND,,}" == "game" ]]; then
+    existing_level_name="$(read_existing_level_name)"
+    data_world_dir="${DATA_DIR}/${WORLD_NAME}"
+    if [[ -n "${existing_level_name}" ]]; then
+      data_world_dir="${DATA_DIR}/${existing_level_name}"
+    fi
+    excluded_map_name="$(resolve_map_name_from_data_world "${data_world_dir}")"
+  fi
+  resolved_map_name="$(resolve_map_name_from_mongo "${excluded_map_name}")"
   if [[ -n "${resolved_map_name}" ]] && ! is_placeholder_map_name "${resolved_map_name}"; then
     MAP_NAME="${resolved_map_name}"
     if [[ "${AUTO_WORLD_NAME_FROM_MAP}" == "true" ]]; then
@@ -800,6 +828,10 @@ if [[ -z "${MAP_NAME}" && "${SERVER_KIND,,}" != "build" ]]; then
     fi
     echo "[bootstrap] Resolved map ${GAME_TYPE}/${MAP_NAME} for server kind ${SERVER_KIND}."
   else
+    if [[ "${SERVER_KIND,,}" == "game" ]]; then
+      echo "[bootstrap] No valid map found in gameTypes.${GAME_TYPE}.rotation; refusing to use a fallback map." >&2
+      exit 1
+    fi
     if [[ -n "${resolved_map_name}" ]]; then
       echo "[bootstrap] Ignoring placeholder Mongo map name ${resolved_map_name}; selecting concrete map."
     fi
@@ -835,34 +867,42 @@ fi
 
 if [[ "${SERVER_KIND,,}" == "build" ]]; then
   preload_build_world_templates "${MAP_ROOT}" "${DATA_DIR}" "${FORCE_MAP_COPY}"
+  if [[ -n "${MAP_ROOT_DEVELOPMENT}" && "${MAP_ROOT_DEVELOPMENT}" != "${MAP_ROOT}" ]]; then
+    preload_build_world_templates "${MAP_ROOT_DEVELOPMENT}" "${DATA_DIR}" "${FORCE_MAP_COPY}"
+  fi
 fi
 
 if [[ -n "${MAP_NAME}" ]]; then
   map_game_root="${MAP_ROOT}/${GAME_TYPE}"
+  if [[ "${SERVER_KIND,,}" == "game" \
+      && ( "${MAP_NAME}" == */* || "${MAP_NAME}" == "." || "${MAP_NAME}" == ".." ) ]]; then
+    echo "[bootstrap] Invalid game map directory name ${MAP_NAME}; refusing to use a fallback map." >&2
+    exit 1
+  fi
   if [[ "${SERVER_KIND,,}" != "build" ]] && is_placeholder_map_name "${MAP_NAME}"; then
+    if [[ "${SERVER_KIND,,}" == "game" ]]; then
+      echo "[bootstrap] Game map selection ${MAP_NAME} is a placeholder; refusing to use a fallback map." >&2
+      exit 1
+    fi
     echo "[bootstrap] MAP_NAME=${MAP_NAME} is a placeholder; selecting a concrete map directory."
     placeholder_source_map="$(resolve_map_source_dir "${map_game_root}" "" "${SERVER_KIND}")"
     if [[ -n "${placeholder_source_map}" ]]; then
       MAP_NAME="$(basename "${placeholder_source_map}")"
     fi
   fi
-  source_map="$(resolve_map_source_dir "${map_game_root}" "${MAP_NAME}" "${SERVER_KIND}")"
-  if [[ -z "${source_map}" ]]; then
+  if [[ "${SERVER_KIND,,}" == "game" ]]; then
     source_map="${map_game_root}/${MAP_NAME}"
+  else
+    source_map="$(resolve_map_source_dir "${map_game_root}" "${MAP_NAME}" "${SERVER_KIND}")"
+    if [[ -z "${source_map}" ]]; then
+      source_map="${map_game_root}/${MAP_NAME}"
+    fi
   fi
   if [[ "${SERVER_KIND,,}" == "game" ]]; then
     resolved_map_name="$(basename "${source_map}")"
     if [[ ! -d "${source_map}" ]] || is_hub_map_name "${resolved_map_name}"; then
-      fallback_source_map="$(resolve_map_source_dir "${map_game_root}" "" "game")"
-      fallback_map_name="$(basename "${fallback_source_map}")"
-      if [[ -n "${fallback_source_map}" && -d "${fallback_source_map}" ]] && ! is_hub_map_name "${fallback_map_name}"; then
-        if [[ ! -d "${source_map}" ]]; then
-          echo "[bootstrap] Requested game map ${GAME_TYPE}/${MAP_NAME} not found; using ${GAME_TYPE}/${fallback_map_name}."
-        else
-          echo "[bootstrap] Requested game map ${GAME_TYPE}/${MAP_NAME} resolved to hub map ${resolved_map_name}; using ${GAME_TYPE}/${fallback_map_name}."
-        fi
-        source_map="${fallback_source_map}"
-      fi
+      echo "[bootstrap] Selected game map ${GAME_TYPE}/${MAP_NAME} is missing or resolves to a hub map; refusing to use a fallback map." >&2
+      exit 1
     fi
   fi
   resolved_map_name="$(basename "${source_map}")"
@@ -887,12 +927,19 @@ if [[ -n "${MAP_NAME}" ]]; then
     world_template_dir="$(resolve_world_template_dir "${source_map}")"
     if [[ -z "${world_template_dir}" ]]; then
       echo "[bootstrap] Map directory ${source_map} does not look like a world root (missing level.dat/region)." >&2
+      if [[ "${SERVER_KIND,,}" == "game" ]]; then
+        exit 1
+      fi
     fi
     modern_world_format="false"
     if [[ -n "${world_template_dir}" && ( -d "${world_template_dir}/entities" || -d "${world_template_dir}/poi" ) ]]; then
       modern_world_format="true"
     fi
     if [[ "${legacy_paper}" == "true" && "${modern_world_format}" == "true" ]]; then
+      if [[ "${SERVER_KIND,,}" == "game" ]]; then
+        echo "[bootstrap] Selected game map is incompatible with Paper ${paper_version:-1.8.x}; refusing to generate a fallback world." >&2
+        exit 1
+      fi
       echo "[bootstrap] Skipping map ${GAME_TYPE}/${MAP_NAME}: appears to be modern world format, incompatible with Paper ${paper_version:-1.8.x}."
       echo "[bootstrap] Starting with a freshly generated ${WORLD_NAME} world instead."
     elif [[ -n "${world_template_dir}" ]]; then
@@ -904,14 +951,30 @@ if [[ -n "${MAP_NAME}" ]]; then
       target_world_dir="${DATA_DIR}/${target_world_name}"
       if apply_world_template_if_needed "${world_template_dir}" "${target_world_dir}" "${FORCE_MAP_COPY}" "${map_identifier}" "${MAP_APPLY_MODE}"; then
         LEVEL_NAME="${target_world_name}"
+        if [[ "${staged_map_selection}" == "true" ]]; then
+          rm -f "${next_map_selection_file}"
+          staged_map_selection="false"
+        fi
         echo "[bootstrap] Using level-name=${LEVEL_NAME} from map directory ${map_identifier} (mode=${MAP_APPLY_MODE})."
       else
+        if [[ "${SERVER_KIND,,}" == "game" ]]; then
+          echo "[bootstrap] Failed to apply selected game map; refusing to generate a fallback world." >&2
+          exit 1
+        fi
         echo "[bootstrap] Failed to apply map template from ${world_template_dir}! Starting with generated ${WORLD_NAME} world." >&2
       fi
     else
+      if [[ "${SERVER_KIND,,}" == "game" ]]; then
+        echo "[bootstrap] Selected game map has no usable world template; refusing to generate a fallback world." >&2
+        exit 1
+      fi
       echo "[bootstrap] Starting with a freshly generated ${WORLD_NAME} world instead."
     fi
   else
+    if [[ "${SERVER_KIND,,}" == "game" ]]; then
+      echo "[bootstrap] Selected game map directory disappeared before it could be applied." >&2
+      exit 1
+    fi
     echo "[bootstrap] Map directory not found: ${source_map}" >&2
   fi
 fi

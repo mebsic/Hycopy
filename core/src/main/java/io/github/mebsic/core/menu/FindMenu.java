@@ -5,6 +5,7 @@ import com.mongodb.client.model.Filters;
 import io.github.mebsic.core.CorePlugin;
 import io.github.mebsic.core.manager.MongoManager;
 import io.github.mebsic.core.model.Rank;
+import io.github.mebsic.core.server.ServerType;
 import io.github.mebsic.core.util.HubMessageUtil;
 import io.github.mebsic.core.util.HycopyExperienceUtil;
 import io.github.mebsic.core.util.RankFormatUtil;
@@ -335,10 +336,11 @@ public class FindMenu extends Menu {
         }
         Map<UUID, FindPlayer> players = new LinkedHashMap<UUID, FindPlayer>();
         String group = safeString(plugin.getConfig().getString("server.group", ""));
+        boolean currentServerIsBuild = plugin.getServerType() != null && plugin.getServerType().isBuild();
         int staleSeconds = Math.max(0, plugin.getConfig().getInt("registry.staleSeconds", 20));
         long now = System.currentTimeMillis();
         for (Document doc : registry.find()) {
-            if (!isUsableServerDocument(doc, group, staleSeconds, now)) {
+            if (!isUsableServerDocument(doc, group, currentServerIsBuild, staleSeconds, now)) {
                 continue;
             }
             addPlayersFromServerDocument(players, doc);
@@ -347,11 +349,19 @@ public class FindMenu extends Menu {
         return players;
     }
 
-    private static boolean isUsableServerDocument(Document doc, String group, int staleSeconds, long now) {
+    private static boolean isUsableServerDocument(Document doc,
+                                                   String group,
+                                                   boolean currentServerIsBuild,
+                                                   int staleSeconds,
+                                                   long now) {
         if (doc == null) {
             return false;
         }
-        if (!group.isEmpty() && !group.equalsIgnoreCase(safeString(doc.getString("group")))) {
+        boolean buildServer = ServerType.fromString(doc.getString("type")).isBuild();
+        if (!currentServerIsBuild
+                && !buildServer
+                && !group.isEmpty()
+                && !group.equalsIgnoreCase(safeString(doc.getString("group")))) {
             return false;
         }
         if (!"online".equalsIgnoreCase(safeString(doc.getString("status")))) {

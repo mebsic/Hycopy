@@ -11,10 +11,13 @@ import com.mongodb.client.model.UpdateOptions;
 import io.github.mebsic.core.manager.MongoManager;
 import org.bson.Document;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 
 import static com.mongodb.client.model.Filters.eq;
 
@@ -114,6 +117,75 @@ public class MapConfigStore {
 
         saveRoot(key, root);
         return true;
+    }
+
+    public String resolveRandomGameWorldDirectory(String gameKey, String excludedMapName) {
+        String key = normalizeGameKey(gameKey);
+        if (key.isEmpty()) {
+            return "";
+        }
+        JsonObject root = loadRoot(key);
+        if (root == null) {
+            return "";
+        }
+        JsonObject gameTypes = child(root, "gameTypes");
+        JsonObject section = child(gameTypes, key);
+        if (section == null) {
+            return "";
+        }
+
+        List<String> candidates = gameRotationCandidates(section);
+        if (candidates.size() > 1) {
+            String excluded = safeText(excludedMapName);
+            for (int i = candidates.size() - 1; i >= 0; i--) {
+                if (excluded.equalsIgnoreCase(candidates.get(i))) {
+                    candidates.remove(i);
+                }
+            }
+        }
+        if (candidates.isEmpty()) {
+            return "";
+        }
+        return candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
+    }
+
+    private List<String> gameRotationCandidates(JsonObject section) {
+        List<String> candidates = new ArrayList<>();
+        JsonElement mapsRaw = section == null ? null : section.get("maps");
+        JsonArray maps = mapsRaw != null && mapsRaw.isJsonArray() ? mapsRaw.getAsJsonArray() : null;
+        JsonElement rotationRaw = section == null ? null : section.get("rotation");
+
+        if (rotationRaw != null && rotationRaw.isJsonArray()) {
+            for (JsonElement entry : rotationRaw.getAsJsonArray()) {
+                addGameRotationCandidate(candidates, maps, safeText(entry));
+            }
+        }
+        return candidates;
+    }
+
+    private void addGameRotationCandidate(List<String> candidates, JsonArray maps, String configuredName) {
+        String candidate = safeText(configuredName);
+        if (maps != null) {
+            JsonObject map = findMapByCandidate(maps, candidate);
+            if (map != null) {
+                String worldDirectory = safeText(map.get("worldDirectory"));
+                candidate = worldDirectory.isEmpty() ? safeText(map.get("name")) : worldDirectory;
+            }
+        }
+        addUniqueGameMap(candidates, candidate);
+    }
+
+    private void addUniqueGameMap(List<String> candidates, String candidate) {
+        String resolved = safeText(candidate);
+        if (resolved.isEmpty() || isPlaceholderMapName(resolved) || !matchesServerKind(resolved, false)) {
+            return;
+        }
+        for (String existing : candidates) {
+            if (resolved.equalsIgnoreCase(existing)) {
+                return;
+            }
+        }
+        candidates.add(resolved);
     }
 
     private void ensureLocationCoordinateDefaults(String gameKey) {

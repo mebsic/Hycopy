@@ -38,6 +38,7 @@ import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.event.player.PlayerItemHeldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
+import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerPickupItemEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
@@ -61,6 +62,19 @@ import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 public class MurderMysteryListener implements Listener {
+    private enum DeathType {
+        DROWNING("You drowned!"),
+        LAVA("You took a swim in lava!"),
+        FELL_OFF_MAP("You fell off the map!"),
+        END_PORTAL("What were you expecting?");
+
+        private final String message;
+
+        DeathType(String message) {
+            this.message = message;
+        }
+    }
+
     private static final String KNIFE_NAME = "Knife";
     private static final String KNIFE_LORE = "Use your Knife to kill players.";
     private static final String PROJECTILE_LAUNCH_X_META = "murdermystery-launch-x";
@@ -196,6 +210,24 @@ public class MurderMysteryListener implements Listener {
             queueService.handleQuit(event.getPlayer());
         } else {
             gameManager.handleQuit(event.getPlayer());
+        }
+    }
+
+    @EventHandler
+    public void onMove(PlayerMoveEvent event) {
+        Player player = event.getPlayer();
+        Location to = event.getTo();
+        if (!gameManager.isInGame(player) || gameManager.getState() != GameState.IN_GAME || to == null) {
+            return;
+        }
+        if (to.getY() < 0.0D) {
+            event.setCancelled(true);
+            handleDeathType(player, DeathType.FELL_OFF_MAP);
+            return;
+        }
+        if (to.getBlock().getType() == Material.ENDER_PORTAL) {
+            event.setCancelled(true);
+            handleDeathType(player, DeathType.END_PORTAL);
         }
     }
 
@@ -627,25 +659,32 @@ public class MurderMysteryListener implements Listener {
         if (event == null || player == null) {
             return false;
         }
-        String deathMessage = null;
-        if (event.getCause() == EntityDamageEvent.DamageCause.DROWNING) {
-            player.setRemainingAir(player.getMaximumAir());
-            deathMessage = "You drowned!";
-        } else if (event.getCause() == EntityDamageEvent.DamageCause.LAVA) {
-            deathMessage = "You fell into lava!";
-        } else if (event.getCause() == EntityDamageEvent.DamageCause.VOID) {
-            deathMessage = "You fell into the void!";
-        }
-        if (deathMessage == null) {
-            return false;
+        DeathType deathType;
+        switch (event.getCause()) {
+            case DROWNING:
+                player.setRemainingAir(player.getMaximumAir());
+                deathType = DeathType.DROWNING;
+                break;
+            case LAVA:
+                deathType = DeathType.LAVA;
+                break;
+            case VOID:
+                deathType = DeathType.FELL_OFF_MAP;
+                break;
+            default:
+                return false;
         }
         event.setCancelled(true);
+        handleDeathType(player, deathType);
+        return true;
+    }
+
+    private void handleDeathType(Player player, DeathType deathType) {
         MurderMysteryGamePlayer mmPlayer = gameManager.getMurderMysteryPlayer(player);
         if (mmPlayer == null || !mmPlayer.isAlive()) {
-            return true;
+            return;
         }
-        gameManager.handleDeath(player, null, deathMessage);
-        return true;
+        gameManager.handleDeath(player, null, deathType.message);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)

@@ -47,6 +47,10 @@ import org.bukkit.scheduler.BukkitTask;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -68,6 +72,7 @@ public class GameManager {
     private static final String TRANSFER_FAILED_MESSAGE = ChatColor.RED + "Could not send you to another server! Please try again later.";
     private static final String MAP_CONFIG_UPDATE_CHANNEL = "map_config_update";
     private static final String MAP_CONFIG_UPDATE_PREFIX = "maps:";
+    private static final String NEXT_MAP_SELECTION_FILE = ".hycopy-next-map";
     private static final int DEFAULT_MAP_CONFIG_RELOAD_POLL_SECONDS = 5;
     private static final int FORCE_START_MIN_PLAYERS = 2;
     private static final double MYSTERY_DUST_REWARD_CHANCE = 0.40D;
@@ -1016,7 +1021,7 @@ public class GameManager {
             @Override
             public void run() {
                 if (transferAfterEnd) {
-                    rotateToNextMapAndPersistActiveSelection();
+                    stageNextMapForRestart();
                     restartServerAndRequeuePlayers();
                     return;
                 }
@@ -1024,7 +1029,7 @@ public class GameManager {
                 state = GameState.WAITING;
                 endingScoreboardMapName = "";
                 publishStateToCore();
-                rotateToNextMapAndPersistActiveSelection();
+                mapManager.rotateToNextMap();
                 for (UUID uuid : players.keySet()) {
                     Player player = Bukkit.getPlayer(uuid);
                     if (player != null) {
@@ -1037,33 +1042,22 @@ public class GameManager {
         }.runTaskLater(plugin, resetDelayTicks);
     }
 
-    private void rotateToNextMapAndPersistActiveSelection() {
-        if (mapManager == null) {
+    private void stageNextMapForRestart() {
+        if (state != GameState.ENDING || mapManager == null || plugin == null) {
             return;
         }
         mapManager.rotateToNextMap();
-
-        if (!isGameServer() || plugin == null) {
-            return;
-        }
         GameMap active = mapManager.getActiveMap();
         String activeName = active == null ? "" : safeString(active.getName());
         if (activeName.isEmpty()) {
             return;
         }
-        MongoManager mongo = plugin.getMongoManager();
-        if (mongo == null) {
-            return;
-        }
-
-        String gameKey = resolveMapConfigGameKey();
+        Path selectionFile = plugin.getServer().getWorldContainer().toPath().resolve(NEXT_MAP_SELECTION_FILE);
         try {
-            MapConfigStore store = new MapConfigStore(mongo);
-            store.ensureDefaults(gameKey);
-            store.setActiveMap(gameKey, activeName);
-        } catch (Exception ex) {
-            plugin.getLogger().warning("Failed to persist rotated map '" + activeName + "' for key '"
-                    + gameKey + "'!\n" + ex.getMessage());
+            Files.write(selectionFile, activeName.getBytes(StandardCharsets.UTF_8));
+        } catch (IOException ex) {
+            plugin.getLogger().warning("Failed to stage next map '" + activeName + "' for restart!\n"
+                    + ex.getMessage());
         }
     }
 

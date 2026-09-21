@@ -15,18 +15,17 @@ import org.bukkit.World;
 import org.bukkit.inventory.ItemStack;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class MapManager {
     private final CorePlugin plugin;
@@ -37,7 +36,6 @@ public class MapManager {
     private String activeMapName;
     private Location pregameSpawn;
     private List<String> rotation;
-    private int rotationIndex;
 
     public MapManager(CorePlugin plugin) {
         this.plugin = plugin;
@@ -47,7 +45,6 @@ public class MapManager {
         this.configuredMapDisplayName = "";
         this.pregameSpawn = null;
         this.rotation = new ArrayList<>();
-        this.rotationIndex = 0;
     }
 
     public void loadMaps() {
@@ -133,12 +130,10 @@ public class MapManager {
             String preserved = firstMatchingMapForServerKind(previousActiveMap);
             if (preserved != null && !isPlaceholderMapName(preserved)) {
                 this.activeMapName = preserved;
-                syncRotationIndex();
                 return;
             }
         }
         this.activeMapName = preferredActiveMap;
-        syncRotationIndex();
     }
 
     public void saveMaps() {
@@ -229,11 +224,22 @@ public class MapManager {
     }
 
     public void rotateToNextMap() {
-        if (rotation.isEmpty()) {
+        List<String> eligibleMaps = eligibleRotationMaps();
+        if (eligibleMaps.isEmpty()) {
             return;
         }
-        rotationIndex = (rotationIndex + 1) % rotation.size();
-        String candidate = safeText(rotation.get(rotationIndex));
+
+        String current = safeText(activeMapName);
+        List<String> candidates = new ArrayList<>();
+        for (String mapName : eligibleMaps) {
+            if (!current.equalsIgnoreCase(mapName)) {
+                candidates.add(mapName);
+            }
+        }
+        if (candidates.isEmpty()) {
+            candidates = eligibleMaps;
+        }
+        String candidate = candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
         String resolved = resolveCanonicalMapName(candidate);
         activeMapName = resolved == null ? candidate : resolved;
     }
@@ -298,14 +304,11 @@ public class MapManager {
         if (root == null) {
             return null;
         }
-
-        for (String key : resolveGameTypeKeys()) {
-            MapConfig scoped = parseScopedMapConfig(root, key, gson);
-            if (scoped != null) {
-                return scoped;
-            }
+        String gameKey = MapConfigStore.normalizeGameKey(plugin.getConfig().getString("server.group", ""));
+        if (gameKey.isEmpty()) {
+            return null;
         }
-        return gson.fromJson(root, MapConfig.class);
+        return parseScopedMapConfig(root, gameKey, gson);
     }
 
     private JsonObject loadRootFromMongo() {
@@ -314,16 +317,10 @@ public class MapManager {
         }
         String gameKey = MapConfigStore.normalizeGameKey(plugin.getConfig().getString("server.group", ""));
         if (gameKey.isEmpty()) {
-            gameKey = MongoManager.MAP_CONFIG_DEFAULT_GAME_KEY;
+            return null;
         }
         MapConfigStore store = new MapConfigStore(plugin.getMongoManager());
-        store.ensureDefaults(gameKey);
-        JsonObject root = store.loadRoot(gameKey);
-        if (root == null && !MongoManager.MAP_CONFIG_DEFAULT_GAME_KEY.equals(gameKey)) {
-            store.ensureDefaults(MongoManager.MAP_CONFIG_DEFAULT_GAME_KEY);
-            root = store.loadRoot(MongoManager.MAP_CONFIG_DEFAULT_GAME_KEY);
-        }
-        return root;
+        return store.loadRoot(gameKey);
     }
 
     private MapConfig parseScopedMapConfig(JsonObject root, String gameTypeKey, Gson gson) {
@@ -332,9 +329,6 @@ public class MapManager {
         }
         JsonObject gameTypes = child(root, "gameTypes");
         JsonObject section = child(gameTypes, gameTypeKey);
-        if (section == null) {
-            section = child(root, gameTypeKey);
-        }
         if (section == null) {
             return null;
         }
@@ -350,44 +344,6 @@ public class MapManager {
             return null;
         }
         return value.getAsJsonObject();
-    }
-
-    private List<String> resolveGameTypeKeys() {
-        Set<String> keys = new LinkedHashSet<>();
-
-        String group = plugin.getConfig().getString("server.group", "");
-        addGameTypeKeyVariants(keys, group);
-
-        ServerType type = plugin.getServerType() == null ? ServerType.UNKNOWN : plugin.getServerType();
-        String typeName = type.name();
-        if (typeName.endsWith("_HUB")) {
-            typeName = typeName.substring(0, typeName.length() - "_HUB".length());
-        }
-        addGameTypeKeyVariants(keys, typeName);
-        addGameTypeKeyVariants(keys, type.getGameTypeDisplayName());
-        addGameTypeKeyVariants(keys, MongoManager.MURDER_MYSTERY_GAME_KEY);
-
-        return new ArrayList<>(keys);
-    }
-
-    private void addGameTypeKeyVariants(Set<String> keys, String raw) {
-        if (keys == null || raw == null) {
-            return;
-        }
-        String trimmed = raw.trim();
-        if (trimmed.isEmpty()) {
-            return;
-        }
-        keys.add(trimmed);
-        keys.add(trimmed.toLowerCase(Locale.ROOT));
-
-        String normalized = trimmed.toLowerCase(Locale.ROOT).replace(' ', '_').replace('-', '_');
-        keys.add(normalized);
-
-        String compact = normalized.replace("_", "");
-        if (!compact.isEmpty()) {
-            keys.add(compact);
-        }
     }
 
     private Location toLocation(LocationEntry entry) {
@@ -612,29 +568,19 @@ public class MapManager {
         return "";
     }
 
-    private void syncRotationIndex() {
-        if (rotation == null || rotation.isEmpty()) {
-            rotationIndex = 0;
-            return;
+    private List<String> eligibleRotationMaps() {
+        List<String> eligible = new ArrayList<>();
+        if (rotation == null) {
+            return eligible;
         }
-        String current = safeText(activeMapName);
-        if (current.isEmpty()) {
-            rotationIndex = 0;
-            return;
-        }
-        for (int i = 0; i < rotation.size(); i++) {
-            String candidate = safeText(rotation.get(i));
-            String resolvedCandidate = resolveCanonicalMapName(candidate);
-            if (!safeText(resolvedCandidate).isEmpty() && safeText(resolvedCandidate).equalsIgnoreCase(current)) {
-                rotationIndex = i;
-                return;
+        for (String configured : rotation) {
+            String resolved = firstMatchingMapForServerKind(configured);
+            if (resolved == null || isPlaceholderMapName(resolved) || containsIgnoreCase(eligible, resolved)) {
+                continue;
             }
-            if (candidate.equalsIgnoreCase(current)) {
-                rotationIndex = i;
-                return;
-            }
+            eligible.add(resolved);
         }
-        rotationIndex = 0;
+        return eligible;
     }
 
     private String firstMatchingMapForServerKind(String mapName) {
