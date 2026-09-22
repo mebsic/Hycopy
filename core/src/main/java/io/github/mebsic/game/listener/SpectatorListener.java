@@ -20,6 +20,7 @@ import org.bson.Document;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.GameMode;
+import org.bukkit.Location;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -44,13 +45,13 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ThreadLocalRandom;
 
 public class SpectatorListener implements Listener {
     private static final String CHANNEL = "BungeeCord";
     private static final String PLAY_AGAIN_INTENT_CHANNEL = "hycopy:playagain";
     private static final String DEAD_CHAT_PREFIX = ChatColor.GRAY + "[DEAD CHAT] ";
     private static final long FOLLOW_ACTION_BAR_INTERVAL_TICKS = 1L;
+    private static final double AUTO_TELEPORT_RANGE = 10.0D;
     private static final long TARGET_LOST_ACTION_BAR_MILLIS = 3000L;
     private static final String ACTION_BAR_TARGET_PREFIX = ChatColor.GRAY + "Target: ";
     private static final String ACTION_BAR_TARGET_NAME_STYLE = ChatColor.GREEN.toString() + ChatColor.BOLD;
@@ -75,6 +76,7 @@ public class SpectatorListener implements Listener {
     private final SpectatorTeleporterMenu teleporterMenu;
     private final SpectatorSettingsMenu settingsMenu;
     private final Map<UUID, FollowState> followStates;
+    private final Map<UUID, UUID> autoTeleportTargets;
     private BukkitTask followActionBarTask;
 
     public SpectatorListener(CorePlugin plugin, GameManager gameManager) {
@@ -87,6 +89,7 @@ public class SpectatorListener implements Listener {
         this.teleporterMenu = new SpectatorTeleporterMenu(plugin, gameManager, this::handleTeleporterSelection);
         this.settingsMenu = new SpectatorSettingsMenu(plugin, gameManager);
         this.followStates = new ConcurrentHashMap<>();
+        this.autoTeleportTargets = new ConcurrentHashMap<>();
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
@@ -150,6 +153,7 @@ public class SpectatorListener implements Listener {
         }
         UUID quitting = event.getPlayer().getUniqueId();
         removeFollowEntry(quitting);
+        removeAutoTeleportEntry(quitting);
         markTargetLostForFollowers(quitting);
         teleporterMenu.clear(event.getPlayer());
     }
@@ -352,11 +356,17 @@ public class SpectatorListener implements Listener {
     }
 
     private void teleportToTarget(Player spectator, Player target) {
-        if (spectator == null || target == null) {
+        if (spectator == null || !isAliveTarget(target)) {
             return;
         }
         if (target.getLocation() != null) {
             spectator.teleport(target.getLocation());
+        }
+        if (shouldAutoTeleport(spectator)) {
+            autoTeleportTargets.put(spectator.getUniqueId(), target.getUniqueId());
+            ensureFollowActionBarTask();
+        } else {
+            removeAutoTeleportEntry(spectator.getUniqueId());
         }
         spectator.sendMessage(SPECTATE_MESSAGE_PREFIX + target.getName() + SPECTATE_MESSAGE_SUFFIX);
     }
@@ -367,6 +377,7 @@ public class SpectatorListener implements Listener {
         }
         spectator.closeInventory();
         teleporterMenu.clear(spectator);
+        removeAutoTeleportEntry(spectator.getUniqueId());
         spectator.setGameMode(GameMode.SPECTATOR);
         setSpectatorTarget(spectator, target);
         followStates.put(spectator.getUniqueId(), FollowState.following(target.getUniqueId()));
@@ -398,7 +409,8 @@ public class SpectatorListener implements Listener {
     }
 
     private void refreshFollowActionBars() {
-        if (followStates.isEmpty()) {
+        refreshAutoTeleportTargets();
+        if (followStates.isEmpty() && autoTeleportTargets.isEmpty()) {
             cancelFollowActionBarTask();
             return;
         }
@@ -418,9 +430,6 @@ public class SpectatorListener implements Listener {
                 spectator.setGameMode(GameMode.SPECTATOR);
             }
             if (!state.hasTarget()) {
-                if (tryAutoRetarget(spectator, state, null)) {
-                    continue;
-                }
                 if (state.shouldShowTargetLost(now)) {
                     sendTargetLostActionBar(spectator);
                 }
@@ -428,19 +437,49 @@ public class SpectatorListener implements Listener {
             }
             Player target = Bukkit.getPlayer(state.targetId);
             if (!isAliveTarget(target)) {
-                UUID previousTargetId = state.targetId;
-                if (tryAutoRetarget(spectator, state, previousTargetId)) {
-                    continue;
-                }
                 markTargetLost(spectator, state, now);
                 continue;
             }
             setSpectatorTarget(spectator, target);
             sendFollowActionBar(spectator, target);
         }
-        if (followStates.isEmpty()) {
+        if (followStates.isEmpty() && autoTeleportTargets.isEmpty()) {
             cancelFollowActionBarTask();
         }
+    }
+
+    private void refreshAutoTeleportTargets() {
+        for (Map.Entry<UUID, UUID> entry : autoTeleportTargets.entrySet()) {
+            UUID spectatorId = entry.getKey();
+            Player spectator = Bukkit.getPlayer(spectatorId);
+            if (spectator == null
+                    || !spectator.isOnline()
+                    || !isDeadSpectator(spectator)
+                    || !shouldAutoTeleport(spectator)) {
+                autoTeleportTargets.remove(spectatorId);
+                continue;
+            }
+            Player target = Bukkit.getPlayer(entry.getValue());
+            if (!isAliveTarget(target)) {
+                autoTeleportTargets.remove(spectatorId);
+                continue;
+            }
+            if (isOutsideAutoTeleportRange(spectator.getLocation(), target.getLocation())) {
+                spectator.teleport(target.getLocation());
+            }
+        }
+    }
+
+    private boolean isOutsideAutoTeleportRange(Location spectator, Location target) {
+        if (spectator == null || target == null || spectator.getWorld() == null || target.getWorld() == null) {
+            return true;
+        }
+        if (!spectator.getWorld().equals(target.getWorld())) {
+            return true;
+        }
+        return Math.abs(spectator.getX() - target.getX()) > AUTO_TELEPORT_RANGE
+                || Math.abs(spectator.getY() - target.getY()) > AUTO_TELEPORT_RANGE
+                || Math.abs(spectator.getZ() - target.getZ()) > AUTO_TELEPORT_RANGE;
     }
 
     private void sendFollowActionBar(Player spectator, Player target) {
@@ -486,25 +525,8 @@ public class SpectatorListener implements Listener {
                 continue;
             }
             Player spectator = Bukkit.getPlayer(entry.getKey());
-            if (tryAutoRetarget(spectator, state, targetId)) {
-                continue;
-            }
             markTargetLost(spectator, state, now);
         }
-    }
-
-    private boolean tryAutoRetarget(Player spectator, FollowState state, UUID excludedTargetId) {
-        if (spectator == null || state == null || !shouldAutoTeleport(spectator)) {
-            return false;
-        }
-        Player replacement = findReplacementTarget(excludedTargetId, spectator.getUniqueId());
-        if (replacement == null) {
-            return false;
-        }
-        state.setTarget(replacement.getUniqueId());
-        setSpectatorTarget(spectator, replacement);
-        sendFollowActionBar(spectator, replacement);
-        return true;
     }
 
     private boolean isFollowingTarget(Player player) {
@@ -516,7 +538,17 @@ public class SpectatorListener implements Listener {
             return;
         }
         followStates.remove(spectatorId);
-        if (followStates.isEmpty()) {
+        if (followStates.isEmpty() && autoTeleportTargets.isEmpty()) {
+            cancelFollowActionBarTask();
+        }
+    }
+
+    private void removeAutoTeleportEntry(UUID spectatorId) {
+        if (spectatorId == null) {
+            return;
+        }
+        autoTeleportTargets.remove(spectatorId);
+        if (followStates.isEmpty() && autoTeleportTargets.isEmpty()) {
             cancelFollowActionBarTask();
         }
     }
@@ -536,27 +568,6 @@ public class SpectatorListener implements Listener {
         return gamePlayer != null && gamePlayer.isAlive();
     }
 
-    private Player findReplacementTarget(UUID excludedTargetId, UUID spectatorId) {
-        List<Player> alive = new ArrayList<>();
-        for (Player online : Bukkit.getOnlinePlayers()) {
-            if (!isAliveTarget(online)) {
-                continue;
-            }
-            if (spectatorId != null && spectatorId.equals(online.getUniqueId())) {
-                continue;
-            }
-            if (excludedTargetId != null && excludedTargetId.equals(online.getUniqueId())) {
-                continue;
-            }
-            alive.add(online);
-        }
-        if (alive.isEmpty()) {
-            return null;
-        }
-        int index = ThreadLocalRandom.current().nextInt(alive.size());
-        return alive.get(index);
-    }
-
     private boolean shouldAutoTeleport(Player spectator) {
         Profile profile = spectator == null || plugin == null ? null : plugin.getProfile(spectator.getUniqueId());
         return profile != null && profile.isSpectatorAutoTeleportEnabled();
@@ -571,15 +582,7 @@ public class SpectatorListener implements Listener {
         if (spectator == null) {
             return;
         }
-        try {
-            spectator.getClass()
-                    .getMethod("setSpectatorTarget", org.bukkit.entity.Entity.class)
-                    .invoke(spectator, target);
-        } catch (Exception ignored) {
-            if (target != null && target.getLocation() != null) {
-                spectator.teleport(target.getLocation());
-            }
-        }
+        spectator.setSpectatorTarget(target);
     }
 
     private void requestGameTransfer(UUID uuid) {
@@ -772,11 +775,6 @@ public class SpectatorListener implements Listener {
         private void markTargetLost(long untilMillis) {
             this.targetId = null;
             this.targetLostUntilMillis = untilMillis;
-        }
-
-        private void setTarget(UUID targetId) {
-            this.targetId = targetId;
-            this.targetLostUntilMillis = 0L;
         }
 
         private boolean shouldShowTargetLost(long nowMillis) {

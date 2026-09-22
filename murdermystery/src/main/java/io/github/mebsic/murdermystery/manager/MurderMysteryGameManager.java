@@ -369,16 +369,18 @@ public class MurderMysteryGameManager extends GameManager {
             return;
         }
         if (mmPlayer.getRole() == MurderMysteryRole.DETECTIVE || mmPlayer.getRole() == MurderMysteryRole.HERO) {
+            boolean showDetectiveStatusMessages = getAliveNonMurdererCount() > 2;
             if (originalDetectiveUuid != null && originalDetectiveUuid.equals(mmPlayer.getUuid())) {
                 originalDetectiveEliminated = true;
             }
             if (mmPlayer.hasDetectiveBow() && player.getInventory().contains(Material.BOW)) {
                 dropBowAt(player.getLocation());
-                if (mmPlayer.getRole() == MurderMysteryRole.DETECTIVE
+                if (showDetectiveStatusMessages
+                        && mmPlayer.getRole() == MurderMysteryRole.DETECTIVE
                         && originalDetectiveUuid != null
                         && originalDetectiveUuid.equals(mmPlayer.getUuid())) {
                     broadcast(DETECTIVE_LEFT_BOW_MESSAGE);
-                } else {
+                } else if (showDetectiveStatusMessages) {
                     broadcast(BOW_DROPPED_CHAT_MESSAGE);
                     broadcastDetectiveStatusSubtitle(ChatColor.GOLD + "The Bow has been dropped!");
                 }
@@ -739,15 +741,16 @@ public class MurderMysteryGameManager extends GameManager {
         victim.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, 60, 1, false, false), true);
         sendSpectatorChatHint(victim);
         boolean endingElimination = aliveBeforeDeath <= 2;
+        boolean showDetectiveStatusMessages = getAliveNonMurdererCount() > 1;
         if (endingElimination) {
             showLoseTitle(victim);
             showWinTitleToAlivePlayers();
             outcomeTitlesShown = true;
         }
-        if (droppedBow) {
+        if (droppedBow && showDetectiveStatusMessages) {
             broadcast(BOW_DROPPED_CHAT_MESSAGE);
         }
-        if (!endingElimination) {
+        if (!endingElimination && showDetectiveStatusMessages) {
             if (victimData.getRole() == MurderMysteryRole.DETECTIVE) {
                 broadcastDetectiveStatusSubtitle(ChatColor.GOLD + "The Detective has been killed!");
             } else if (droppedBow) {
