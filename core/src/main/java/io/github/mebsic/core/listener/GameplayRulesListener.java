@@ -11,6 +11,7 @@ import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
@@ -27,6 +28,9 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.FoodLevelChangeEvent;
 import org.bukkit.event.hanging.HangingBreakByEntityEvent;
 import org.bukkit.event.player.PlayerAchievementAwardedEvent;
+import org.bukkit.event.player.PlayerArmorStandManipulateEvent;
+import org.bukkit.event.player.PlayerInteractAtEntityEvent;
+import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerKickEvent;
@@ -231,6 +235,31 @@ public class GameplayRulesListener implements Listener {
             return;
         }
         if (!(event.getRemover() instanceof Player)) {
+            return;
+        }
+        event.setCancelled(true);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public void onArmorStandInteractAt(PlayerInteractAtEntityEvent event) {
+        if (event == null || !isHubOrGameServer() || !(event.getRightClicked() instanceof ArmorStand)) {
+            return;
+        }
+        event.setCancelled(true);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public void onArmorStandInteract(PlayerInteractEntityEvent event) {
+        if (event == null || event instanceof PlayerInteractAtEntityEvent || !isHubOrGameServer()
+                || !(event.getRightClicked() instanceof ArmorStand)) {
+            return;
+        }
+        event.setCancelled(true);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public void onArmorStandManipulate(PlayerArmorStandManipulateEvent event) {
+        if (event == null || !isHubOrGameServer()) {
             return;
         }
         event.setCancelled(true);

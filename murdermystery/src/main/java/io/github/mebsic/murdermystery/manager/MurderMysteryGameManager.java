@@ -258,6 +258,16 @@ public class MurderMysteryGameManager extends GameManager {
     }
 
     @Override
+    protected Location adjustPlayerSpawnLocation(Location location) {
+        if (location == null) {
+            return null;
+        }
+        Location adjusted = location.clone();
+        adjusted.setPitch(0.0F);
+        return adjusted;
+    }
+
+    @Override
     public void prepareLobbyPlayer(Player player) {
         super.prepareLobbyPlayer(player);
         if (getState() == GameState.WAITING || getState() == GameState.STARTING) {

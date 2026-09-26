@@ -737,7 +737,7 @@ public class GameManager {
         for (int i = 0; i < online.size(); i++) {
             Player player = online.get(i);
             Location spawn = spawnPoints.get(i % spawnPoints.size());
-            Location target = resolveSpawnTeleportTarget(spawn);
+            Location target = adjustPlayerSpawnLocation(resolveSpawnTeleportTarget(spawn));
             if (target == null) {
                 continue;
             }
@@ -776,6 +776,10 @@ public class GameManager {
             return highest;
         }
         return spawn;
+    }
+
+    protected Location adjustPlayerSpawnLocation(Location location) {
+        return location;
     }
 
     private boolean isClearForPlayer(Location feet) {
@@ -826,6 +830,9 @@ public class GameManager {
         Location target = mapPregame;
         if (target == null) {
             target = pregameSpawn;
+        }
+        if (target != null) {
+            target = adjustPlayerSpawnLocation(target);
         }
         if (target == null) {
             target = lobby;
