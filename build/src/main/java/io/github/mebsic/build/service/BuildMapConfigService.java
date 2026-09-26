@@ -1552,9 +1552,6 @@ public class BuildMapConfigService {
                 player.getUniqueId(),
                 new MysteryPotionSelection(gameType, mapWorld)
         );
-        player.sendMessage(ChatColor.YELLOW + "Left-click or right-click a block in "
-                + ChatColor.GOLD + mapWorld
-                + ChatColor.YELLOW + " to add a Mystery Potion.");
         return true;
     }
 
