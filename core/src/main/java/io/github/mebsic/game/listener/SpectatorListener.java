@@ -15,6 +15,7 @@ import io.github.mebsic.game.menu.SpectatorSettingsMenu;
 import io.github.mebsic.game.menu.SpectatorTeleporterMenu;
 import io.github.mebsic.game.model.GamePlayer;
 import io.github.mebsic.game.model.GameState;
+import io.github.mebsic.game.service.TitleService;
 import io.github.mebsic.game.util.SpectatorItems;
 import org.bson.Document;
 import org.bukkit.Bukkit;
@@ -53,12 +54,20 @@ public class SpectatorListener implements Listener {
     private static final long FOLLOW_ACTION_BAR_INTERVAL_TICKS = 1L;
     private static final double AUTO_TELEPORT_RANGE = 10.0D;
     private static final long TARGET_LOST_ACTION_BAR_MILLIS = 3000L;
-    private static final String ACTION_BAR_TARGET_PREFIX = ChatColor.GRAY + "Target: ";
+    private static final int SPECTATOR_TITLE_FADE_IN_TICKS = 0;
+    private static final int SPECTATOR_TITLE_STAY_TICKS = 60;
+    private static final int SPECTATOR_TITLE_FADE_OUT_TICKS = 7;
+    private static final String ACTION_BAR_TARGET_PREFIX = ChatColor.WHITE + "Target: ";
     private static final String ACTION_BAR_TARGET_NAME_STYLE = ChatColor.GREEN.toString() + ChatColor.BOLD;
-    private static final String ACTION_BAR_MENU_HINT = ChatColor.GREEN + "  LEFT CLICK for menu  ";
-    private static final String ACTION_BAR_EXIT_HINT = ChatColor.RED + "SNEAK to exit";
+    private static final String ACTION_BAR_DISTANCE_PREFIX = ChatColor.WHITE + "  Distance: ";
+    private static final String ACTION_BAR_DISTANCE_STYLE = ChatColor.GREEN.toString() + ChatColor.BOLD;
+    private static final String SPECTATOR_CONTROL_HINT =
+            ChatColor.GREEN + "LEFT CLICK for menu" + ChatColor.RED + "   SNEAK to exit";
+    private static final String ACTION_BAR_CONTROL_HINT = "  " + SPECTATOR_CONTROL_HINT;
     private static final String ACTION_BAR_TARGET_LOST =
             ChatColor.RED.toString() + ChatColor.BOLD + "Target Lost" + ChatColor.GRAY + " (Right Click)";
+    private static final String REPLACEMENT_TARGET_MESSAGE_PREFIX =
+            ChatColor.RED + "The player you were previously spectating is no longer alive, so you're now spectating ";
     private static final String SPECTATE_MESSAGE_PREFIX =
             ChatColor.GREEN + "Now spectating " + ChatColor.YELLOW;
     private static final String SPECTATE_MESSAGE_SUFFIX = ChatColor.GREEN + ".";
@@ -75,8 +84,9 @@ public class SpectatorListener implements Listener {
     private final int staleSeconds;
     private final SpectatorTeleporterMenu teleporterMenu;
     private final SpectatorSettingsMenu settingsMenu;
+    private final TitleService titleService;
     private final Map<UUID, FollowState> followStates;
-    private final Map<UUID, UUID> autoTeleportTargets;
+    private final Map<UUID, FollowState> teleportStates;
     private BukkitTask followActionBarTask;
 
     public SpectatorListener(CorePlugin plugin, GameManager gameManager) {
@@ -88,8 +98,9 @@ public class SpectatorListener implements Listener {
         this.staleSeconds = plugin == null ? 20 : Math.max(0, plugin.getConfig().getInt("registry.staleSeconds", 20));
         this.teleporterMenu = new SpectatorTeleporterMenu(plugin, gameManager, this::handleTeleporterSelection);
         this.settingsMenu = new SpectatorSettingsMenu(plugin, gameManager);
+        this.titleService = new TitleService();
         this.followStates = new ConcurrentHashMap<>();
-        this.autoTeleportTargets = new ConcurrentHashMap<>();
+        this.teleportStates = new ConcurrentHashMap<>();
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
@@ -153,8 +164,9 @@ public class SpectatorListener implements Listener {
         }
         UUID quitting = event.getPlayer().getUniqueId();
         removeFollowEntry(quitting);
-        removeAutoTeleportEntry(quitting);
+        removeTeleportEntry(quitting);
         markTargetLostForFollowers(quitting);
+        markTargetLostForTeleporters(quitting);
         teleporterMenu.clear(event.getPlayer());
     }
 
@@ -362,12 +374,9 @@ public class SpectatorListener implements Listener {
         if (target.getLocation() != null) {
             spectator.teleport(target.getLocation());
         }
-        if (shouldAutoTeleport(spectator)) {
-            autoTeleportTargets.put(spectator.getUniqueId(), target.getUniqueId());
-            ensureFollowActionBarTask();
-        } else {
-            removeAutoTeleportEntry(spectator.getUniqueId());
-        }
+        teleportStates.put(spectator.getUniqueId(), FollowState.following(target.getUniqueId()));
+        sendTeleportActionBar(spectator, target);
+        ensureFollowActionBarTask();
         spectator.sendMessage(SPECTATE_MESSAGE_PREFIX + target.getName() + SPECTATE_MESSAGE_SUFFIX);
     }
 
@@ -377,11 +386,12 @@ public class SpectatorListener implements Listener {
         }
         spectator.closeInventory();
         teleporterMenu.clear(spectator);
-        removeAutoTeleportEntry(spectator.getUniqueId());
+        removeTeleportEntry(spectator.getUniqueId());
         spectator.setGameMode(GameMode.SPECTATOR);
         setSpectatorTarget(spectator, target);
         followStates.put(spectator.getUniqueId(), FollowState.following(target.getUniqueId()));
         sendFollowActionBar(spectator, target);
+        showSpectatingTitle(spectator, target);
         ensureFollowActionBarTask();
     }
 
@@ -393,6 +403,8 @@ public class SpectatorListener implements Listener {
         setSpectatorTarget(spectator, null);
         if (restoreSpectatorState) {
             gameManager.restoreDeadSpectatorState(spectator);
+            ActionBarUtil.send(spectator, " ");
+            showExitSpectatorTitle(spectator);
         }
     }
 
@@ -409,8 +421,8 @@ public class SpectatorListener implements Listener {
     }
 
     private void refreshFollowActionBars() {
-        refreshAutoTeleportTargets();
-        if (followStates.isEmpty() && autoTeleportTargets.isEmpty()) {
+        refreshTeleportTargets();
+        if (followStates.isEmpty() && teleportStates.isEmpty()) {
             cancelFollowActionBarTask();
             return;
         }
@@ -429,10 +441,11 @@ public class SpectatorListener implements Listener {
             if (spectator.getGameMode() != GameMode.SPECTATOR) {
                 spectator.setGameMode(GameMode.SPECTATOR);
             }
+            if (state.shouldShowTargetLost(now)) {
+                sendTargetLostActionBar(spectator);
+                continue;
+            }
             if (!state.hasTarget()) {
-                if (state.shouldShowTargetLost(now)) {
-                    sendTargetLostActionBar(spectator);
-                }
                 continue;
             }
             Player target = Bukkit.getPlayer(state.targetId);
@@ -443,30 +456,44 @@ public class SpectatorListener implements Listener {
             setSpectatorTarget(spectator, target);
             sendFollowActionBar(spectator, target);
         }
-        if (followStates.isEmpty() && autoTeleportTargets.isEmpty()) {
+        if (followStates.isEmpty() && teleportStates.isEmpty()) {
             cancelFollowActionBarTask();
         }
     }
 
-    private void refreshAutoTeleportTargets() {
-        for (Map.Entry<UUID, UUID> entry : autoTeleportTargets.entrySet()) {
+    private void refreshTeleportTargets() {
+        long now = System.currentTimeMillis();
+        for (Map.Entry<UUID, FollowState> entry : teleportStates.entrySet()) {
             UUID spectatorId = entry.getKey();
             Player spectator = Bukkit.getPlayer(spectatorId);
             if (spectator == null
                     || !spectator.isOnline()
-                    || !isDeadSpectator(spectator)
-                    || !shouldAutoTeleport(spectator)) {
-                autoTeleportTargets.remove(spectatorId);
+                    || !isDeadSpectator(spectator)) {
+                teleportStates.remove(spectatorId);
                 continue;
             }
-            Player target = Bukkit.getPlayer(entry.getValue());
+            FollowState state = entry.getValue();
+            if (state == null) {
+                teleportStates.remove(spectatorId);
+                continue;
+            }
+            if (state.shouldShowTargetLost(now)) {
+                sendTargetLostActionBar(spectator);
+                continue;
+            }
+            if (!state.hasTarget()) {
+                continue;
+            }
+            Player target = Bukkit.getPlayer(state.targetId);
             if (!isAliveTarget(target)) {
-                autoTeleportTargets.remove(spectatorId);
+                markTeleportTargetLost(spectator, state, now);
                 continue;
             }
-            if (isOutsideAutoTeleportRange(spectator.getLocation(), target.getLocation())) {
+            if (shouldAutoTeleport(spectator)
+                    && isOutsideAutoTeleportRange(spectator.getLocation(), target.getLocation())) {
                 spectator.teleport(target.getLocation());
             }
+            sendTeleportActionBar(spectator, target);
         }
     }
 
@@ -491,8 +518,35 @@ public class SpectatorListener implements Listener {
                 ACTION_BAR_TARGET_PREFIX
                         + ACTION_BAR_TARGET_NAME_STYLE
                         + target.getName()
-                        + ACTION_BAR_MENU_HINT
-                        + ACTION_BAR_EXIT_HINT
+                        + ACTION_BAR_CONTROL_HINT
+        );
+    }
+
+    private void sendTeleportActionBar(Player spectator, Player target) {
+        if (spectator == null || target == null) {
+            return;
+        }
+        Location spectatorLocation = spectator.getLocation();
+        Location targetLocation = target.getLocation();
+        if (spectatorLocation == null || targetLocation == null
+                || spectatorLocation.getWorld() == null || targetLocation.getWorld() == null
+                || !spectatorLocation.getWorld().equals(targetLocation.getWorld())) {
+            return;
+        }
+        double distance;
+        try {
+            distance = spectatorLocation.distance(targetLocation);
+        } catch (IllegalArgumentException ignored) {
+            return;
+        }
+        ActionBarUtil.send(
+                spectator,
+                ACTION_BAR_TARGET_PREFIX
+                        + ACTION_BAR_TARGET_NAME_STYLE
+                        + target.getName()
+                        + ACTION_BAR_DISTANCE_PREFIX
+                        + ACTION_BAR_DISTANCE_STYLE
+                        + String.format(Locale.US, "%.1fm", distance)
         );
     }
 
@@ -503,15 +557,110 @@ public class SpectatorListener implements Listener {
         ActionBarUtil.send(spectator, ACTION_BAR_TARGET_LOST);
     }
 
+    private void showSpectatingTitle(Player spectator, Player target) {
+        if (spectator == null || target == null) {
+            return;
+        }
+        titleService.send(
+                spectator,
+                ChatColor.GREEN + "Spectating " + target.getName(),
+                SPECTATOR_CONTROL_HINT,
+                SPECTATOR_TITLE_FADE_IN_TICKS,
+                SPECTATOR_TITLE_STAY_TICKS,
+                SPECTATOR_TITLE_FADE_OUT_TICKS
+        );
+    }
+
+    private void showExitSpectatorTitle(Player spectator) {
+        if (spectator == null) {
+            return;
+        }
+        titleService.send(
+                spectator,
+                ChatColor.YELLOW + "Exiting Spectator mode",
+                "",
+                SPECTATOR_TITLE_FADE_IN_TICKS,
+                SPECTATOR_TITLE_STAY_TICKS,
+                SPECTATOR_TITLE_FADE_OUT_TICKS
+        );
+    }
+
     private void markTargetLost(Player spectator, FollowState state, long now) {
         if (state == null) {
             return;
         }
-        state.markTargetLost(now + TARGET_LOST_ACTION_BAR_MILLIS);
+        Player replacement = findReplacementTarget(state.targetId);
+        state.markTargetLost(
+                replacement == null ? null : replacement.getUniqueId(),
+                now + TARGET_LOST_ACTION_BAR_MILLIS
+        );
         if (spectator != null && spectator.isOnline()) {
-            setSpectatorTarget(spectator, null);
+            setSpectatorTarget(spectator, replacement);
             sendTargetLostActionBar(spectator);
+            if (replacement != null) {
+                sendReplacementTargetMessage(spectator, replacement);
+            }
         }
+    }
+
+    private void markTeleportTargetLost(Player spectator, FollowState state, long now) {
+        if (state == null) {
+            return;
+        }
+        Player replacement = findReplacementTarget(state.targetId);
+        state.markTargetLost(
+                replacement == null ? null : replacement.getUniqueId(),
+                now + TARGET_LOST_ACTION_BAR_MILLIS
+        );
+        if (spectator == null || !spectator.isOnline()) {
+            return;
+        }
+        sendTargetLostActionBar(spectator);
+        if (replacement == null) {
+            return;
+        }
+        spectator.teleport(replacement.getLocation());
+        sendReplacementTargetMessage(spectator, replacement);
+    }
+
+    private Player findReplacementTarget(UUID unavailableTargetId) {
+        for (Player online : Bukkit.getOnlinePlayers()) {
+            if (online == null || online.getUniqueId().equals(unavailableTargetId) || !isAliveTarget(online)) {
+                continue;
+            }
+            return online;
+        }
+        return null;
+    }
+
+    private void sendReplacementTargetMessage(Player spectator, Player target) {
+        if (spectator == null || target == null) {
+            return;
+        }
+        spectator.sendMessage(
+                REPLACEMENT_TARGET_MESSAGE_PREFIX
+                        + formatPlayerNameWithoutPrefix(target)
+                        + ChatColor.RED + "."
+        );
+    }
+
+    private String formatPlayerNameWithoutPrefix(Player player) {
+        if (player == null) {
+            return ChatColor.GRAY + "Unknown";
+        }
+        if (plugin == null) {
+            return ChatColor.GRAY + player.getName();
+        }
+        UUID uuid = player.getUniqueId();
+        Profile profile = plugin.getProfile(uuid);
+        Rank rank = profile == null || profile.getRank() == null
+                ? plugin.getRank(uuid)
+                : profile.getRank();
+        if (rank == null) {
+            rank = Rank.DEFAULT;
+        }
+        String mvpPlusPlusPrefixColor = profile == null ? null : profile.getMvpPlusPlusPrefixColor();
+        return RankFormatUtil.baseColor(rank, mvpPlusPlusPrefixColor) + player.getName();
     }
 
     private void markTargetLostForFollowers(UUID targetId) {
@@ -529,6 +678,21 @@ public class SpectatorListener implements Listener {
         }
     }
 
+    private void markTargetLostForTeleporters(UUID targetId) {
+        if (targetId == null || teleportStates.isEmpty()) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        for (Map.Entry<UUID, FollowState> entry : teleportStates.entrySet()) {
+            FollowState state = entry.getValue();
+            if (state == null || !state.hasTarget() || !targetId.equals(state.targetId)) {
+                continue;
+            }
+            Player spectator = Bukkit.getPlayer(entry.getKey());
+            markTeleportTargetLost(spectator, state, now);
+        }
+    }
+
     private boolean isFollowingTarget(Player player) {
         return player != null && followStates.containsKey(player.getUniqueId());
     }
@@ -538,17 +702,17 @@ public class SpectatorListener implements Listener {
             return;
         }
         followStates.remove(spectatorId);
-        if (followStates.isEmpty() && autoTeleportTargets.isEmpty()) {
+        if (followStates.isEmpty() && teleportStates.isEmpty()) {
             cancelFollowActionBarTask();
         }
     }
 
-    private void removeAutoTeleportEntry(UUID spectatorId) {
+    private void removeTeleportEntry(UUID spectatorId) {
         if (spectatorId == null) {
             return;
         }
-        autoTeleportTargets.remove(spectatorId);
-        if (followStates.isEmpty() && autoTeleportTargets.isEmpty()) {
+        teleportStates.remove(spectatorId);
+        if (followStates.isEmpty() && teleportStates.isEmpty()) {
             cancelFollowActionBarTask();
         }
     }
@@ -772,8 +936,8 @@ public class SpectatorListener implements Listener {
             return targetId != null;
         }
 
-        private void markTargetLost(long untilMillis) {
-            this.targetId = null;
+        private void markTargetLost(UUID replacementTargetId, long untilMillis) {
+            this.targetId = replacementTargetId;
             this.targetLostUntilMillis = untilMillis;
         }
 
