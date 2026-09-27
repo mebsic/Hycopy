@@ -273,6 +273,9 @@ public class ActionBarService {
         }
 
         for (Player player : participants) {
+            if (!isInGameAndAlive(player)) {
+                continue;
+            }
             if (sendTemporaryIfActive(player)) {
                 continue;
             }
