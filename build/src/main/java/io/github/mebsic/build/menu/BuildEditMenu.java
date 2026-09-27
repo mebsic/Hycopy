@@ -321,7 +321,7 @@ public class BuildEditMenu extends Menu {
                 ChatColor.GRAY + "This will set the next block",
                 ChatColor.GRAY + "you click as a Mystery Potion.",
                 "",
-                ChatColor.YELLOW + "Click to select!"
+                ChatColor.YELLOW + "Click to add!"
         );
     }
 

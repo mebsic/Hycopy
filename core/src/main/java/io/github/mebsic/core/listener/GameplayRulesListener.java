@@ -13,6 +13,7 @@ import org.bukkit.block.BlockFace;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Painting;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
@@ -75,7 +76,7 @@ public class GameplayRulesListener implements Listener {
         this.containerInteractionBlocked = this.serverType == ServerType.MURDER_MYSTERY_HUB || this.serverType == ServerType.MURDER_MYSTERY;
         this.mechanismInteractionBlocked = this.serverType == ServerType.MURDER_MYSTERY_HUB;
         this.farmlandTrampleBlocked = this.serverType == ServerType.MURDER_MYSTERY_HUB || this.serverType == ServerType.MURDER_MYSTERY;
-        this.paintingBreakBlocked = this.serverType != null && this.serverType.isHub();
+        this.paintingBreakBlocked = isHubOrGameServer(this.serverType);
         this.beaconInteractionBlocked = this.serverType != null && this.serverType.isHub();
         this.leverBreakBlocked = this.serverType == ServerType.MURDER_MYSTERY;
         this.blockSpreadBlocked = this.serverType == ServerType.MURDER_MYSTERY_HUB || this.serverType == ServerType.MURDER_MYSTERY;
@@ -241,17 +242,18 @@ public class GameplayRulesListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
-    public void onArmorStandInteractAt(PlayerInteractAtEntityEvent event) {
-        if (event == null || !isHubOrGameServer() || !(event.getRightClicked() instanceof ArmorStand)) {
+    public void onProtectedEntityInteractAt(PlayerInteractAtEntityEvent event) {
+        if (event == null || !isHubOrGameServer()
+                || (!(event.getRightClicked() instanceof ArmorStand) && !(event.getRightClicked() instanceof Painting))) {
             return;
         }
         event.setCancelled(true);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
-    public void onArmorStandInteract(PlayerInteractEntityEvent event) {
+    public void onProtectedEntityInteract(PlayerInteractEntityEvent event) {
         if (event == null || event instanceof PlayerInteractAtEntityEvent || !isHubOrGameServer()
-                || !(event.getRightClicked() instanceof ArmorStand)) {
+                || (!(event.getRightClicked() instanceof ArmorStand) && !(event.getRightClicked() instanceof Painting))) {
             return;
         }
         event.setCancelled(true);
