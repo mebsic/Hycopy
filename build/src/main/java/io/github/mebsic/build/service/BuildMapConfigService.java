@@ -331,7 +331,9 @@ public class BuildMapConfigService {
             String exportError = exportFailures.toString();
             if (primaryExportSucceeded) {
                 try {
-                    registerExportedMapInConfig(gameKey, sourceWorldName);
+                    if (!loadMapLocations(gameType, sourceWorldName).isEmpty()) {
+                        registerExportedMapInConfig(gameKey, sourceWorldName);
+                    }
                 } catch (Exception ex) {
                     metadataError = safeString(ex.getMessage());
                 }
