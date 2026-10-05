@@ -47,9 +47,7 @@ public abstract class Menu {
 
     protected abstract void populate(Player player, Inventory inventory);
 
-    public void onClick(MenuClick click) {
-        // Default no-op.
-    }
+    public abstract void onClick(MenuClick click);
 
     public boolean isAllowedClick(MenuClick click) {
         return click.isLeftClick() || click.isRightClick();

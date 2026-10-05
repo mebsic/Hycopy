@@ -136,10 +136,6 @@ public class MapManager {
         this.activeMapName = preferredActiveMap;
     }
 
-    public void saveMaps() {
-        // Map metadata is sourced from MongoDB maps; no-op.
-    }
-
     public GameMap getActiveMap() {
         String current = safeText(activeMapName);
         GameMap active = current.isEmpty() ? null : maps.get(normalizeMapKey(current));
@@ -288,14 +284,6 @@ public class MapManager {
             return null;
         }
         return pregameSpawns.get(key);
-    }
-
-    public void addSpawn(Location location) {
-        // Disabled: spawns are managed by build tooling and persisted in MongoDB maps.
-    }
-
-    public void addDropItemSpawn(Location location) {
-        // Disabled: spawns are managed by build tooling and persisted in MongoDB maps.
     }
 
     private MapConfig loadConfig() {

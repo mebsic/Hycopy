@@ -50,11 +50,11 @@ public class BookPromptService implements Listener {
         }
         boolean opened = openBook(viewer, book);
         if (!opened) {
-            prompt.onCancel(plugin, viewerUuid);
+            notifyCancellation(prompt, viewerUuid);
             return false;
         }
         if (!viewer.isOnline()) {
-            prompt.onCancel(plugin, viewerUuid);
+            notifyCancellation(prompt, viewerUuid);
             return false;
         }
         BukkitTask timeoutTask = null;
@@ -77,7 +77,13 @@ public class BookPromptService implements Listener {
         if (removed == null || removed.prompt == null) {
             return;
         }
-        removed.prompt.onCancel(plugin, viewerUuid);
+        notifyCancellation(removed.prompt, viewerUuid);
+    }
+
+    private void notifyCancellation(InteractiveBookPrompt prompt, UUID viewerUuid) {
+        if (prompt instanceof InteractiveBookPrompt.CancellationHandler) {
+            ((InteractiveBookPrompt.CancellationHandler) prompt).onCancel(plugin, viewerUuid);
+        }
     }
 
     public void shutdown() {
@@ -137,7 +143,7 @@ public class BookPromptService implements Listener {
             removed.prompt.onNo(plugin, viewer);
             return;
         }
-        removed.prompt.onCancel(plugin, viewerUuid);
+        notifyCancellation(removed.prompt, viewerUuid);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)

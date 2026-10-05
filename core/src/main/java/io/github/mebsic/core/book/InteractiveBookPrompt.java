@@ -23,7 +23,7 @@ public abstract class InteractiveBookPrompt {
 
     public abstract void onNo(CorePlugin plugin, Player viewer);
 
-    public void onCancel(CorePlugin plugin, UUID viewerUuid) {
-        // Optional override.
+    public interface CancellationHandler {
+        void onCancel(CorePlugin plugin, UUID viewerUuid);
     }
 }

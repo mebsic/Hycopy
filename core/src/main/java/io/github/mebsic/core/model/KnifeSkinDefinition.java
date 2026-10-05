@@ -3,6 +3,10 @@ package io.github.mebsic.core.model;
 import java.util.Locale;
 
 public class KnifeSkinDefinition {
+    public static final String ID_PREFIX = "mm_knife_skin_";
+    public static final String DEFAULT_ID = ID_PREFIX + "01";
+    public static final String RANDOM_ID = ID_PREFIX + "02";
+    public static final String RANDOM_FAVORITE_ID = ID_PREFIX + "03";
     public static final String DEFAULT_RARITY = "common";
 
     private String id;
@@ -75,6 +79,28 @@ public class KnifeSkinDefinition {
 
     public void setRarity(String rarity) {
         this.rarity = normalizeRarity(rarity);
+    }
+
+    public static String normalizeId(String value) {
+        String normalized = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+        if (!normalized.startsWith(ID_PREFIX)) {
+            return normalized;
+        }
+        String numberToken = normalized.substring(ID_PREFIX.length());
+        if (numberToken.isEmpty()) {
+            return normalized;
+        }
+        for (int i = 0; i < numberToken.length(); i++) {
+            if (!Character.isDigit(numberToken.charAt(i))) {
+                return normalized;
+            }
+        }
+        try {
+            int number = Integer.parseInt(numberToken);
+            return number > 0 ? ID_PREFIX + (number < 10 ? "0" : "") + number : normalized;
+        } catch (NumberFormatException ignored) {
+            return normalized;
+        }
     }
 
     private String normalizeRarity(String value) {

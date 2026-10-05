@@ -1,14 +1,15 @@
-package io.github.mebsic.core.service;
+package io.github.mebsic.murdermystery.service;
 
 import io.github.mebsic.core.model.CosmeticType;
 import io.github.mebsic.core.model.PrefixCosmeticDefinition;
+import io.github.mebsic.core.service.PrefixCatalog;
 
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
-public final class PrefixCosmeticCatalog {
+public final class PrefixCosmeticCatalog implements PrefixCatalog {
     public static final String RANDOM_ID = "random";
     public static final String RANDOM_FAVORITE_ID = "random_favorite";
     public static final String DEFAULT_ICON_ID = "default";
@@ -50,7 +51,49 @@ public final class PrefixCosmeticCatalog {
             scheme("killer_khroma", "INK_SACK", 9, "Killer Khroma", 20_000, "RED", true)
     ));
 
-    private PrefixCosmeticCatalog() {
+    @Override
+    public List<PrefixCosmeticDefinition> getDefinitions(CosmeticType type) {
+        return definitions(type);
+    }
+
+    @Override
+    public PrefixCosmeticDefinition getDefinition(CosmeticType type, String id) {
+        return definition(type, id);
+    }
+
+    @Override
+    public String getDefaultId(CosmeticType type) {
+        return defaultId(type);
+    }
+
+    @Override
+    public boolean isNoneScheme(String id) {
+        return isNoneSchemeId(id);
+    }
+
+    @Override
+    public boolean supports(CosmeticType type) {
+        return isPrefixType(type);
+    }
+
+    @Override
+    public boolean isSpecial(String id) {
+        return isSpecialId(id);
+    }
+
+    @Override
+    public String normalize(String id) {
+        return normalizeId(id);
+    }
+
+    @Override
+    public String randomId() {
+        return RANDOM_ID;
+    }
+
+    @Override
+    public String randomFavoriteId() {
+        return RANDOM_FAVORITE_ID;
     }
 
     public static List<PrefixCosmeticDefinition> definitions(CosmeticType type) {

@@ -7,7 +7,7 @@ import io.github.mebsic.core.model.CosmeticType;
 import io.github.mebsic.core.model.KnifeSkinDefinition;
 import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.core.service.CoreApi;
-import io.github.mebsic.core.store.KnifeSkinStore;
+import io.github.mebsic.murdermystery.store.KnifeSkinStore;
 import org.bson.Document;
 import org.bukkit.entity.Player;
 

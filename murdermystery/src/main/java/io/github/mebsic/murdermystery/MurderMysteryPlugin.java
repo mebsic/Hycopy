@@ -41,7 +41,10 @@ import io.github.mebsic.murdermystery.command.KillsCommand;
 import io.github.mebsic.murdermystery.command.WinsCommand;
 import io.github.mebsic.murdermystery.listener.MurderMysteryListener;
 import io.github.mebsic.core.model.Profile;
+import io.github.mebsic.core.model.KnifeSkinDefinition;
 import io.github.mebsic.core.model.Stats;
+import io.github.mebsic.murdermystery.service.PrefixCosmeticCatalog;
+import io.github.mebsic.murdermystery.store.KnifeSkinStore;
 import io.github.mebsic.murdermystery.service.ActionBarService;
 import io.github.mebsic.murdermystery.manager.MurderMysteryGameManager;
 import org.bukkit.Location;
@@ -56,6 +59,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
@@ -123,6 +127,7 @@ public class MurderMysteryPlugin extends JavaPlugin implements HubContext {
         this.coreApi = corePlugin.getCoreApi();
         this.serverType = corePlugin.getServerType();
         this.roleChanceStore = corePlugin.getRoleChanceStore();
+        corePlugin.configureMurderMysteryCosmetics(loadKnifeSkins(corePlugin.getMongoManager()), new PrefixCosmeticCatalog());
         this.corePlugin.ensureServerIdentity();
         registerCommand("chance", new ChanceCommand(corePlugin));
         registerCommand("token", new TokenCommand(corePlugin));
@@ -151,6 +156,21 @@ public class MurderMysteryPlugin extends JavaPlugin implements HubContext {
 
     public CoreApi getCoreApi() {
         return coreApi;
+    }
+
+    private Map<String, KnifeSkinDefinition> loadKnifeSkins(MongoManager mongo) {
+        Map<String, KnifeSkinDefinition> skins = new HashMap<>();
+        if (mongo == null) {
+            return skins;
+        }
+        KnifeSkinStore store = new KnifeSkinStore(mongo);
+        store.ensureDefault();
+        for (KnifeSkinDefinition definition : store.loadAll()) {
+            if (definition != null && definition.getId() != null) {
+                skins.put(KnifeSkinDefinition.normalizeId(definition.getId()), definition);
+            }
+        }
+        return skins;
     }
 
     public ActionBarService getActionBarService() {
@@ -334,7 +354,6 @@ public class MurderMysteryPlugin extends JavaPlugin implements HubContext {
         );
         this.gameManager = new MurderMysteryGameManager(corePlugin, bossBarService);
         this.queueService = new QueueService(this, gameManager);
-        this.queueService.start();
         getServer().getPluginManager().registerEvents(new TablistListener(this, gameManager.getTablistService()), this);
         this.tablistTask = getServer().getScheduler().runTaskTimer(this, () -> gameManager.getTablistService().updateAll(), 20L, 20L);
         this.gameScoreboardTitleTask = getServer().getScheduler().runTaskTimer(this, () -> {

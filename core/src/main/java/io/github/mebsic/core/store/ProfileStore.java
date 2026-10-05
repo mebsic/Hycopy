@@ -38,7 +38,7 @@ public class ProfileStore {
         BASE_STATS_KEYS.add(MongoManager.MURDER_MYSTERY_WINS_CHAT_ENABLED_KEY);
         BASE_STATS_KEYS.add(MongoManager.MURDER_MYSTERY_TEN_TIMES_MODE_ENABLED_KEY);
     }
-    private static final String DEFAULT_KNIFE_ID = KnifeSkinStore.DEFAULT_KNIFE_ID;
+    private static final String DEFAULT_KNIFE_ID = KnifeSkinDefinition.DEFAULT_ID;
     private static final KnifeSkinDefinition DEFAULT_KNIFE = new KnifeSkinDefinition(
             DEFAULT_KNIFE_ID,
             "IRON_SWORD",
@@ -53,12 +53,17 @@ public class ProfileStore {
     public ProfileStore(MongoManager mongo, Map<String, KnifeSkinDefinition> knifeSkins) {
         this.mongo = mongo;
         this.knifeSkins = new HashMap<>();
+        setKnifeSkins(knifeSkins);
+    }
+
+    public void setKnifeSkins(Map<String, KnifeSkinDefinition> knifeSkins) {
+        this.knifeSkins.clear();
         if (knifeSkins != null) {
             for (Map.Entry<String, KnifeSkinDefinition> entry : knifeSkins.entrySet()) {
                 if (entry == null || entry.getKey() == null || entry.getValue() == null) {
                     continue;
                 }
-                String key = KnifeSkinStore.normalizeKnifeSkinId(entry.getKey());
+                String key = KnifeSkinDefinition.normalizeId(entry.getKey());
                 if (key.isEmpty()) {
                     continue;
                 }
@@ -454,7 +459,7 @@ public class ProfileStore {
         }
         String normalized = trimmed.toLowerCase(Locale.ROOT);
         if (type == CosmeticType.KNIFE) {
-            return KnifeSkinStore.normalizeKnifeSkinId(normalized);
+            return KnifeSkinDefinition.normalizeId(normalized);
         }
         return normalized;
     }

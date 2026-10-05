@@ -4,7 +4,6 @@ import io.github.mebsic.core.model.CosmeticType;
 import io.github.mebsic.core.model.KnifeSkinDefinition;
 import io.github.mebsic.core.model.PrefixCosmeticDefinition;
 import io.github.mebsic.core.model.Profile;
-import io.github.mebsic.core.store.KnifeSkinStore;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
@@ -21,11 +20,9 @@ import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
 public class CosmeticService {
-    public static final String DEFAULT_KNIFE_ID = KnifeSkinStore.DEFAULT_KNIFE_ID;
+    public static final String DEFAULT_KNIFE_ID = KnifeSkinDefinition.DEFAULT_ID;
     public static final String RANDOM_KNIFE_ID = "random";
     public static final String RANDOM_FAVORITE_KNIFE_ID = "random_favorite";
-    public static final String RANDOM_PREFIX_ID = PrefixCosmeticCatalog.RANDOM_ID;
-    public static final String RANDOM_FAVORITE_PREFIX_ID = PrefixCosmeticCatalog.RANDOM_FAVORITE_ID;
     private static final KnifeSkinDefinition DEFAULT_KNIFE = new KnifeSkinDefinition(
             DEFAULT_KNIFE_ID,
             "IRON_SWORD",
@@ -34,26 +31,36 @@ public class CosmeticService {
             0
     );
     private final Map<String, KnifeSkinDefinition> knifeSkins;
+    private PrefixCatalog prefixCatalog;
 
     public CosmeticService(Map<String, KnifeSkinDefinition> knifeSkins) {
         this.knifeSkins = new HashMap<>();
+        setKnifeSkins(knifeSkins);
+    }
+
+    public void setKnifeSkins(Map<String, KnifeSkinDefinition> knifeSkins) {
+        this.knifeSkins.clear();
         if (knifeSkins != null) {
             for (Map.Entry<String, KnifeSkinDefinition> entry : knifeSkins.entrySet()) {
                 if (entry == null || entry.getKey() == null || entry.getValue() == null) {
                     continue;
                 }
-                String key = KnifeSkinStore.normalizeKnifeSkinId(entry.getKey());
+                String key = KnifeSkinDefinition.normalizeId(entry.getKey());
                 if (key.isEmpty()) {
                     continue;
                 }
-                if (key.equals(KnifeSkinStore.SKIN_02_CHEST_ID)
-                        || key.equals(KnifeSkinStore.SKIN_03_ENDER_CHEST_ID)) {
+                if (key.equals(KnifeSkinDefinition.RANDOM_ID)
+                        || key.equals(KnifeSkinDefinition.RANDOM_FAVORITE_ID)) {
                     continue;
                 }
                 this.knifeSkins.put(key, entry.getValue());
             }
         }
         this.knifeSkins.putIfAbsent(DEFAULT_KNIFE_ID, DEFAULT_KNIFE);
+    }
+
+    public void setPrefixCatalog(PrefixCatalog prefixCatalog) {
+        this.prefixCatalog = prefixCatalog;
     }
 
     public List<String> getOptions(CosmeticType type) {
@@ -77,13 +84,13 @@ public class CosmeticService {
             options.addAll(remaining);
             return Collections.unmodifiableList(options);
         }
-        if (PrefixCosmeticCatalog.isPrefixType(type)) {
+        if (prefixCatalog != null && prefixCatalog.supports(type)) {
             List<String> options = new ArrayList<String>();
-            String defaultId = PrefixCosmeticCatalog.defaultId(type);
+            String defaultId = prefixCatalog.getDefaultId(type);
             if (!defaultId.isEmpty()) {
                 options.add(defaultId);
             }
-            for (PrefixCosmeticDefinition definition : PrefixCosmeticCatalog.definitions(type)) {
+            for (PrefixCosmeticDefinition definition : prefixCatalog.getDefinitions(type)) {
                 if (definition != null && !definition.getId().isEmpty()) {
                     if (definition.getId().equals(defaultId)) {
                         continue;
@@ -91,8 +98,8 @@ public class CosmeticService {
                     options.add(definition.getId());
                 }
             }
-            options.add(1, RANDOM_PREFIX_ID);
-            options.add(2, RANDOM_FAVORITE_PREFIX_ID);
+            options.add(1, prefixCatalog.randomId());
+            options.add(2, prefixCatalog.randomFavoriteId());
             return Collections.unmodifiableList(options);
         }
         if (LobbyCosmeticCatalog.isLobbyType(type)) {
@@ -133,12 +140,12 @@ public class CosmeticService {
             }
             return profile.getUnlocked().get(type).add(normalized);
         }
-        if (PrefixCosmeticCatalog.isPrefixType(type)) {
-            String normalized = PrefixCosmeticCatalog.normalizeId(id);
-            if (normalized.isEmpty() || PrefixCosmeticCatalog.isSpecialId(normalized)) {
+        if (prefixCatalog != null && prefixCatalog.supports(type)) {
+            String normalized = prefixCatalog.normalize(id);
+            if (normalized.isEmpty() || prefixCatalog.isSpecial(normalized)) {
                 return false;
             }
-            if (PrefixCosmeticCatalog.definition(type, normalized) == null) {
+            if (prefixCatalog.getDefinition(type, normalized) == null) {
                 return false;
             }
             return profile.getUnlocked().get(type).add(normalized);
@@ -159,9 +166,9 @@ public class CosmeticService {
         }
         if (type == CosmeticType.KNIFE) {
             String normalized = normalizeId(id);
-            if (normalized.equals(KnifeSkinStore.SKIN_02_CHEST_ID)) {
+            if (normalized.equals(KnifeSkinDefinition.RANDOM_ID)) {
                 normalized = RANDOM_KNIFE_ID;
-            } else if (normalized.equals(KnifeSkinStore.SKIN_03_ENDER_CHEST_ID)) {
+            } else if (normalized.equals(KnifeSkinDefinition.RANDOM_FAVORITE_ID)) {
                 normalized = RANDOM_FAVORITE_KNIFE_ID;
             }
             if (normalized.isEmpty()) {
@@ -180,16 +187,16 @@ public class CosmeticService {
             profile.getSelected().put(type, normalized);
             return true;
         }
-        if (PrefixCosmeticCatalog.isPrefixType(type)) {
-            String normalized = PrefixCosmeticCatalog.normalizeId(id);
+        if (prefixCatalog != null && prefixCatalog.supports(type)) {
+            String normalized = prefixCatalog.normalize(id);
             if (normalized.isEmpty()) {
                 return false;
             }
-            if (PrefixCosmeticCatalog.isSpecialId(normalized)) {
+            if (prefixCatalog.isSpecial(normalized)) {
                 profile.getSelected().put(type, normalized);
                 return true;
             }
-            if (PrefixCosmeticCatalog.definition(type, normalized) == null) {
+            if (prefixCatalog.getDefinition(type, normalized) == null) {
                 return false;
             }
             if (!containsPrefixId(profile.getUnlocked().get(type), normalized)) {
@@ -232,11 +239,11 @@ public class CosmeticService {
             favorites.add(normalized);
             return true;
         }
-        if (PrefixCosmeticCatalog.isPrefixType(type)) {
-            String normalized = PrefixCosmeticCatalog.normalizeId(id);
+        if (prefixCatalog != null && prefixCatalog.supports(type)) {
+            String normalized = prefixCatalog.normalize(id);
             if (normalized.isEmpty()
-                    || PrefixCosmeticCatalog.isSpecialId(normalized)
-                    || PrefixCosmeticCatalog.isNoneSchemeId(normalized)) {
+                    || prefixCatalog.isSpecial(normalized)
+                    || prefixCatalog.isNoneScheme(normalized)) {
                 return false;
             }
             if (!containsPrefixId(profile.getUnlocked().get(type), normalized)) {
@@ -280,8 +287,8 @@ public class CosmeticService {
             }
             return containsNormalized(profile.getFavorites().get(type), normalized);
         }
-        if (PrefixCosmeticCatalog.isPrefixType(type)) {
-            String normalized = PrefixCosmeticCatalog.normalizeId(id);
+        if (prefixCatalog != null && prefixCatalog.supports(type)) {
+            String normalized = prefixCatalog.normalize(id);
             if (normalized.isEmpty()) {
                 return false;
             }
@@ -326,9 +333,9 @@ public class CosmeticService {
             return DEFAULT_KNIFE_ID;
         }
         String selected = normalizeId(profile.getSelected().getOrDefault(CosmeticType.KNIFE, DEFAULT_KNIFE_ID));
-        if (selected.equals(KnifeSkinStore.SKIN_02_CHEST_ID)) {
+        if (selected.equals(KnifeSkinDefinition.RANDOM_ID)) {
             selected = RANDOM_KNIFE_ID;
-        } else if (selected.equals(KnifeSkinStore.SKIN_03_ENDER_CHEST_ID)) {
+        } else if (selected.equals(KnifeSkinDefinition.RANDOM_FAVORITE_ID)) {
             selected = RANDOM_FAVORITE_KNIFE_ID;
         }
         if (selected.equals(RANDOM_KNIFE_ID)) {
@@ -426,12 +433,12 @@ public class CosmeticService {
         if (values == null || values.isEmpty()) {
             return false;
         }
-        String normalizedTarget = PrefixCosmeticCatalog.normalizeId(targetNormalized);
+        String normalizedTarget = prefixCatalog.normalize(targetNormalized);
         if (normalizedTarget.isEmpty()) {
             return false;
         }
         for (String value : values) {
-            if (normalizedTarget.equals(PrefixCosmeticCatalog.normalizeId(value))) {
+            if (normalizedTarget.equals(prefixCatalog.normalize(value))) {
                 return true;
             }
         }
@@ -442,13 +449,13 @@ public class CosmeticService {
         if (values == null || values.isEmpty()) {
             return;
         }
-        String normalizedTarget = PrefixCosmeticCatalog.normalizeId(targetNormalized);
+        String normalizedTarget = prefixCatalog.normalize(targetNormalized);
         if (normalizedTarget.isEmpty()) {
             return;
         }
         java.util.Iterator<String> iterator = values.iterator();
         while (iterator.hasNext()) {
-            if (normalizedTarget.equals(PrefixCosmeticCatalog.normalizeId(iterator.next()))) {
+            if (normalizedTarget.equals(prefixCatalog.normalize(iterator.next()))) {
                 iterator.remove();
             }
         }
@@ -487,20 +494,20 @@ public class CosmeticService {
     }
 
     private void grantPrefixDefaults(Profile profile, CosmeticType type) {
-        if (profile == null || !PrefixCosmeticCatalog.isPrefixType(type)) {
+        if (profile == null || prefixCatalog == null || !prefixCatalog.supports(type)) {
             return;
         }
         int wins = Math.max(0, profile.getStats().getWins());
         Set<String> unlocked = profile.getUnlocked().get(type);
-        for (PrefixCosmeticDefinition definition : PrefixCosmeticCatalog.definitions(type)) {
+        for (PrefixCosmeticDefinition definition : prefixCatalog.getDefinitions(type)) {
             if (definition == null || definition.getId().isEmpty()) {
                 continue;
             }
             if (wins >= definition.getRequiredWins()) {
-                unlocked.add(PrefixCosmeticCatalog.normalizeId(definition.getId()));
+                unlocked.add(prefixCatalog.normalize(definition.getId()));
             }
         }
-        String defaultId = PrefixCosmeticCatalog.defaultId(type);
+        String defaultId = prefixCatalog.getDefaultId(type);
         if (!defaultId.isEmpty()) {
             unlocked.add(defaultId);
             profile.getSelected().putIfAbsent(type, defaultId);
@@ -526,12 +533,12 @@ public class CosmeticService {
         String normalized = normalizeId(id);
         return normalized.equals(RANDOM_KNIFE_ID)
                 || normalized.equals(RANDOM_FAVORITE_KNIFE_ID)
-                || normalized.equals(KnifeSkinStore.SKIN_02_CHEST_ID)
-                || normalized.equals(KnifeSkinStore.SKIN_03_ENDER_CHEST_ID);
+                || normalized.equals(KnifeSkinDefinition.RANDOM_ID)
+                || normalized.equals(KnifeSkinDefinition.RANDOM_FAVORITE_ID);
     }
 
     private String normalizeId(String id) {
-        return KnifeSkinStore.normalizeKnifeSkinId(id);
+        return KnifeSkinDefinition.normalizeId(id);
     }
 
     private Material resolveMaterial(KnifeSkinDefinition skin) {
@@ -561,27 +568,27 @@ public class CosmeticService {
             return;
         }
         String normalizedId = normalizeId(knifeId);
-        if (KnifeSkinStore.SKIN_44_SAPLING_ID.equals(normalizedId) && item.getType() == Material.SAPLING) {
+        if ((KnifeSkinDefinition.ID_PREFIX + "44").equals(normalizedId) && item.getType() == Material.SAPLING) {
             item.setDurability((short) 3);
             return;
         }
-        if (KnifeSkinStore.SKIN_19_COAL_ID.equals(normalizedId) && item.getType() == Material.COAL) {
+        if ((KnifeSkinDefinition.ID_PREFIX + "19").equals(normalizedId) && item.getType() == Material.COAL) {
             item.setDurability((short) 1);
             return;
         }
-        if (KnifeSkinStore.SKIN_26_ROSE_ID.equals(normalizedId) && item.getType() == Material.DOUBLE_PLANT) {
+        if ((KnifeSkinDefinition.ID_PREFIX + "26").equals(normalizedId) && item.getType() == Material.DOUBLE_PLANT) {
             item.setDurability((short) 4);
             return;
         }
-        if (KnifeSkinStore.SKIN_39_NETHER_WART_ID.equals(normalizedId) && item.getType() == Material.INK_SACK) {
+        if ((KnifeSkinDefinition.ID_PREFIX + "39").equals(normalizedId) && item.getType() == Material.INK_SACK) {
             item.setDurability((short) 1);
             return;
         }
-        if (KnifeSkinStore.SKIN_33_PRISMARINE_SHARD_ID.equals(normalizedId) && item.getType() == Material.INK_SACK) {
+        if ((KnifeSkinDefinition.ID_PREFIX + "33").equals(normalizedId) && item.getType() == Material.INK_SACK) {
             item.setDurability((short) 4);
             return;
         }
-        if (KnifeSkinStore.SKIN_38_RAW_FISH_ID.equals(normalizedId) && item.getType() == Material.RAW_FISH) {
+        if ((KnifeSkinDefinition.ID_PREFIX + "38").equals(normalizedId) && item.getType() == Material.RAW_FISH) {
             item.setDurability((short) 1);
         }
     }

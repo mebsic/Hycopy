@@ -15,10 +15,6 @@ public class QueueService {
         this.gameManager = gameManager;
     }
 
-    public void start() {
-        // Joins/quits are handled immediately; no queued fallback task.
-    }
-
     public void stop() {
         if (task != null) {
             task.cancel();
@@ -46,7 +42,4 @@ public class QueueService {
         gameManager.handleQuit(player);
     }
 
-    public void flush() {
-        // No-op: kept for API compatibility.
-    }
 }

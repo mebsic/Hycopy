@@ -1,4 +1,4 @@
-package io.github.mebsic.core.store;
+package io.github.mebsic.murdermystery.store;
 
 import io.github.mebsic.core.model.KnifeSkinDefinition;
 import io.github.mebsic.core.manager.MongoManager;
@@ -16,10 +16,10 @@ import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 
 public class KnifeSkinStore {
-    public static final String SKIN_ID_PREFIX = "mm_knife_skin_";
-    public static final String DEFAULT_KNIFE_ID = "mm_knife_skin_01";
-    public static final String SKIN_02_CHEST_ID = "mm_knife_skin_02";
-    public static final String SKIN_03_ENDER_CHEST_ID = "mm_knife_skin_03";
+    public static final String SKIN_ID_PREFIX = KnifeSkinDefinition.ID_PREFIX;
+    public static final String DEFAULT_KNIFE_ID = KnifeSkinDefinition.DEFAULT_ID;
+    public static final String SKIN_02_CHEST_ID = KnifeSkinDefinition.RANDOM_ID;
+    public static final String SKIN_03_ENDER_CHEST_ID = KnifeSkinDefinition.RANDOM_FAVORITE_ID;
     public static final String SKIN_04_IRON_BLADE_ID = "mm_knife_skin_04";
     public static final String SKIN_05_STICK_ID = "mm_knife_skin_05";
     public static final String SKIN_06_WOOD_SPADE_ID = "mm_knife_skin_06";
@@ -560,15 +560,7 @@ public class KnifeSkinStore {
     }
 
     public static String normalizeKnifeSkinId(String value) {
-        String normalized = normalizeStatic(value);
-        if (normalized.isEmpty()) {
-            return "";
-        }
-        int number = skinNumber(normalized);
-        if (number > 0) {
-            return idByNumber(number);
-        }
-        return normalized;
+        return KnifeSkinDefinition.normalizeId(value);
     }
 
     public static int skinNumber(String value) {
@@ -581,16 +573,6 @@ public class KnifeSkinStore {
             return parsePositiveInt(numberToken);
         }
         return -1;
-    }
-
-    private static String idByNumber(int number) {
-        if (number <= 0) {
-            return "";
-        }
-        if (number < 10) {
-            return SKIN_ID_PREFIX + "0" + number;
-        }
-        return SKIN_ID_PREFIX + number;
     }
 
     private static int parsePositiveInt(String value) {

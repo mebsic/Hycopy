@@ -55,6 +55,7 @@ import io.github.mebsic.core.service.CosmeticService;
 import io.github.mebsic.core.service.LobbyCosmeticCatalog;
 import io.github.mebsic.core.manager.MongoManager;
 import io.github.mebsic.core.service.ProfileService;
+import io.github.mebsic.core.service.PrefixCatalog;
 import io.github.mebsic.core.service.ProfileCommandSyncService;
 import io.github.mebsic.core.service.GiftRequestService;
 import io.github.mebsic.core.service.PunishmentService;
@@ -65,7 +66,6 @@ import io.github.mebsic.core.service.NewsEditService;
 import io.github.mebsic.core.store.ProfileStore;
 import io.github.mebsic.core.store.PunishmentStore;
 import io.github.mebsic.core.store.RoleChanceStore;
-import io.github.mebsic.core.store.KnifeSkinStore;
 import io.github.mebsic.core.store.MapConfigStore;
 import io.github.mebsic.core.model.KnifeSkinDefinition;
 import io.github.mebsic.core.server.DefaultGameTypePlayerCountProvider;
@@ -151,6 +151,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
     private RoleChanceStore roleChanceStore;
     private ProfileService profileService;
     private CosmeticService cosmetics;
+    private volatile PrefixCatalog prefixCatalog;
     private PubSubService pubSub;
     private PunishmentService punishments;
     private ProfileCommandSyncService profileCommandSync;
@@ -365,7 +366,6 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
             ensureCoreCollections();
             initializeNetworkDomainSettings();
             ensureMapConfigDefaults();
-            knifeSkins = loadKnifeSkins();
             this.profileStore = new ProfileStore(mongo, knifeSkins);
             this.punishmentStore = new PunishmentStore(mongo);
             this.roleChanceStore = new RoleChanceStore(mongo);
@@ -373,13 +373,6 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
             this.profileStore = null;
             this.punishmentStore = null;
             this.roleChanceStore = null;
-            knifeSkins.put(KnifeSkinStore.DEFAULT_KNIFE_ID, new KnifeSkinDefinition(
-                    KnifeSkinStore.DEFAULT_KNIFE_ID,
-                    "IRON_SWORD",
-                    "",
-                    "",
-                    0
-            ));
         }
         this.cosmetics = new CosmeticService(knifeSkins);
         this.profileService = new ProfileService(this, profileStore, cosmetics);
@@ -461,26 +454,18 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
         }
     }
 
-    private Map<String, KnifeSkinDefinition> loadKnifeSkins() {
-        Map<String, KnifeSkinDefinition> map = new HashMap<>();
-        if (mongo != null) {
-            KnifeSkinStore store = new KnifeSkinStore(mongo);
-            store.ensureDefault();
-            for (KnifeSkinDefinition definition : store.loadAll()) {
-                if (definition == null || definition.getId() == null) {
-                    continue;
-                }
-                map.put(definition.getId().toLowerCase(Locale.ROOT), definition);
-            }
+    public void configureMurderMysteryCosmetics(Map<String, KnifeSkinDefinition> knifeSkins,
+                                                PrefixCatalog prefixCatalog) {
+        this.prefixCatalog = prefixCatalog;
+        cosmetics.setKnifeSkins(knifeSkins);
+        cosmetics.setPrefixCatalog(prefixCatalog);
+        if (profileStore != null) {
+            profileStore.setKnifeSkins(knifeSkins);
         }
-        map.putIfAbsent(KnifeSkinStore.DEFAULT_KNIFE_ID, new KnifeSkinDefinition(
-                KnifeSkinStore.DEFAULT_KNIFE_ID,
-                "IRON_SWORD",
-                "",
-                "",
-                0
-        ));
-        return map;
+    }
+
+    public PrefixCatalog getPrefixCatalog() {
+        return prefixCatalog;
     }
 
     public boolean isMongoEnabled() {

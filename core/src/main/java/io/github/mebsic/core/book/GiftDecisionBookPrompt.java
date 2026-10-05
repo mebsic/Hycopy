@@ -23,7 +23,7 @@ import org.bukkit.inventory.meta.ItemMeta;
 import java.lang.reflect.Method;
 import java.util.UUID;
 
-public class GiftDecisionBookPrompt extends InteractiveBookPrompt {
+public class GiftDecisionBookPrompt extends InteractiveBookPrompt implements InteractiveBookPrompt.CancellationHandler {
     private static final String PROMPT_COMMAND = "/bookprompt";
     private static final int INDENT_SPACES = 10;
 

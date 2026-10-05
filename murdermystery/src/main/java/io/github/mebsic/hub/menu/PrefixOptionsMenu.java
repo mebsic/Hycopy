@@ -8,7 +8,7 @@ import io.github.mebsic.core.model.PrefixCosmeticDefinition;
 import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.core.model.Rank;
 import io.github.mebsic.core.service.CoreApi;
-import io.github.mebsic.core.service.PrefixCosmeticCatalog;
+import io.github.mebsic.murdermystery.service.PrefixCosmeticCatalog;
 import io.github.mebsic.core.util.NetworkConstants;
 import io.github.mebsic.core.util.RankFormatUtil;
 import io.github.mebsic.murdermystery.stats.MurderMysteryStats;

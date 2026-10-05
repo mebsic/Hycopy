@@ -63,11 +63,11 @@ import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class GameManager {
+public abstract class GameManager {
     private static final String BUNGEE_CHANNEL = "BungeeCord";
     public static final String QUEUED_TRANSFER_MESSAGE = ChatColor.GREEN.toString() + ChatColor.BOLD + "Queued! Use the bed to return to lobby!";
     private static final long POST_GAME_TRANSFER_DELAY_TICKS = 200L; // 10 seconds
-    private static final String RESTARTING_KICK_MESSAGE = ChatColor.RED + "This server is restarting!..";
+    private static final String RESTARTING_KICK_MESSAGE = ChatColor.RED + "This server is restarting!";
     private static final String NO_LOBBY_AVAILABLE_MESSAGE = ChatColor.RED + CommonMessages.NO_SERVERS_AVAILABLE;
     private static final String TRANSFER_FAILED_MESSAGE = ChatColor.RED + "Could not send you to another server! Please try again later.";
     private static final String MAP_CONFIG_UPDATE_CHANNEL = "map_config_update";
@@ -215,7 +215,6 @@ public class GameManager {
         plugin.getConfig().set("lobby", LocationUtil.serialize(lobby));
         plugin.getConfig().set("pregameSpawn", LocationUtil.serialize(pregameSpawn));
         plugin.saveConfig();
-        mapManager.saveMaps();
     }
 
     private boolean isGameServer() {
@@ -495,14 +494,6 @@ public class GameManager {
 
     public void setPregameSpawn(Location location) {
         this.pregameSpawn = location;
-    }
-
-    public void addSpawn(Location location) {
-        mapManager.addSpawn(location);
-    }
-
-    public void addDropItemSpawn(Location location) {
-        mapManager.addDropItemSpawn(location);
     }
 
     public boolean setActiveMap(String name) {
@@ -817,7 +808,6 @@ public class GameManager {
         resetPlayer(player);
         player.teleport(lobby == null ? player.getLocation() : lobby);
         player.getInventory().clear();
-        onPrepareLobbyPlayer(player);
         giveReturnToLobbyItem(player);
     }
 
@@ -1711,9 +1701,7 @@ public class GameManager {
         return new GameResult(gamePlayer.getUuid(), gameType, didPlayerWin(player, gamePlayer), gamePlayer.getKills());
     }
 
-    protected void appendInGameScoreboardLines(Player player, GamePlayer gp, List<String> lines) {
-        // Optional extension hook.
-    }
+    protected abstract void appendInGameScoreboardLines(Player player, GamePlayer gp, List<String> lines);
 
     protected void appendDefaultInGameScoreboardLines(List<String> lines) {
         lines.add(ChatColor.WHITE + "Map: " + ChatColor.GREEN + getScoreboardMapName());
@@ -1732,21 +1720,11 @@ public class GameManager {
         return getActiveMapName();
     }
 
-    protected void appendPregameScoreboardLines(Player player, GamePlayer gp, List<String> lines) {
-        // Optional extension hook.
-    }
+    protected abstract void appendPregameScoreboardLines(Player player, GamePlayer gp, List<String> lines);
 
-    protected void onPrepareLobbyPlayer(Player player) {
-        // Optional extension hook.
-    }
+    protected abstract void onGameStarted(GameMap activeMap);
 
-    protected void onGameStarted(GameMap activeMap) {
-        // Optional extension hook.
-    }
-
-    protected void onGameSecondElapsed() {
-        // Optional extension hook.
-    }
+    protected abstract void onGameSecondElapsed();
 
     protected void broadcastCountdownMessage(int seconds) {
         int safeSeconds = Math.max(0, seconds);
@@ -1854,17 +1832,11 @@ public class GameManager {
         return false;
     }
 
-    protected void onAlivePlayerQuitInGame(Player player, GamePlayer gamePlayer) {
-        // Optional extension hook.
-    }
+    protected abstract void onAlivePlayerQuitInGame(Player player, GamePlayer gamePlayer);
 
-    protected void onGameEnding() {
-        // Optional extension hook.
-    }
+    protected abstract void onGameEnding();
 
-    protected void appendPostGameSummaryLines(Player player, GamePlayer gamePlayer, List<String> lines) {
-        // Optional extension hook.
-    }
+    protected abstract void appendPostGameSummaryLines(Player player, GamePlayer gamePlayer, List<String> lines);
 
     protected GamePlayer createGamePlayer(UUID uuid) {
         return new GamePlayer(uuid);

@@ -7,7 +7,7 @@ import io.github.mebsic.core.model.KnifeSkinDefinition;
 import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.core.service.CoreApi;
 import io.github.mebsic.core.service.CosmeticService;
-import io.github.mebsic.core.store.KnifeSkinStore;
+import io.github.mebsic.murdermystery.store.KnifeSkinStore;
 import io.github.mebsic.core.util.CommonMessages;
 import io.github.mebsic.core.util.NetworkConstants;
 import io.github.mebsic.hub.service.KnifeMenuStateService;
