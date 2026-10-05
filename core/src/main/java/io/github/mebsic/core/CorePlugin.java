@@ -366,7 +366,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
             ensureCoreCollections();
             initializeNetworkDomainSettings();
             ensureMapConfigDefaults();
-            this.profileStore = new ProfileStore(mongo, knifeSkins);
+            this.profileStore = new ProfileStore(mongo);
             this.punishmentStore = new PunishmentStore(mongo);
             this.roleChanceStore = new RoleChanceStore(mongo);
         } else {

@@ -50,10 +50,26 @@ public class ProfileStore {
     private final MongoManager mongo;
     private final Map<String, KnifeSkinDefinition> knifeSkins;
 
-    public ProfileStore(MongoManager mongo, Map<String, KnifeSkinDefinition> knifeSkins) {
+    public ProfileStore(MongoManager mongo) {
         this.mongo = mongo;
         this.knifeSkins = new HashMap<>();
-        setKnifeSkins(knifeSkins);
+        Map<String, KnifeSkinDefinition> skins = new HashMap<>();
+        for (Document doc : mongo.getKnifeSkins().find(Filters.and(
+                eq(MongoManager.MURDER_MYSTERY_RECORD_TYPE_FIELD, MongoManager.MURDER_MYSTERY_KNIFE_SKIN_RECORD_TYPE),
+                eq(MongoManager.MURDER_MYSTERY_GAME_TYPE_FIELD, MongoManager.MURDER_MYSTERY_GAME_TYPE)
+        ))) {
+            String id = KnifeSkinDefinition.normalizeId(doc.getString("id"));
+            Number cost = doc.get("cost", Number.class);
+            skins.put(id, new KnifeSkinDefinition(
+                    id,
+                    doc.getString("material"),
+                    doc.getString("displayName"),
+                    doc.getString("description"),
+                    cost == null ? 0 : cost.intValue(),
+                    doc.getString(MongoManager.MURDER_MYSTERY_RARITY_FIELD)
+            ));
+        }
+        setKnifeSkins(skins);
     }
 
     public void setKnifeSkins(Map<String, KnifeSkinDefinition> knifeSkins) {
