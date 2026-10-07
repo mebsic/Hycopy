@@ -3,7 +3,7 @@ package io.github.mebsic.hub.menu;
 import io.github.mebsic.core.menu.Menu;
 import io.github.mebsic.core.menu.MenuClick;
 import io.github.mebsic.core.model.CosmeticType;
-import io.github.mebsic.core.model.PrefixCosmeticDefinition;
+import io.github.mebsic.murdermystery.model.PrefixCosmeticDefinition;
 import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.core.service.CoreApi;
 import io.github.mebsic.murdermystery.service.PrefixCosmeticCatalog;

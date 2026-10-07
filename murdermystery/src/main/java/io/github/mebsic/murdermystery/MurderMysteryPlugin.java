@@ -5,6 +5,7 @@ import io.github.mebsic.core.manager.MongoManager;
 import io.github.mebsic.core.server.MapConfigResolver;
 import io.github.mebsic.core.server.ServerType;
 import io.github.mebsic.core.service.CoreApi;
+import io.github.mebsic.core.service.CosmeticItem;
 import io.github.mebsic.core.service.HubContext;
 import io.github.mebsic.core.store.MapConfigStore;
 import io.github.mebsic.core.store.RoleChanceStore;
@@ -41,7 +42,7 @@ import io.github.mebsic.murdermystery.command.KillsCommand;
 import io.github.mebsic.murdermystery.command.WinsCommand;
 import io.github.mebsic.murdermystery.listener.MurderMysteryListener;
 import io.github.mebsic.core.model.Profile;
-import io.github.mebsic.core.model.KnifeSkinDefinition;
+import io.github.mebsic.murdermystery.model.KnifeSkinDefinition;
 import io.github.mebsic.core.model.Stats;
 import io.github.mebsic.murdermystery.service.PrefixCosmeticCatalog;
 import io.github.mebsic.murdermystery.store.KnifeSkinStore;
@@ -160,6 +161,9 @@ public class MurderMysteryPlugin extends JavaPlugin implements HubContext {
 
     private Map<String, KnifeSkinDefinition> loadKnifeSkins(MongoManager mongo) {
         Map<String, KnifeSkinDefinition> skins = new HashMap<>();
+        skins.put(KnifeSkinDefinition.DEFAULT_ID, new KnifeSkinDefinition(
+                KnifeSkinDefinition.DEFAULT_ID, "IRON_SWORD", "", "", 0
+        ));
         if (mongo == null) {
             return skins;
         }
@@ -665,7 +669,7 @@ public class MurderMysteryPlugin extends JavaPlugin implements HubContext {
     private java.util.Map<String, Integer> loadKnifeCosts() {
         java.util.Map<String, Integer> map = new java.util.HashMap<>();
         if (coreApi != null) {
-            for (io.github.mebsic.core.model.KnifeSkinDefinition skin : coreApi.getKnifeSkins().values()) {
+            for (CosmeticItem skin : coreApi.getKnifeSkins().values()) {
                 map.put(skin.getId().toLowerCase(), skin.getCost());
             }
         }

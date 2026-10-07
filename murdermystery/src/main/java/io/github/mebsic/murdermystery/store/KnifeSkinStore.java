@@ -1,6 +1,6 @@
 package io.github.mebsic.murdermystery.store;
 
-import io.github.mebsic.core.model.KnifeSkinDefinition;
+import io.github.mebsic.murdermystery.model.KnifeSkinDefinition;
 import io.github.mebsic.core.manager.MongoManager;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.model.UpdateOptions;

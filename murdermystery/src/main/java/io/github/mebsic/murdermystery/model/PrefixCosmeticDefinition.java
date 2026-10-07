@@ -1,6 +1,8 @@
-package io.github.mebsic.core.model;
+package io.github.mebsic.murdermystery.model;
 
-public class PrefixCosmeticDefinition {
+import io.github.mebsic.core.service.PrefixCatalog;
+
+public class PrefixCosmeticDefinition implements PrefixCatalog.Entry {
     private final String id;
     private final String material;
     private final short durability;

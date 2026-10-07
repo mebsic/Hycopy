@@ -1,25 +1,24 @@
 package io.github.mebsic.core.model;
 
 import io.github.mebsic.core.util.NetworkConstants;
-
 import java.util.Locale;
 
 public enum MuteReasonType {
     NEGATIVE_REFERENCE("Discussing important people or world events in a negative way", "NR", ChatInfractionGroup.EXTREME),
     USER_DISRESPECT("Acting in a manner that is disrespectful to members within the community", "UD"),
     STAFF_DISRESPECT("Disrespectful behaviour directed at staff members", "SD"),
-    INAPPROPRIATE_CONTENT_LVL1("Using adult concepts in public chat on the server", "IC1", ChatInfractionGroup.EXTREME),
+    INAPPROPRIATE_CONTENT("Using adult concepts in public chat on the server", "IC", ChatInfractionGroup.EXTREME),
     DISCRIMINATION("Discrimination of a player or group of people", "DI", ChatInfractionGroup.EXTREME),
     EXCESSIVE_SWEARING("Excessive use of swearing in chat", "ES"),
-    UN_INTENTIONALLY_CAUSING_DISTRESS("intentionally or unintentionally causing distress", "UI", "Unintentionally/Intentionally Causing distress"),
-    ENCOURAGING_CHEATING_LVL1("Discussing or actively promoting cheating or breaking of rules on the server", "EC1"),
-    MEDIA_ADVERTISING("Media Advertising", "MA"),
+    UN_INTENTIONALLY_CAUSING_DISTRESS("Intentionally or unintentionally causing distress", "UI", "Unintentionally/intentionally causing distress"),
+    ENCOURAGING_CHEATING("Discussing or actively promoting cheating or breaking of rules on the server", "EC"),
+    MEDIA_ADVERTISING("Media advertising", "MA"),
     PUBLIC_SHAMING("Publicly revealing information about a player", "PS", ChatInfractionGroup.EXTREME),
     RUDE("Being rude or inappropriate", "RU"),
     EXCESSIVE_SPAMMING("Repeatedly posting unnecessary messages or content", "SP"),
-    MISLEADING_INFORMATION("misleading other players into actions that disrupt their game", "MI", "Trolling", "Misleading other players to carry out actions that disrupts their game"),
-    UNNECESSARY_SPOILERS("Giving spoilers, revealing important storylines of popular movies and tv shows", "US"),
-    ESCALATION("a chat offense that is currently under review", "ESC", "You have been muted for a chat offense and is currently under review");
+    MISLEADING_INFORMATION("Misleading other players into actions that disrupt their game", "MI", "Trolling", "Misleading other players to carry out actions that disrupts their game"),
+    UNNECESSARY_SPOILERS("Giving spoilers, revealing important storylines of popular movies and TV shows", "US"),
+    ESCALATION("A chat offense that is currently under review", "ESC", "You have been muted for a chat offense and is currently under review");
 
     private final String description;
     private final String code;

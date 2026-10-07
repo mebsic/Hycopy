@@ -3,9 +3,9 @@ package io.github.mebsic.hub.menu;
 import io.github.mebsic.core.menu.Menu;
 import io.github.mebsic.core.menu.MenuClick;
 import io.github.mebsic.core.model.CosmeticType;
-import io.github.mebsic.core.model.KnifeSkinDefinition;
 import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.core.service.CoreApi;
+import io.github.mebsic.core.service.CosmeticItem;
 import io.github.mebsic.core.service.CosmeticService;
 import io.github.mebsic.murdermystery.store.KnifeSkinStore;
 import io.github.mebsic.core.util.NetworkConstants;
@@ -168,7 +168,7 @@ public class KnifeMenu extends Menu {
         if (KnifeSkinStore.SKIN_03_ENDER_CHEST_ID.equals(normalized)) {
             return "Random Favorite Knife Skin";
         }
-        KnifeSkinDefinition skin = coreApi.getKnifeSkins().get(normalized);
+        CosmeticItem skin = coreApi.getKnifeSkins().get(normalized);
         if (skin == null) {
             return selected;
         }

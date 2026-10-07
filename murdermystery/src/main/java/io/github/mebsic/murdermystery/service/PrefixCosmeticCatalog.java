@@ -1,7 +1,7 @@
 package io.github.mebsic.murdermystery.service;
 
 import io.github.mebsic.core.model.CosmeticType;
-import io.github.mebsic.core.model.PrefixCosmeticDefinition;
+import io.github.mebsic.murdermystery.model.PrefixCosmeticDefinition;
 import io.github.mebsic.core.service.PrefixCatalog;
 
 import java.util.Arrays;

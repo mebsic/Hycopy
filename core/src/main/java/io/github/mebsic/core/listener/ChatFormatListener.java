@@ -3,7 +3,6 @@ package io.github.mebsic.core.listener;
 import io.github.mebsic.core.CorePlugin;
 import io.github.mebsic.core.manager.MongoManager;
 import io.github.mebsic.core.model.CosmeticType;
-import io.github.mebsic.core.model.PrefixCosmeticDefinition;
 import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.core.model.Rank;
 import io.github.mebsic.core.server.ServerType;
@@ -178,8 +177,8 @@ public class ChatFormatListener implements Listener {
             return null;
         }
         int totalWins = Math.max(0, coreApi.getCounter(uuid, MongoManager.MURDER_MYSTERY_LIFETIME_WINS_KEY));
-        PrefixCosmeticDefinition icon = resolveSelectedPrefixCosmetic(profile, CosmeticType.PREFIX_ICON);
-        PrefixCosmeticDefinition scheme = resolveSelectedPrefixCosmetic(profile, CosmeticType.PREFIX_SCHEME);
+        PrefixCatalog.Entry icon = resolveSelectedPrefixCosmetic(profile, CosmeticType.PREFIX_ICON);
+        PrefixCatalog.Entry scheme = resolveSelectedPrefixCosmetic(profile, CosmeticType.PREFIX_SCHEME);
         String symbol = icon == null || icon.getSymbol().isEmpty() ? "✪" : icon.getSymbol();
         boolean plainStarPrefix = totalWins == 0
                 || catalog().isNoneScheme(scheme == null ? null : scheme.getId());
@@ -253,14 +252,14 @@ public class ChatFormatListener implements Listener {
         }
     }
 
-    private String colorMurderMysteryWinsPrefix(PrefixCosmeticDefinition scheme, String prefix) {
+    private String colorMurderMysteryWinsPrefix(PrefixCatalog.Entry scheme, String prefix) {
         if (scheme != null && scheme.isChroma()) {
             return colorChroma(prefix);
         }
         return parsePrefixColor(scheme == null ? null : scheme.getColor()) + prefix;
     }
 
-    private PrefixCosmeticDefinition resolveSelectedPrefixCosmetic(Profile profile, CosmeticType type) {
+    private PrefixCatalog.Entry resolveSelectedPrefixCosmetic(Profile profile, CosmeticType type) {
         if (profile == null || !catalog().supports(type)) {
             return catalog().getDefinition(type, catalog().getDefaultId(type));
         }
@@ -271,7 +270,7 @@ public class ChatFormatListener implements Listener {
         if (catalog().randomFavoriteId().equals(selected)) {
             return pickRandomPrefixCosmetic(profile, type, true);
         }
-        PrefixCosmeticDefinition definition = catalog().getDefinition(type, selected);
+        PrefixCatalog.Entry definition = catalog().getDefinition(type, selected);
         if (definition != null && hasUnlockedPrefixCosmetic(profile, type, definition.getId())) {
             return definition;
         }
@@ -282,15 +281,15 @@ public class ChatFormatListener implements Listener {
         return corePlugin.getPrefixCatalog();
     }
 
-    private PrefixCosmeticDefinition pickRandomPrefixCosmetic(Profile profile, CosmeticType type, boolean favoritesOnly) {
-        List<PrefixCosmeticDefinition> candidates = new ArrayList<PrefixCosmeticDefinition>();
+    private PrefixCatalog.Entry pickRandomPrefixCosmetic(Profile profile, CosmeticType type, boolean favoritesOnly) {
+        List<PrefixCatalog.Entry> candidates = new ArrayList<PrefixCatalog.Entry>();
         Set<String> source = favoritesOnly ? profile.getFavorites().get(type) : profile.getUnlocked().get(type);
         if (source != null) {
             for (String id : source) {
                 if (type == CosmeticType.PREFIX_SCHEME && catalog().isNoneScheme(id)) {
                     continue;
                 }
-                PrefixCosmeticDefinition definition = catalog().getDefinition(type, id);
+                PrefixCatalog.Entry definition = catalog().getDefinition(type, id);
                 if (definition != null && hasUnlockedPrefixCosmetic(profile, type, definition.getId())) {
                     candidates.add(definition);
                 }

@@ -1,8 +1,6 @@
 package io.github.mebsic.core.service;
 
 import io.github.mebsic.core.model.CosmeticType;
-import io.github.mebsic.core.model.KnifeSkinDefinition;
-import io.github.mebsic.core.model.PrefixCosmeticDefinition;
 import io.github.mebsic.core.model.Profile;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -20,43 +18,35 @@ import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
 public class CosmeticService {
-    public static final String DEFAULT_KNIFE_ID = KnifeSkinDefinition.DEFAULT_ID;
+    public static final String DEFAULT_KNIFE_ID = CosmeticType.DEFAULT_KNIFE_ID;
     public static final String RANDOM_KNIFE_ID = "random";
     public static final String RANDOM_FAVORITE_KNIFE_ID = "random_favorite";
-    private static final KnifeSkinDefinition DEFAULT_KNIFE = new KnifeSkinDefinition(
-            DEFAULT_KNIFE_ID,
-            "IRON_SWORD",
-            "",
-            "",
-            0
-    );
-    private final Map<String, KnifeSkinDefinition> knifeSkins;
+    private final Map<String, CosmeticItem> knifeSkins;
     private PrefixCatalog prefixCatalog;
 
-    public CosmeticService(Map<String, KnifeSkinDefinition> knifeSkins) {
+    public CosmeticService(Map<String, ? extends CosmeticItem> knifeSkins) {
         this.knifeSkins = new HashMap<>();
         setKnifeSkins(knifeSkins);
     }
 
-    public void setKnifeSkins(Map<String, KnifeSkinDefinition> knifeSkins) {
+    public void setKnifeSkins(Map<String, ? extends CosmeticItem> knifeSkins) {
         this.knifeSkins.clear();
         if (knifeSkins != null) {
-            for (Map.Entry<String, KnifeSkinDefinition> entry : knifeSkins.entrySet()) {
+            for (Map.Entry<String, ? extends CosmeticItem> entry : knifeSkins.entrySet()) {
                 if (entry == null || entry.getKey() == null || entry.getValue() == null) {
                     continue;
                 }
-                String key = KnifeSkinDefinition.normalizeId(entry.getKey());
+                String key = CosmeticType.KNIFE.normalizeId(entry.getKey());
                 if (key.isEmpty()) {
                     continue;
                 }
-                if (key.equals(KnifeSkinDefinition.RANDOM_ID)
-                        || key.equals(KnifeSkinDefinition.RANDOM_FAVORITE_ID)) {
+                if (key.equals(CosmeticType.RANDOM_KNIFE_ENTRY_ID)
+                        || key.equals(CosmeticType.RANDOM_FAVORITE_KNIFE_ENTRY_ID)) {
                     continue;
                 }
                 this.knifeSkins.put(key, entry.getValue());
             }
         }
-        this.knifeSkins.putIfAbsent(DEFAULT_KNIFE_ID, DEFAULT_KNIFE);
     }
 
     public void setPrefixCatalog(PrefixCatalog prefixCatalog) {
@@ -90,7 +80,7 @@ public class CosmeticService {
             if (!defaultId.isEmpty()) {
                 options.add(defaultId);
             }
-            for (PrefixCosmeticDefinition definition : prefixCatalog.getDefinitions(type)) {
+            for (PrefixCatalog.Entry definition : prefixCatalog.getDefinitions(type)) {
                 if (definition != null && !definition.getId().isEmpty()) {
                     if (definition.getId().equals(defaultId)) {
                         continue;
@@ -110,11 +100,11 @@ public class CosmeticService {
 
     public ItemStack createKnife(Profile profile) {
         String selected = resolveSelectedKnifeId(profile);
-        KnifeSkinDefinition skin = resolveKnife(selected);
+        CosmeticItem skin = resolveKnife(selected);
         ItemStack item = new ItemStack(resolveMaterial(skin));
         applyLegacyVariantData(item, selected);
         ItemMeta meta = item.getItemMeta();
-        if (meta != null && !DEFAULT_KNIFE_ID.equals(normalizeId(selected))) {
+        if (meta != null && skin != null && !DEFAULT_KNIFE_ID.equals(normalizeId(selected))) {
             meta.setDisplayName(colorize(skin.getDisplayName()));
             meta.setLore(Collections.singletonList(colorize(skin.getDescription())));
             item.setItemMeta(meta);
@@ -166,9 +156,9 @@ public class CosmeticService {
         }
         if (type == CosmeticType.KNIFE) {
             String normalized = normalizeId(id);
-            if (normalized.equals(KnifeSkinDefinition.RANDOM_ID)) {
+            if (normalized.equals(CosmeticType.RANDOM_KNIFE_ENTRY_ID)) {
                 normalized = RANDOM_KNIFE_ID;
-            } else if (normalized.equals(KnifeSkinDefinition.RANDOM_FAVORITE_ID)) {
+            } else if (normalized.equals(CosmeticType.RANDOM_FAVORITE_KNIFE_ENTRY_ID)) {
                 normalized = RANDOM_FAVORITE_KNIFE_ID;
             }
             if (normalized.isEmpty()) {
@@ -315,16 +305,16 @@ public class CosmeticService {
         grantPrefixDefaults(profile, CosmeticType.PREFIX_SCHEME);
     }
 
-    public Map<String, KnifeSkinDefinition> getKnifeSkins() {
+    public Map<String, CosmeticItem> getKnifeSkins() {
         return Collections.unmodifiableMap(knifeSkins);
     }
 
-    private KnifeSkinDefinition resolveKnife(String id) {
+    private CosmeticItem resolveKnife(String id) {
         String normalized = normalizeId(id);
         if (normalized.isEmpty()) {
             return knifeSkins.get(DEFAULT_KNIFE_ID);
         }
-        KnifeSkinDefinition definition = knifeSkins.get(normalized);
+        CosmeticItem definition = knifeSkins.get(normalized);
         return definition == null ? knifeSkins.get(DEFAULT_KNIFE_ID) : definition;
     }
 
@@ -333,9 +323,9 @@ public class CosmeticService {
             return DEFAULT_KNIFE_ID;
         }
         String selected = normalizeId(profile.getSelected().getOrDefault(CosmeticType.KNIFE, DEFAULT_KNIFE_ID));
-        if (selected.equals(KnifeSkinDefinition.RANDOM_ID)) {
+        if (selected.equals(CosmeticType.RANDOM_KNIFE_ENTRY_ID)) {
             selected = RANDOM_KNIFE_ID;
-        } else if (selected.equals(KnifeSkinDefinition.RANDOM_FAVORITE_ID)) {
+        } else if (selected.equals(CosmeticType.RANDOM_FAVORITE_KNIFE_ENTRY_ID)) {
             selected = RANDOM_FAVORITE_KNIFE_ID;
         }
         if (selected.equals(RANDOM_KNIFE_ID)) {
@@ -499,7 +489,7 @@ public class CosmeticService {
         }
         int wins = Math.max(0, profile.getStats().getWins());
         Set<String> unlocked = profile.getUnlocked().get(type);
-        for (PrefixCosmeticDefinition definition : prefixCatalog.getDefinitions(type)) {
+        for (PrefixCatalog.Entry definition : prefixCatalog.getDefinitions(type)) {
             if (definition == null || definition.getId().isEmpty()) {
                 continue;
             }
@@ -533,15 +523,15 @@ public class CosmeticService {
         String normalized = normalizeId(id);
         return normalized.equals(RANDOM_KNIFE_ID)
                 || normalized.equals(RANDOM_FAVORITE_KNIFE_ID)
-                || normalized.equals(KnifeSkinDefinition.RANDOM_ID)
-                || normalized.equals(KnifeSkinDefinition.RANDOM_FAVORITE_ID);
+                || normalized.equals(CosmeticType.RANDOM_KNIFE_ENTRY_ID)
+                || normalized.equals(CosmeticType.RANDOM_FAVORITE_KNIFE_ENTRY_ID);
     }
 
     private String normalizeId(String id) {
-        return KnifeSkinDefinition.normalizeId(id);
+        return CosmeticType.KNIFE.normalizeId(id);
     }
 
-    private Material resolveMaterial(KnifeSkinDefinition skin) {
+    private Material resolveMaterial(CosmeticItem skin) {
         if (skin == null || skin.getMaterial() == null) {
             return Material.IRON_SWORD;
         }
@@ -568,27 +558,27 @@ public class CosmeticService {
             return;
         }
         String normalizedId = normalizeId(knifeId);
-        if ((KnifeSkinDefinition.ID_PREFIX + "44").equals(normalizedId) && item.getType() == Material.SAPLING) {
+        if ((CosmeticType.KNIFE_ID_PREFIX + "44").equals(normalizedId) && item.getType() == Material.SAPLING) {
             item.setDurability((short) 3);
             return;
         }
-        if ((KnifeSkinDefinition.ID_PREFIX + "19").equals(normalizedId) && item.getType() == Material.COAL) {
+        if ((CosmeticType.KNIFE_ID_PREFIX + "19").equals(normalizedId) && item.getType() == Material.COAL) {
             item.setDurability((short) 1);
             return;
         }
-        if ((KnifeSkinDefinition.ID_PREFIX + "26").equals(normalizedId) && item.getType() == Material.DOUBLE_PLANT) {
+        if ((CosmeticType.KNIFE_ID_PREFIX + "26").equals(normalizedId) && item.getType() == Material.DOUBLE_PLANT) {
             item.setDurability((short) 4);
             return;
         }
-        if ((KnifeSkinDefinition.ID_PREFIX + "39").equals(normalizedId) && item.getType() == Material.INK_SACK) {
+        if ((CosmeticType.KNIFE_ID_PREFIX + "39").equals(normalizedId) && item.getType() == Material.INK_SACK) {
             item.setDurability((short) 1);
             return;
         }
-        if ((KnifeSkinDefinition.ID_PREFIX + "33").equals(normalizedId) && item.getType() == Material.INK_SACK) {
+        if ((CosmeticType.KNIFE_ID_PREFIX + "33").equals(normalizedId) && item.getType() == Material.INK_SACK) {
             item.setDurability((short) 4);
             return;
         }
-        if ((KnifeSkinDefinition.ID_PREFIX + "38").equals(normalizedId) && item.getType() == Material.RAW_FISH) {
+        if ((CosmeticType.KNIFE_ID_PREFIX + "38").equals(normalizedId) && item.getType() == Material.RAW_FISH) {
             item.setDurability((short) 1);
         }
     }

@@ -66,5 +66,5 @@ public interface CoreApi {
 
     void addCounter(UUID uuid, String key, int amount);
 
-    java.util.Map<String, io.github.mebsic.core.model.KnifeSkinDefinition> getKnifeSkins();
+    java.util.Map<String, CosmeticItem> getKnifeSkins();
 }

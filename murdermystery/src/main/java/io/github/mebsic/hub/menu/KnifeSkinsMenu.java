@@ -3,9 +3,10 @@ package io.github.mebsic.hub.menu;
 import io.github.mebsic.core.menu.Menu;
 import io.github.mebsic.core.menu.MenuClick;
 import io.github.mebsic.core.model.CosmeticType;
-import io.github.mebsic.core.model.KnifeSkinDefinition;
 import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.core.service.CoreApi;
+import io.github.mebsic.core.service.CosmeticItem;
+import io.github.mebsic.murdermystery.model.KnifeSkinDefinition;
 import io.github.mebsic.core.service.CosmeticService;
 import io.github.mebsic.murdermystery.store.KnifeSkinStore;
 import io.github.mebsic.core.util.CommonMessages;
@@ -274,7 +275,7 @@ public class KnifeSkinsMenu extends Menu {
         if (costs.containsKey(key)) {
             return Math.max(0, costs.get(key));
         }
-        KnifeSkinDefinition skin = coreApi == null ? null : coreApi.getKnifeSkins().get(key);
+        CosmeticItem skin = coreApi == null ? null : coreApi.getKnifeSkins().get(key);
         if (skin != null) {
             return Math.max(0, skin.getCost());
         }
@@ -320,7 +321,7 @@ public class KnifeSkinsMenu extends Menu {
         if (options == null || options.isEmpty()) {
             return entries;
         }
-        Map<String, KnifeSkinDefinition> skins = coreApi.getKnifeSkins();
+        Map<String, CosmeticItem> skins = coreApi.getKnifeSkins();
         for (String option : options) {
             String normalized = normalizeId(option);
             if (normalized.isEmpty()) {
@@ -353,7 +354,7 @@ public class KnifeSkinsMenu extends Menu {
                 ));
                 continue;
             }
-            KnifeSkinDefinition skin = skins.get(normalized);
+            CosmeticItem skin = skins.get(normalized);
             if (skin == null && CosmeticService.DEFAULT_KNIFE_ID.equals(normalized)) {
                 skin = syntheticSkin(normalized, "IRON_SWORD", "&aDefault Iron Sword");
             }
@@ -671,7 +672,7 @@ public class KnifeSkinsMenu extends Menu {
         return ChatColor.GREEN;
     }
 
-    private String plainDisplayName(KnifeSkinDefinition definition) {
+    private String plainDisplayName(CosmeticItem definition) {
         if (definition == null) {
             return "";
         }
@@ -801,7 +802,7 @@ public class KnifeSkinsMenu extends Menu {
                 + (knifeName == null ? "Knife Skin" : knifeName) + ChatColor.RED + "!");
     }
 
-    private String definitionDescription(KnifeSkinDefinition definition) {
+    private String definitionDescription(CosmeticItem definition) {
         if (definition == null || definition.getDescription() == null) {
             return "";
         }
@@ -842,7 +843,7 @@ public class KnifeSkinsMenu extends Menu {
         return lines;
     }
 
-    private KnifeSkinDefinition syntheticSkin(String id, String material, String displayName) {
+    private CosmeticItem syntheticSkin(String id, String material, String displayName) {
         return new KnifeSkinDefinition(id, material, displayName, "", 0, KnifeSkinDefinition.DEFAULT_RARITY);
     }
 
@@ -889,13 +890,13 @@ public class KnifeSkinsMenu extends Menu {
 
     private static final class KnifeEntry {
         private final String optionId;
-        private final KnifeSkinDefinition definition;
+        private final CosmeticItem definition;
         private final boolean unlocked;
         private final boolean selected;
         private final boolean favorite;
         private final EntryType type;
 
-        private KnifeEntry(String optionId, KnifeSkinDefinition definition, boolean unlocked, boolean selected, boolean favorite, EntryType type) {
+        private KnifeEntry(String optionId, CosmeticItem definition, boolean unlocked, boolean selected, boolean favorite, EntryType type) {
             this.optionId = optionId;
             this.definition = definition;
             this.unlocked = unlocked;

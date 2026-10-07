@@ -1,12 +1,13 @@
-package io.github.mebsic.core.model;
+package io.github.mebsic.murdermystery.model;
 
-import java.util.Locale;
+import io.github.mebsic.core.model.CosmeticType;
+import io.github.mebsic.core.service.CosmeticItem;
 
-public class KnifeSkinDefinition {
-    public static final String ID_PREFIX = "mm_knife_skin_";
-    public static final String DEFAULT_ID = ID_PREFIX + "01";
-    public static final String RANDOM_ID = ID_PREFIX + "02";
-    public static final String RANDOM_FAVORITE_ID = ID_PREFIX + "03";
+public class KnifeSkinDefinition implements CosmeticItem {
+    public static final String ID_PREFIX = CosmeticType.KNIFE_ID_PREFIX;
+    public static final String DEFAULT_ID = CosmeticType.DEFAULT_KNIFE_ID;
+    public static final String RANDOM_ID = CosmeticType.RANDOM_KNIFE_ENTRY_ID;
+    public static final String RANDOM_FAVORITE_ID = CosmeticType.RANDOM_FAVORITE_KNIFE_ENTRY_ID;
     public static final String DEFAULT_RARITY = "common";
 
     private String id;
@@ -82,41 +83,10 @@ public class KnifeSkinDefinition {
     }
 
     public static String normalizeId(String value) {
-        String normalized = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
-        if (!normalized.startsWith(ID_PREFIX)) {
-            return normalized;
-        }
-        String numberToken = normalized.substring(ID_PREFIX.length());
-        if (numberToken.isEmpty()) {
-            return normalized;
-        }
-        for (int i = 0; i < numberToken.length(); i++) {
-            if (!Character.isDigit(numberToken.charAt(i))) {
-                return normalized;
-            }
-        }
-        try {
-            int number = Integer.parseInt(numberToken);
-            return number > 0 ? ID_PREFIX + (number < 10 ? "0" : "") + number : normalized;
-        } catch (NumberFormatException ignored) {
-            return normalized;
-        }
+        return CosmeticType.KNIFE.normalizeId(value);
     }
 
     private String normalizeRarity(String value) {
-        if (value == null) {
-            return DEFAULT_RARITY;
-        }
-        String normalized = value.trim().toLowerCase(Locale.ROOT);
-        if (normalized.isEmpty()) {
-            return DEFAULT_RARITY;
-        }
-        if (normalized.equals("common")
-                || normalized.equals("rare")
-                || normalized.equals("epic")
-                || normalized.equals("legendary")) {
-            return normalized;
-        }
-        return DEFAULT_RARITY;
+        return CosmeticItem.normalizeRarity(value);
     }
 }

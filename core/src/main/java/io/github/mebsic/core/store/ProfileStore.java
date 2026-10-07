@@ -1,7 +1,7 @@
 package io.github.mebsic.core.store;
 
 import io.github.mebsic.core.model.CosmeticType;
-import io.github.mebsic.core.model.KnifeSkinDefinition;
+import io.github.mebsic.core.service.CosmeticItem;
 import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.core.model.ProfileStatus;
 import io.github.mebsic.core.model.Rank;
@@ -38,52 +38,57 @@ public class ProfileStore {
         BASE_STATS_KEYS.add(MongoManager.MURDER_MYSTERY_WINS_CHAT_ENABLED_KEY);
         BASE_STATS_KEYS.add(MongoManager.MURDER_MYSTERY_TEN_TIMES_MODE_ENABLED_KEY);
     }
-    private static final String DEFAULT_KNIFE_ID = KnifeSkinDefinition.DEFAULT_ID;
-    private static final KnifeSkinDefinition DEFAULT_KNIFE = new KnifeSkinDefinition(
-            DEFAULT_KNIFE_ID,
-            "IRON_SWORD",
-            "",
-            "",
-            0
-    );
+    private static final String DEFAULT_KNIFE_ID = CosmeticType.DEFAULT_KNIFE_ID;
+    private static final Document DEFAULT_KNIFE = new Document("id", DEFAULT_KNIFE_ID)
+            .append("material", "IRON_SWORD")
+            .append("displayName", "")
+            .append("description", "")
+            .append("cost", 0)
+            .append("rarity", "common");
 
     private final MongoManager mongo;
-    private final Map<String, KnifeSkinDefinition> knifeSkins;
+    private final Map<String, Document> knifeSkins;
 
     public ProfileStore(MongoManager mongo) {
         this.mongo = mongo;
         this.knifeSkins = new HashMap<>();
-        Map<String, KnifeSkinDefinition> skins = new HashMap<>();
         for (Document doc : mongo.getKnifeSkins().find(Filters.and(
                 eq(MongoManager.MURDER_MYSTERY_RECORD_TYPE_FIELD, MongoManager.MURDER_MYSTERY_KNIFE_SKIN_RECORD_TYPE),
                 eq(MongoManager.MURDER_MYSTERY_GAME_TYPE_FIELD, MongoManager.MURDER_MYSTERY_GAME_TYPE)
         ))) {
-            String id = KnifeSkinDefinition.normalizeId(doc.getString("id"));
+            String id = CosmeticType.KNIFE.normalizeId(doc.getString("id"));
+            if (id.isEmpty()) {
+                continue;
+            }
             Number cost = doc.get("cost", Number.class);
-            skins.put(id, new KnifeSkinDefinition(
-                    id,
-                    doc.getString("material"),
-                    doc.getString("displayName"),
-                    doc.getString("description"),
-                    cost == null ? 0 : cost.intValue(),
-                    doc.getString(MongoManager.MURDER_MYSTERY_RARITY_FIELD)
-            ));
+            this.knifeSkins.put(id, new Document("id", id)
+                    .append("material", doc.getString("material"))
+                    .append("displayName", doc.getString("displayName"))
+                    .append("description", doc.getString("description"))
+                    .append("cost", cost == null ? 0 : cost.intValue())
+                    .append("rarity", CosmeticItem.normalizeRarity(doc.getString(MongoManager.MURDER_MYSTERY_RARITY_FIELD))));
         }
-        setKnifeSkins(skins);
+        this.knifeSkins.putIfAbsent(DEFAULT_KNIFE_ID, DEFAULT_KNIFE);
     }
 
-    public void setKnifeSkins(Map<String, KnifeSkinDefinition> knifeSkins) {
+    public void setKnifeSkins(Map<String, ? extends CosmeticItem> knifeSkins) {
         this.knifeSkins.clear();
         if (knifeSkins != null) {
-            for (Map.Entry<String, KnifeSkinDefinition> entry : knifeSkins.entrySet()) {
+            for (Map.Entry<String, ? extends CosmeticItem> entry : knifeSkins.entrySet()) {
                 if (entry == null || entry.getKey() == null || entry.getValue() == null) {
                     continue;
                 }
-                String key = KnifeSkinDefinition.normalizeId(entry.getKey());
+                String key = CosmeticType.KNIFE.normalizeId(entry.getKey());
                 if (key.isEmpty()) {
                     continue;
                 }
-                this.knifeSkins.put(key, entry.getValue());
+                CosmeticItem skin = entry.getValue();
+                this.knifeSkins.put(key, new Document("id", skin.getId())
+                        .append("material", skin.getMaterial())
+                        .append("displayName", skin.getDisplayName())
+                        .append("description", skin.getDescription())
+                        .append("cost", skin.getCost())
+                        .append("rarity", skin.getRarity()));
             }
         }
         this.knifeSkins.putIfAbsent(DEFAULT_KNIFE_ID, DEFAULT_KNIFE);
@@ -423,16 +428,8 @@ public class ProfileStore {
     }
 
     private Document buildKnifeMeta(String id) {
-        KnifeSkinDefinition def = resolveKnife(id);
-        if (def == null) {
-            return null;
-        }
-        return new Document("id", def.getId())
-                .append("material", def.getMaterial())
-                .append("displayName", def.getDisplayName())
-                .append("description", def.getDescription())
-                .append("cost", def.getCost())
-                .append("rarity", def.getRarity());
+        Document def = resolveKnife(id);
+        return def == null ? null : new Document(def);
     }
 
     private Document cosmeticsByScope(CosmeticType type, Document murderMystery, Document hub) {
@@ -457,11 +454,11 @@ public class ProfileStore {
         return type != CosmeticType.SUIT;
     }
 
-    private KnifeSkinDefinition resolveKnife(String id) {
+    private Document resolveKnife(String id) {
         if (id == null || id.trim().isEmpty()) {
             return knifeSkins.get(DEFAULT_KNIFE_ID);
         }
-        KnifeSkinDefinition def = knifeSkins.get(normalizeCosmeticId(CosmeticType.KNIFE, id));
+        Document def = knifeSkins.get(normalizeCosmeticId(CosmeticType.KNIFE, id));
         return def == null ? knifeSkins.get(DEFAULT_KNIFE_ID) : def;
     }
 
@@ -475,7 +472,7 @@ public class ProfileStore {
         }
         String normalized = trimmed.toLowerCase(Locale.ROOT);
         if (type == CosmeticType.KNIFE) {
-            return KnifeSkinDefinition.normalizeId(normalized);
+            return CosmeticType.KNIFE.normalizeId(normalized);
         }
         return normalized;
     }

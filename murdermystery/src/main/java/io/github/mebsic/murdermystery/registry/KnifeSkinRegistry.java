@@ -1,9 +1,10 @@
 package io.github.mebsic.murdermystery.registry;
 
 import io.github.mebsic.core.model.CosmeticType;
-import io.github.mebsic.core.model.KnifeSkinDefinition;
 import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.core.service.CoreApi;
+import io.github.mebsic.core.service.CosmeticItem;
+import io.github.mebsic.murdermystery.model.KnifeSkinDefinition;
 import io.github.mebsic.murdermystery.store.KnifeSkinStore;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -17,7 +18,7 @@ import java.util.Map;
 
 public class KnifeSkinRegistry {
     private static final String DEFAULT_KNIFE_ID = KnifeSkinStore.DEFAULT_KNIFE_ID;
-    private static final KnifeSkinDefinition DEFAULT_KNIFE = new KnifeSkinDefinition(
+    private static final CosmeticItem DEFAULT_KNIFE = new KnifeSkinDefinition(
             DEFAULT_KNIFE_ID,
             "IRON_SWORD",
             "",
@@ -25,12 +26,12 @@ public class KnifeSkinRegistry {
             0
     );
 
-    private final Map<String, KnifeSkinDefinition> skins;
+    private final Map<String, CosmeticItem> skins;
 
-    public KnifeSkinRegistry(Map<String, KnifeSkinDefinition> skins) {
+    public KnifeSkinRegistry(Map<String, ? extends CosmeticItem> skins) {
         this.skins = new HashMap<>();
         if (skins != null) {
-            for (Map.Entry<String, KnifeSkinDefinition> entry : skins.entrySet()) {
+            for (Map.Entry<String, ? extends CosmeticItem> entry : skins.entrySet()) {
                 if (entry == null || entry.getKey() == null || entry.getValue() == null) {
                     continue;
                 }
@@ -45,11 +46,11 @@ public class KnifeSkinRegistry {
     }
 
     public static KnifeSkinRegistry fromCoreApi(CoreApi coreApi) {
-        Map<String, KnifeSkinDefinition> source = coreApi == null ? Collections.<String, KnifeSkinDefinition>emptyMap() : coreApi.getKnifeSkins();
+        Map<String, CosmeticItem> source = coreApi == null ? Collections.<String, CosmeticItem>emptyMap() : coreApi.getKnifeSkins();
         return new KnifeSkinRegistry(source);
     }
 
-    public Map<String, KnifeSkinDefinition> getSkins() {
+    public Map<String, CosmeticItem> getSkins() {
         return Collections.unmodifiableMap(skins);
     }
 
@@ -61,7 +62,7 @@ public class KnifeSkinRegistry {
                 selected = normalizeId(value);
             }
         }
-        KnifeSkinDefinition skin = resolve(selected);
+        CosmeticItem skin = resolve(selected);
         ItemStack item = new ItemStack(resolveMaterial(skin));
         applyLegacyVariantData(item, skin == null ? null : skin.getId());
         ItemMeta meta = item.getItemMeta();
@@ -73,16 +74,16 @@ public class KnifeSkinRegistry {
         return item;
     }
 
-    public KnifeSkinDefinition resolve(String id) {
+    public CosmeticItem resolve(String id) {
         String normalized = normalizeId(id);
         if (normalized.isEmpty()) {
             return skins.get(DEFAULT_KNIFE_ID);
         }
-        KnifeSkinDefinition skin = skins.get(normalized);
+        CosmeticItem skin = skins.get(normalized);
         return skin == null ? skins.get(DEFAULT_KNIFE_ID) : skin;
     }
 
-    public Material resolveMaterial(KnifeSkinDefinition definition) {
+    public Material resolveMaterial(CosmeticItem definition) {
         if (definition == null || definition.getMaterial() == null) {
             return Material.IRON_SWORD;
         }

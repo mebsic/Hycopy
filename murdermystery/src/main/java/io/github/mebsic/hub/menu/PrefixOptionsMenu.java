@@ -4,7 +4,7 @@ import io.github.mebsic.core.manager.MongoManager;
 import io.github.mebsic.core.menu.Menu;
 import io.github.mebsic.core.menu.MenuClick;
 import io.github.mebsic.core.model.CosmeticType;
-import io.github.mebsic.core.model.PrefixCosmeticDefinition;
+import io.github.mebsic.murdermystery.model.PrefixCosmeticDefinition;
 import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.core.model.Rank;
 import io.github.mebsic.core.service.CoreApi;

@@ -1,14 +1,13 @@
 package io.github.mebsic.core.service;
 
 import io.github.mebsic.core.model.CosmeticType;
-import io.github.mebsic.core.model.PrefixCosmeticDefinition;
 
 import java.util.List;
 
 public interface PrefixCatalog {
-    List<PrefixCosmeticDefinition> getDefinitions(CosmeticType type);
+    List<? extends Entry> getDefinitions(CosmeticType type);
 
-    PrefixCosmeticDefinition getDefinition(CosmeticType type, String id);
+    Entry getDefinition(CosmeticType type, String id);
 
     String getDefaultId(CosmeticType type);
 
@@ -23,4 +22,16 @@ public interface PrefixCatalog {
     String randomId();
 
     String randomFavoriteId();
+
+    interface Entry {
+        String getId();
+
+        int getRequiredWins();
+
+        String getSymbol();
+
+        String getColor();
+
+        boolean isChroma();
+    }
 }

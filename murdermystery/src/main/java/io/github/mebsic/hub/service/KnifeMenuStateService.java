@@ -4,9 +4,9 @@ import com.mongodb.client.MongoCollection;
 import com.mongodb.client.model.UpdateOptions;
 import io.github.mebsic.core.manager.MongoManager;
 import io.github.mebsic.core.model.CosmeticType;
-import io.github.mebsic.core.model.KnifeSkinDefinition;
 import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.core.service.CoreApi;
+import io.github.mebsic.core.service.CosmeticItem;
 import io.github.mebsic.murdermystery.store.KnifeSkinStore;
 import org.bson.Document;
 import org.bukkit.entity.Player;
@@ -180,7 +180,7 @@ public class KnifeMenuStateService {
         if (unlocked == null || unlocked.isEmpty() || coreApi == null) {
             return Collections.emptyList();
         }
-        Map<String, KnifeSkinDefinition> skinMap = coreApi.getKnifeSkins();
+        Map<String, CosmeticItem> skinMap = coreApi.getKnifeSkins();
         if (skinMap == null || skinMap.isEmpty()) {
             return Collections.emptyList();
         }
@@ -190,7 +190,7 @@ public class KnifeMenuStateService {
             if (normalized.isEmpty()) {
                 continue;
             }
-            KnifeSkinDefinition skin = skinMap.get(normalized);
+            CosmeticItem skin = skinMap.get(normalized);
             if (skin == null) {
                 continue;
             }

@@ -67,7 +67,7 @@ import io.github.mebsic.core.store.ProfileStore;
 import io.github.mebsic.core.store.PunishmentStore;
 import io.github.mebsic.core.store.RoleChanceStore;
 import io.github.mebsic.core.store.MapConfigStore;
-import io.github.mebsic.core.model.KnifeSkinDefinition;
+import io.github.mebsic.core.service.CosmeticItem;
 import io.github.mebsic.core.server.DefaultGameTypePlayerCountProvider;
 import io.github.mebsic.core.server.ServerIdentityResolver;
 import io.github.mebsic.core.server.NetworkConfigResolver;
@@ -359,7 +359,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
     }
 
     private void setupServices() {
-        Map<String, KnifeSkinDefinition> knifeSkins = new HashMap<>();
+        Map<String, CosmeticItem> knifeSkins = new HashMap<>();
         NetworkConstants.resetDomain();
         if (isMongoEnabled()) {
             this.mongo = new MongoManager(getConfig().getString("mongo.uri"), getConfig().getString("mongo.database"));
@@ -454,7 +454,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
         }
     }
 
-    public void configureMurderMysteryCosmetics(Map<String, KnifeSkinDefinition> knifeSkins,
+    public void configureMurderMysteryCosmetics(Map<String, ? extends CosmeticItem> knifeSkins,
                                                 PrefixCatalog prefixCatalog) {
         this.prefixCatalog = prefixCatalog;
         cosmetics.setKnifeSkins(knifeSkins);
@@ -2146,7 +2146,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
     }
 
     @Override
-    public java.util.Map<String, io.github.mebsic.core.model.KnifeSkinDefinition> getKnifeSkins() {
+    public java.util.Map<String, CosmeticItem> getKnifeSkins() {
         return cosmetics == null ? java.util.Collections.emptyMap() : cosmetics.getKnifeSkins();
     }
 
