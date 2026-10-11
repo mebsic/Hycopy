@@ -46,7 +46,7 @@ function sidebar(navigation, slug) {
   return `<aside class="sidebar" id="sidebar" aria-label="Documentation navigation">
     <div class="sidebar-intro"><span class="server-invite">Try it out</span><p class="server-description">Minecraft Java Edition</p><button class="server-address" data-copy="mc.hycopy.net" aria-label="Copy Minecraft server address"><span>mc.hycopy.net</span>${icon('copy')}</button></div>
     <nav>${navigation.map(group => `<section class="nav-group${group.label ? '' : ' nav-group-unlabeled'}">${group.label ? `<h2>${e(group.label)}</h2>` : ''}<ul>${navigationItems(group.pages, slug)}</ul></section>`).join('')}</nav>
-    <a target="_blank" rel="noopener noreferrer" class="sidebar-source" href="https://github.com/mebsic/Hycopy">${icon('code')} Open source on GitHub ${icon('external')}</a>
+    <a target="_blank" rel="noopener noreferrer" class="sidebar-source" href="https://github.com/mebsic/Hycopy">${icon('code')} View source on GitHub ${icon('external')}</a>
   </aside>`;
 }
 
@@ -61,7 +61,7 @@ function home() {
     <section class="start-section" aria-labelledby="start-title"><div class="section-heading"><h2 id="start-title">Guides</h2><span class="section-note">Choose a topic to get started.</span></div>
       <div class="guide-cards">
         <a class="guide-card" href="/docker-quickstart"><span class="card-icon">${icon('terminal')}</span><h3>Quickstart</h3><p>Start the Docker stack, configure your environment, and connect to the local server.</p><span class="card-link">Read more ${icon('arrow')}</span></a>
-        <a class="guide-card" href="/murdermystery/creating-maps"><span class="card-icon">${icon('map')}</span><h3>Creation</h3><p>Create a build world, place spawns, and export a reusable map template.</p><span class="card-link">Read more ${icon('arrow')}</span></a>
+        <a class="guide-card" href="/murdermystery/creating-maps"><span class="card-icon">${icon('map')}</span><h3>Creation</h3><p>Build a map, place spawns, and export a reusable template.</p><span class="card-link">Read more ${icon('arrow')}</span></a>
         <a class="guide-card" href="/architecture"><span class="card-icon">${icon('network')}</span><h3>Architecture</h3><p>Understand the proxy, Paper servers, databases, and service discovery.</p><span class="card-link">Read more ${icon('arrow')}</span></a>
       </div>
     </section>
@@ -85,7 +85,7 @@ function article(page, pages) {
     <article class="prose">${page.html}</article>
     <nav class="page-pagination" aria-label="Previous and next guides">${previous ? `<a href="${e(previous.url)}"><small>PREVIOUS</small><strong>← ${e(previous.title)}</strong></a>` : '<span></span>'}${next ? `<a href="${e(next.url)}"><small>NEXT</small><strong>${e(next.title)} →</strong></a>` : '<span></span>'}</nav>
     <div class="feedback-link">Something missing? <a target="_blank" rel="noopener noreferrer" href="https://github.com/mebsic/Hycopy/issues/new">Help improve this guide ${icon('external')}</a></div>
-  </div><aside class="table-of-contents" aria-label="On this page"><span class="section-label">ON THIS PAGE</span><nav>${page.headings.map(heading => `<a href="#${e(heading.id)}" class="toc-depth-${heading.depth}">${e(heading.text)}</a>`).join('')}</nav><div class="toc-note"><a target="_blank" rel="noopener noreferrer" href="https://github.com/mebsic/Hycopy">${icon('code')}<span>View the source</span>${icon('external')}</a></div></aside></div>`;
+  </div><aside class="table-of-contents" aria-label="On this page"><span class="section-label">ON THIS PAGE</span><nav>${page.headings.map(heading => `<a href="#${e(heading.id)}" class="toc-depth-${heading.depth}">${e(heading.text)}</a>`).join('')}</nav><div class="toc-note"><a target="_blank" rel="noopener noreferrer" href="https://github.com/mebsic/Hycopy">${icon('code')}<span>View source on GitHub</span>${icon('external')}</a></div></aside></div>`;
 }
 
 export function renderPage({ page, navigation, pages, siteUrl, assetVersion = '', iconAvailable = true, notFound = false }) {
