@@ -12,8 +12,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: website
-  cancel-in-progress: false
+  group: website-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   validate:
@@ -33,17 +33,3 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Test website without compilation
         run: npm test
-
-  publish:
-    name: Publish website for Heroku
-    needs: validate
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v7.0.1
-      - name: Publish website directory as deployment branch
-        env:
-          DEPLOYMENT_BRANCH: website
-        run: bash website/scripts/deploy.sh
