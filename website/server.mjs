@@ -42,9 +42,7 @@ export async function createDocumentationServer({ siteUrl = process.env.SITE_URL
     function redirect(location, status = 301, extra = {}) { send(status, 'text/plain; charset=utf-8', `Redirecting to ${location}`, { Location: location, 'Cache-Control': 'no-store', ...extra }); }
     try {
       if (!['GET', 'HEAD'].includes(request.method)) return send(405, 'text/plain; charset=utf-8', 'Method not allowed', { Allow: 'GET, HEAD' });
-      const url = new URL(request.url.startsWith('/') ? `http://localhost${request.url}` : request.url, 'http://localhost');
-      const requestHost = (request.headers.host || '').toLowerCase().replace(/:\d+$/, '').replace(/\.$/, '');
-      if (requestHost === `www.${canonical.hostname}`) return redirect(siteUrl + url.pathname + url.search);
+      const url = new URL(request.url, 'http://localhost');
       const path = decodeURIComponent(url.pathname);
       // Clear the previously cached / -> /docs redirect before returning to the new root.
       if (path === '/docs' || path === '/docs/') return redirect(`/${url.search}`, 301, { 'Clear-Site-Data': '"cache"' });
