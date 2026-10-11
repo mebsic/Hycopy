@@ -44,7 +44,6 @@ export async function createDocumentationServer({ siteUrl = process.env.SITE_URL
       if (!['GET', 'HEAD'].includes(request.method)) return send(405, 'text/plain; charset=utf-8', 'Method not allowed', { Allow: 'GET, HEAD' });
       const url = new URL(request.url, 'http://localhost');
       const path = decodeURIComponent(url.pathname);
-      // Clear the previously cached / -> /docs redirect before returning to the new root.
       if (path === '/docs' || path === '/docs/') return redirect(`/${url.search}`, 301, { 'Clear-Site-Data': '"cache"' });
       if (path.startsWith('/docs/')) {
         const legacyPath = path.slice('/docs'.length).replace(/\/$/, '');

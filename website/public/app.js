@@ -56,7 +56,7 @@ function updateThemeButton() {
 themeButton.addEventListener('click', () => {
   const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
   document.documentElement.dataset.theme = theme;
-  try { localStorage.setItem('hycopy-theme', theme); } catch { /* Storage is optional. */ }
+  try { localStorage.setItem('hycopy-theme', theme); } catch {}
   updateThemeButton();
 });
 updateThemeButton();

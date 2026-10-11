@@ -32,7 +32,7 @@ export function renderMarkdown(markdown, { siteUrl = 'https://hycopy.net' } = {}
         try {
           const destination = new URL(attributes.href || '', siteUrl);
           external = ['http:', 'https:'].includes(destination.protocol) && destination.origin !== siteOrigin;
-        } catch { /* Leave malformed URLs for the sanitizer to handle. */ }
+        } catch {}
         return { tagName, attribs: external ? { ...attributes, target: '_blank', rel: 'noopener noreferrer' } : attributes };
       },
     },
