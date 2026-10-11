@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createDocumentationServer } from '../server.mjs';
 import { loadDocumentation, renderMarkdown } from '../lib/content.mjs';
 
@@ -152,10 +153,14 @@ test('search contains guide text; assets, health, canonical URLs and sitemap are
   assert.match(await (await fetch(base + '/robots.txt')).text(), /Allow: \/\n/);
 });
 
-test('optional branding serves the supplied file when present and does not block startup when absent', async () => {
+test('optional branding serves the supplied file when present and does not block startup when absent', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'hycopy-icon-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const suppliedIcon = join(directory, 'image.png');
+  await writeFile(suppliedIcon, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5l8AAAAASUVORK5CYII=', 'base64'));
   const cases = [
-    [new URL('../public/server-icon-production-fullres.png', import.meta.url), true],
-    [new URL('../test/not-supplied-icon.png', import.meta.url), false],
+    [suppliedIcon, true],
+    [join(directory, 'not-supplied-icon.png'), false],
   ];
   for (const [iconFile, available] of cases) {
     const app = await createDocumentationServer({ iconFile });
