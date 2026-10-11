@@ -71,5 +71,5 @@ problems-report.html
 
 ### Documentation website ###
 node_modules/
-!website/image.png
+!website/icon.png
 !website/public/**/*.png

@@ -13,7 +13,7 @@ let server;
 let base;
 let iconBytes;
 before(async () => {
-  try { iconBytes = await readFile(new URL('../image.png', import.meta.url)); }
+  try { iconBytes = await readFile(new URL('../icon.png', import.meta.url)); }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
   server = await createDocumentationServer();
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
@@ -40,7 +40,7 @@ test('old documentation URLs redirect to direct routes and preserve query string
     ['/docs/search.json', '/search.json'],
     ['/docs/assets/styles.css', '/assets/styles.css'],
     ['/docs/Getting-Started-with-Docker', '/docker-quickstart'],
-    ['/icon.png', '/image.png'],
+    ['/image.png', '/icon.png'],
     ['/creating-maps', '/murdermystery/creating-maps'],
     ['/edit-menu', '/murdermystery/edit-menu'],
     ['/creating-maps/', '/murdermystery/creating-maps'],
@@ -55,7 +55,7 @@ test('old documentation URLs redirect to direct routes and preserve query string
     assert.equal(response.headers.get('location'), newPath + '?ref=github');
     assert.equal(response.headers.get('cache-control'), 'no-store');
     if (newPath === '/') assert.equal(response.headers.get('clear-site-data'), '"cache"');
-    const expectedStatus = newPath === '/image.png' && !iconBytes ? 404 : 200;
+    const expectedStatus = newPath === '/icon.png' && !iconBytes ? 404 : 200;
     assert.equal((await fetch(base + response.headers.get('location'), { redirect: 'manual' })).status, expectedStatus);
   }
 });
@@ -126,15 +126,15 @@ test('search contains guide text; assets, health, canonical URLs and sitemap are
   assert.deepEqual(await (await fetch(base + '/healthz')).json(), { status: 'ok' });
   const home = await (await fetch(base + '/')).text();
   assert.match(home, /rel="canonical" href="https:\/\/hycopy.net\/"/);
-  const iconResponse = await fetch(base + '/image.png');
+  const iconResponse = await fetch(base + '/icon.png');
   if (iconBytes) {
-    assert.match(home, /rel="icon" type="image\/png" href="\/image\.png\?v=/);
-    assert.match(home, /class="brand"[^]*?<img src="\/image\.png\?v=/);
+    assert.match(home, /rel="icon" type="image\/png" href="\/icon\.png\?v=/);
+    assert.match(home, /class="brand"[^]*?<img src="\/icon\.png\?v=/);
     assert.equal(iconResponse.status, 200);
     assert.equal(iconResponse.headers.get('content-type'), 'image/png');
     assert.deepEqual(Buffer.from(await iconResponse.arrayBuffer()), iconBytes);
   } else {
-    assert.doesNotMatch(home, /(?:href|src)="\/image\.png/);
+    assert.doesNotMatch(home, /(?:href|src)="\/icon\.png/);
     assert.equal(iconResponse.status, 404);
   }
   const assetUrls = new Set([...home.matchAll(/(?:href|src)="(\/assets\/[^"<>]+)"/g)].map(match => match[1]));
@@ -156,7 +156,7 @@ test('search contains guide text; assets, health, canonical URLs and sitemap are
 test('optional branding serves the supplied file when present and does not block startup when absent', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'hycopy-icon-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
-  const suppliedIcon = join(directory, 'image.png');
+  const suppliedIcon = join(directory, 'icon.png');
   await writeFile(suppliedIcon, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5l8AAAAASUVORK5CYII=', 'base64'));
   const cases = [
     [suppliedIcon, true],
@@ -171,7 +171,7 @@ test('optional branding serves the supplied file when present and does not block
       assert.equal(home.status, 200);
       const html = await home.text();
       assert.equal(html.includes('rel="icon" type="image/png"'), available);
-      const image = await fetch(origin + '/image.png');
+      const image = await fetch(origin + '/icon.png');
       assert.equal(image.status, available ? 200 : 404);
       if (available) assert.deepEqual(Buffer.from(await image.arrayBuffer()), await readFile(iconFile));
     } finally { await new Promise(resolve => app.close(resolve)); }

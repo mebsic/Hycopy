@@ -89,8 +89,8 @@ function article(page, pages) {
 
 export function renderPage({ page, navigation, pages, siteUrl, assetVersion = '', iconAvailable = true, notFound = false }) {
   const assetQuery = assetVersion ? `?v=${encodeURIComponent(assetVersion)}` : '';
-  const favicon = iconAvailable ? `<link rel="icon" type="image/png" href="/image.png${assetQuery}">` : '';
-  const brand = iconAvailable ? `<a class="brand" href="/" aria-label="Hycopy documentation"><img src="/image.png${assetQuery}" width="32" height="32" alt=""></a>` : '';
+  const favicon = iconAvailable ? `<link rel="icon" type="image/png" href="/icon.png${assetQuery}">` : '';
+  const brand = iconAvailable ? `<a class="brand" href="/" aria-label="Hycopy documentation"><img src="/icon.png${assetQuery}" width="32" height="32" alt=""></a>` : '';
   const title = `Hycopy - ${notFound ? 'Page not found' : page.title}`;
   const description = notFound ? 'Find your way back to the Hycopy documentation.' : page.description;
   const body = notFound ? `<div class="not-found"><h1>404</h1><p>Page not found</p><a class="button button-primary" href="/">Back to overview ${icon('arrow')}</a></div>` : page.slug ? article(page, pages) : home();

@@ -6,7 +6,7 @@ import { loadDocumentation, escapeHtml } from './lib/content.mjs';
 import { renderPage } from './lib/views.mjs';
 
 const assetsDirectory = resolve(fileURLToPath(new URL('./public/', import.meta.url)));
-const iconPath = fileURLToPath(new URL('./image.png', import.meta.url));
+const iconPath = fileURLToPath(new URL('./icon.png', import.meta.url));
 const types = { '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' };
 const aliases = new Map([
   ['Getting-Started-with-Docker', 'docker-quickstart'],
@@ -56,8 +56,8 @@ export async function createDocumentationServer({ siteUrl = process.env.SITE_URL
       if (path === '/robots.txt') return send(200, 'text/plain; charset=utf-8', `User-agent: *\nAllow: /\nSitemap: ${siteUrl}/sitemap.xml\n`);
       if (path === '/sitemap.xml') return send(200, 'application/xml; charset=utf-8', `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${documentation.pages.map(page => `<url><loc>${escapeHtml(siteUrl + page.url)}</loc></url>`).join('')}</urlset>`);
       if (path === '/search.json') return send(200, 'application/json; charset=utf-8', search, { 'Cache-Control': 'public, max-age=300' });
-      if (path === '/icon.png') return redirect('/image.png' + url.search);
-      if (path === '/image.png') {
+      if (path === '/image.png') return redirect('/icon.png' + url.search);
+      if (path === '/icon.png') {
         if (!iconAvailable) return send(404, 'text/plain; charset=utf-8', 'Icon not available');
         return send(200, 'image/png', await readFile(iconFile), { 'Cache-Control': 'public, max-age=300' });
       }
