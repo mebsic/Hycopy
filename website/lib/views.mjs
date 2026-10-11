@@ -19,6 +19,7 @@ const paths = {
   search: '<circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/>',
   copy: '<rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V3H3v13h5"/>',
   menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+  close: '<path d="m6 6 12 12M6 18 18 6"/>',
   light: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/>',
   dark: '<path d="M20.5 13A8.8 8.8 0 0 1 11 3.5 9 9 0 1 0 20.5 13Z"/>',
   book: '<path d="M12 5v16M12 5c-3-3-7-3-10-2v16c4-1 7-1 10 2 3-3 6-3 10-2V3c-3-1-7-1-10 2"/>',
@@ -37,7 +38,7 @@ function navigationItems(entries, slug) {
       const expanded = dropdownCount === 1 || current;
       return `<li><details class="nav-dropdown${current ? ' nav-dropdown-current' : ''}"${expanded ? ' open' : ''}><summary>${icon(entry.icon)}<span>${e(entry.label)}</span>${icon('chevron', 'nav-chevron')}</summary><ul class="nav-dropdown-pages">${navigationItems(entry.pages, slug)}</ul></details></li>`;
     }
-    return `<li><a href="${entry.slug ? `/${e(entry.slug)}` : '/'}" ${entry.slug === slug ? 'aria-current="page"' : ''}>${icon(entry.icon)}<span>${e(entry.title)}</span>${entry.slug === slug ? '<span class="active-dot"></span>' : ''}</a></li>`;
+    return `<li><a href="${entry.slug ? `/${e(entry.slug)}` : '/'}" ${entry.slug === slug ? 'aria-current="page"' : ''}>${icon(entry.icon)}<span>${e(entry.title)}</span></a></li>`;
   }).join('');
 }
 
@@ -55,7 +56,7 @@ function home() {
       <h1 id="home-title">Hycopy</h1>
       <p class="hero-description">Open-source Hypixel recreation. This website covers installation, server configuration, map creation, and network operations.</p>
       <div class="hero-actions"><a class="button button-primary" href="/docker-quickstart">Quickstart ${icon('arrow')}</a><a class="button button-subtle" href="/architecture">Architecture ${icon('arrow')}</a></div>
-      <div class="hero-meta"><span>${icon('layers')} Paper + Velocity</span><span>${icon('terminal')} Docker</span><span>${icon('database')} MongoDB + Redis</span></div>
+      <div class="hero-meta"><span>${icon('layers')} Paper + Velocity</span><span>${icon('database')} MongoDB + Redis</span><span>${icon('terminal')} Docker</span></div>
     </section>
     <section class="start-section" aria-labelledby="start-title"><div class="section-heading"><h2 id="start-title">Guides</h2><span class="section-note">Choose a topic to get started.</span></div>
       <div class="guide-cards">
@@ -96,11 +97,11 @@ export function renderPage({ page, navigation, pages, siteUrl, assetVersion = ''
   const body = notFound ? `<div class="not-found"><h1>404</h1><p>Page not found</p><a class="button button-primary" href="/">Back to overview ${icon('arrow')}</a></div>` : page.slug ? article(page, pages) : home();
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><title>${e(title)}</title><meta name="description" content="${e(description)}">${notFound ? '<meta name="robots" content="noindex">' : `<link rel="canonical" href="${e(siteUrl + page.url)}">`}<meta property="og:title" content="${e(title)}"><meta property="og:description" content="${e(description)}"><meta property="og:type" content="website">${favicon}<link rel="stylesheet" href="/assets/styles.css${assetQuery}"><script src="/assets/theme.js${assetQuery}"></script><script src="/assets/app.js${assetQuery}" defer></script></head><body>
     <a class="skip-link" href="#main-content">Skip to content</a>
-    <header class="site-header"><div class="header-brand"><button class="menu-toggle icon-button" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar">${icon('menu')}</button>${brand}</div><nav class="header-nav" aria-label="Primary"><a href="/" ${!page.slug ? 'aria-current="page"' : ''}>Overview</a><a href="/docker-quickstart" ${page.slug ? 'aria-current="page"' : ''}>Guides</a><a target="_blank" rel="noopener noreferrer" href="https://discord.com">Discord ${icon('external')}</a><a target="_blank" rel="noopener noreferrer" href="https://github.com/mebsic/Hycopy">GitHub ${icon('external')}</a></nav><div class="header-actions"><button class="search-trigger" aria-label="Search documentation" aria-haspopup="dialog">${icon('search')}<span>Search</span><kbd>⌘ K</kbd></button><button class="theme-toggle icon-button" aria-label="Toggle color theme" aria-pressed="false">${icon('light', 'theme-light')}${icon('dark', 'theme-dark')}</button></div></header>
+    <header class="site-header"><div class="header-brand">${brand}</div><nav class="header-nav" aria-label="Primary"><a href="/" ${!page.slug ? 'aria-current="page"' : ''}>Overview</a><a href="/docker-quickstart" ${page.slug ? 'aria-current="page"' : ''}>Guides</a><a target="_blank" rel="noopener noreferrer" href="https://discord.com">Discord ${icon('external')}</a><a target="_blank" rel="noopener noreferrer" href="https://github.com/mebsic/Hycopy">GitHub ${icon('external')}</a></nav><div class="header-actions"><button class="search-trigger" aria-label="Search documentation" aria-haspopup="dialog">${icon('search')}<span>Search</span><kbd>⌘ K</kbd></button><button class="theme-toggle icon-button" aria-label="Toggle color theme" aria-pressed="false">${icon('light', 'theme-light')}${icon('dark', 'theme-dark')}</button><button class="menu-toggle icon-button" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar">${icon('menu')}</button></div></header>
     ${sidebar(navigation, notFound ? null : page.slug)}<button class="nav-overlay" aria-label="Close navigation" tabindex="-1"></button>
     <main id="main-content" tabindex="-1">${body}<footer class="site-footer"><span>Built by <a target="_blank" rel="noopener noreferrer" href="https://github.com/mebsic">mebsic</a></span><span>Unofficial project. Not affiliated with Hypixel Inc.</span><a target="_blank" rel="noopener noreferrer" href="https://github.com/mebsic/Hycopy/blob/main/LICENSE">GPL-3.0 ${icon('external')}</a></footer></main>
     <dialog id="search-dialog" aria-labelledby="search-title">
-      <div class="search-modal-top">${icon('search')}<label class="sr-only" id="search-title" for="search-input">Search documentation</label><input id="search-input" type="search" placeholder="What would you like to find?" autocomplete="off"><button class="search-close" aria-label="Close search">Esc</button></div>
+      <div class="search-modal-top">${icon('search')}<label class="sr-only" id="search-title" for="search-input">Search documentation</label><input id="search-input" type="search" placeholder="Search" autocomplete="off"><button class="search-close" aria-label="Close search"><span class="search-close-label">Esc</span>${icon('close', 'search-close-icon')}</button></div>
       <div class="search-shortcuts"><span><kbd>↑</kbd> <kbd>↓</kbd> to navigate</span><span><kbd>↵</kbd> to open</span></div>
       <p class="search-status" role="status">Search guides, commands, and configuration.</p><ul id="search-results" aria-label="Search results"></ul>
     </dialog><div class="toast" role="status" aria-live="polite"></div>

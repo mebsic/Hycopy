@@ -135,7 +135,11 @@ async function openSearch() {
 }
 document.querySelector('.search-trigger').addEventListener('click', openSearch);
 document.querySelector('.search-close').addEventListener('click', () => dialog.close());
-dialog.addEventListener('click', event => { if (event.target === dialog && event.offsetY < 0) dialog.close(); });
+dialog.addEventListener('click', event => {
+  if (event.target !== dialog) return;
+  const bounds = dialog.getBoundingClientRect();
+  if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) dialog.close();
+});
 input.addEventListener('input', renderResults);
 input.addEventListener('keydown', event => {
   if (['ArrowDown', 'ArrowUp'].includes(event.key) && matches.length) {
