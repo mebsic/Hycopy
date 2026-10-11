@@ -158,7 +158,6 @@ public class QueueOrchestrator {
                 }
                 pending.add(request);
             } catch (Exception ignored) {
-                // Keep loop alive if Redis blips.
             }
         }
     }

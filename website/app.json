@@ -1,0 +1,12 @@
+{
+  "name": "Hycopy Documentation",
+  "description": "The Hycopy handbook at hycopy.net",
+  "repository": "https://github.com/mebsic/Hycopy",
+  "env": {
+    "SITE_URL": {
+      "description": "Public origin used for canonical URLs and the sitemap",
+      "value": "https://hycopy.net"
+    }
+  },
+  "buildpacks": [{ "url": "heroku/nodejs" }]
+}

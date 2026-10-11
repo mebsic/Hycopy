@@ -1,0 +1,23 @@
+[
+  { "label": "", "pages": [
+    { "slug": "", "title": "Overview", "description": "Hycopy documentation for server setup, configuration, map creation, and network operations.", "icon": "home" },
+    { "slug": "docker-quickstart", "title": "Quickstart", "description": "Get a local Hycopy network running and make your first connection.", "icon": "terminal" },
+    { "slug": "configuration", "title": "Configuration", "description": "Understand environment variables, runtime settings, and database access.", "icon": "settings" }
+  ] },
+  { "label": "Network", "pages": [
+    { "slug": "architecture", "title": "Architecture", "description": "How Paper, Velocity, MongoDB, and Redis work together.", "icon": "network" },
+    { "slug": "deployment", "title": "Deployment", "description": "Understand service startup, plugin rollout, and restart behavior.", "icon": "upload" },
+    { "slug": "autoscaling", "title": "Autoscaling", "description": "Scale game servers with player demand and drain them safely.", "icon": "chart" },
+    { "slug": "troubleshooting", "title": "Troubleshooting", "description": "Work through connection, configuration, and map issues.", "icon": "help" }
+  ] },
+  { "label": "Maps", "pages": [
+    { "label": "Murder Mystery", "icon": "map", "pages": [
+      { "slug": "murdermystery/creating-maps", "title": "Creation", "description": "Create Murder Mystery hub and game maps with the build server's editor.", "icon": "map" },
+      { "slug": "murdermystery/edit-menu", "title": "Editor", "description": "Configure Murder Mystery spawns, NPCs, parkour, and leaderboards.", "icon": "grid" }
+    ] },
+    { "slug": "map-templates", "title": "Templates", "description": "Export worlds and understand how servers choose their maps.", "icon": "layers" }
+  ] },
+  { "label": "Project", "pages": [
+    { "slug": "contributing", "title": "Contributing", "description": "Help improve Hycopy with focused issues and pull requests.", "icon": "code" }
+  ] }
+]
