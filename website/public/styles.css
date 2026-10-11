@@ -225,6 +225,12 @@ code, pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospac
 .search-shortcuts { display: flex; justify-content: space-between; padding: 12px 20px; border-bottom: 1px solid var(--border); font-size: 10px; color: var(--muted); }
 .toast { position: fixed; bottom: 25px; left: 50vw; width: max-content; max-width: calc(100vw - 32px); transform: translate(-50%, 20px); padding: 9px 17px; background: var(--text); color: var(--background); border-radius: 7px; font-size: 12px; text-align: center; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 40; }
 .toast.visible { opacity: 1; transform: translate(-50%, 0); }
+@media (min-width: 721px) {
+  html { overscroll-behavior-y: none; }
+  body { padding-top: var(--header-height); }
+  .site-header { position: fixed; left: 0; right: 0; }
+  .sidebar { overscroll-behavior-y: contain; }
+}
 @media (min-width: 1600px) { .home-content { padding-top: 70px; } }
 @media (max-width: 1200px) {
   .home-content { padding: 42px 35px 15px; }
