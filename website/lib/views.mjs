@@ -11,6 +11,7 @@ const paths = {
   map: '<path d="m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2zm6-2v16m6-14v16"/>',
   grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
   layers: '<path d="m12 3 10 5-10 5L2 8zm-10 9 10 5 10-5M2 16l10 5 10-5"/>',
+  database: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/>',
   code: '<path d="m8 5-6 7 6 7m8-14 6 7-6 7m-3-16-2 18"/>',
   arrow: '<path d="M4 12h16m-6-6 6 6-6 6"/>',
   chevron: '<path d="m9 5 7 7-7 7"/>',
@@ -54,7 +55,7 @@ function home() {
       <h1 id="home-title">Hycopy</h1>
       <p class="hero-description">Open-source Hypixel recreation. This website covers installation, server configuration, map creation, and network operations.</p>
       <div class="hero-actions"><a class="button button-primary" href="/docker-quickstart">Quickstart ${icon('arrow')}</a><a class="button button-subtle" href="/architecture">Architecture ${icon('arrow')}</a></div>
-      <div class="hero-meta"><span>${icon('layers')} Paper + Velocity</span><span>${icon('terminal')} Deployed using Docker</span><span>${icon('code')} Minecraft Java Edition</span></div>
+      <div class="hero-meta"><span>${icon('layers')} Paper + Velocity</span><span>${icon('terminal')} Docker</span><span>${icon('database')} MongoDB + Redis</span></div>
     </section>
     <section class="start-section" aria-labelledby="start-title"><div class="section-heading"><h2 id="start-title">Guides</h2><span class="section-note">Choose a topic to get started.</span></div>
       <div class="guide-cards">

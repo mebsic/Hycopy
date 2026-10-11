@@ -57,7 +57,7 @@ button { border: 0; }
 .icon-button { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border-radius: 6px; background: transparent; color: var(--muted); }
 .icon-button:hover { background: var(--surface-strong); color: var(--text); }
 .theme-toggle { position: relative; perspective: 80px; border: 1px solid var(--border); color: var(--text); }
-.theme-toggle:hover { background: transparent; border-color: var(--muted); }
+.theme-toggle:hover { background: transparent; }
 .theme-toggle > .icon { position: absolute; transition: transform .25s ease, opacity .2s ease; }
 .theme-toggle > .theme-light { width: 20px; height: 20px; opacity: 0; transform: rotateY(-180deg); }
 .theme-toggle > .theme-dark { opacity: 1; transform: rotateY(0); }

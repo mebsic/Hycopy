@@ -2,6 +2,7 @@ import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -29,6 +30,39 @@ test('overview is served at the root without redirecting', async () => {
   const trailing = await fetch(base + '/configuration/?ref=github', { redirect: 'manual' });
   assert.equal(trailing.status, 308);
   assert.equal(trailing.headers.get('location'), '/configuration?ref=github');
+});
+
+test('www redirects permanently to the canonical HTTPS origin and preserves paths and queries', async () => {
+  const requestAsHost = (path, host, method = 'GET') => new Promise((resolve, reject) => {
+    const outgoing = request(base, { path, method, headers: { Host: host, 'X-Forwarded-Host': 'www.hycopy.net' } }, response => {
+      let body = '';
+      response.setEncoding('utf8');
+      response.on('data', chunk => { body += chunk; });
+      response.on('end', () => resolve({ status: response.statusCode, location: response.headers.location, body }));
+      response.on('error', reject);
+    });
+    outgoing.on('error', reject);
+    outgoing.end();
+  });
+  for (const [path, host] of [
+    ['/', 'www.hycopy.net'],
+    ['/configuration?ref=www', 'WWW.HYCOPY.NET:443'],
+    ['/murdermystery/creating-maps?name=Map%20One', 'www.hycopy.net.'],
+    ['//other.example/configuration?ref=www', 'www.hycopy.net'],
+  ]) {
+    const response = await requestAsHost(path, host);
+    assert.equal(response.status, 301);
+    assert.equal(response.location, 'https://hycopy.net' + path);
+  }
+  const head = await requestAsHost('/configuration?ref=www', 'www.hycopy.net', 'HEAD');
+  assert.equal(head.status, 301);
+  assert.equal(head.location, 'https://hycopy.net/configuration?ref=www');
+  assert.equal(head.body, '');
+  for (const host of ['hycopy.net', 'localhost', 'unrelated.example', 'www.hycopy.net.other.example']) {
+    const response = await requestAsHost('/', host);
+    assert.equal(response.status, 200);
+    assert.equal(response.location, undefined);
+  }
 });
 
 test('old documentation URLs redirect to direct routes and preserve query strings', async () => {
