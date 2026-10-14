@@ -260,7 +260,7 @@ code, pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospac
   .site-footer { font-size: 8px; }
 }
 @media (max-width: 720px) {
-  :root { --header-height: 65px; --sidebar-width: 260px; }
+  :root { --header-height: 65px; --sidebar-width: 290px; }
   .site-header { padding: 0 17px; gap: 12px; }
   .brand img { width: 28px; height: 28px; }
   .header-brand { gap: 9px; }

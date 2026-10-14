@@ -28,6 +28,7 @@ import static com.mongodb.client.model.Filters.eq;
 
 public class FriendService {
     private static final long REQUEST_TTL_MILLIS = 5L * 60L * 1000L;
+    private static final long PRESENCE_TIMEOUT_MILLIS = 1_000L;
     private static final String FRIEND_VISIBILITY_UPDATE_CHANNEL = "friend_visibility_update";
 
     private final ProxyServer proxy;
@@ -360,11 +361,20 @@ public class FriendService {
     }
 
     private FriendPresence refreshFromLiveProxyIfNeeded(UUID uuid, FriendPresence current) {
-        if (!needsLiveRefresh(current) || proxy == null || uuid == null) {
+        if (proxy == null || uuid == null || !current.isOnline()) {
             return null;
         }
         Optional<Player> online = proxy.getPlayer(uuid);
         if (!online.isPresent()) {
+            if (System.currentTimeMillis() - current.getUpdatedAt() >= PRESENCE_TIMEOUT_MILLIS) {
+                FriendPresence offline = FriendPresence.offline(current.getUpdatedAt());
+                presenceByPlayer.put(uuid, offline);
+                persistPresence(uuid, null, offline);
+                return offline;
+            }
+            return null;
+        }
+        if (!needsLiveRefresh(current)) {
             return null;
         }
         updatePresence(online.get());

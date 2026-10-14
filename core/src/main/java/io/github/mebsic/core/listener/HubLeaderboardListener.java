@@ -6,6 +6,7 @@ import io.github.mebsic.core.manager.MongoManager;
 import io.github.mebsic.core.model.Rank;
 import io.github.mebsic.core.server.ServerType;
 import io.github.mebsic.core.store.MapConfigStore;
+import io.github.mebsic.core.util.MojangApi;
 import io.github.mebsic.core.util.RankFormatUtil;
 import org.bson.Document;
 import org.bukkit.Bukkit;
@@ -312,8 +313,10 @@ public class HubLeaderboardListener implements Listener {
                 rankIndex++;
                 continue;
             }
+            Player online = entry.uuid == null ? null : Bukkit.getPlayer(entry.uuid);
+            String name = online == null ? entry.name : online.getName();
             lines.add(ChatColor.YELLOW + "" + rankIndex + ". "
-                    + entry.nameColor + entry.name
+                    + entry.nameColor + name
                     + ChatColor.GRAY + " - "
                     + ChatColor.YELLOW + formatNumber(entry.score));
             rankIndex++;
@@ -363,7 +366,7 @@ public class HubLeaderboardListener implements Listener {
             boolean uuidMatch = entry.uuid != null && viewerUuid.equals(entry.uuid);
             boolean nameMatch = !viewerName.isEmpty() && viewerName.equalsIgnoreCase(entry.name);
             if (uuidMatch || nameMatch) {
-                return new ViewerRecord(position, entry.name, entry.score, entry.nameColor);
+                return new ViewerRecord(position, viewerName, entry.score, entry.nameColor);
             }
             position++;
         }
@@ -476,6 +479,13 @@ public class HubLeaderboardListener implements Listener {
                     .comparingInt((LeaderboardEntry entry) -> entry.score)
                     .reversed()
                     .thenComparing(entry -> entry.name.toLowerCase(Locale.ROOT)));
+            for (int i = 0; i < Math.min(10, entries.size()); i++) {
+                LeaderboardEntry entry = entries.get(i);
+                String refreshedName = MojangApi.lookupName(entry.uuid);
+                if (refreshedName != null) {
+                    entries.set(i, new LeaderboardEntry(entry.uuid, refreshedName, entry.score, entry.nameColor));
+                }
+            }
         }
         return entriesByMetric;
     }

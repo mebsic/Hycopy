@@ -514,6 +514,10 @@ public class FriendCommand implements SimpleCommand {
         String commandPrefix = bestOnly ? cmd("list best") : cmd("list");
         lines.add(FriendComponents.pageHeader(title, page, totalPages, commandPrefix));
         for (UUID friendId : pageSlice(ordered, page, LIST_PAGE_SIZE)) {
+            String currentName = proxy.getPlayer(friendId)
+                    .map(Player::getUsername)
+                    .orElseGet(() -> MojangApi.lookupName(friendId));
+            friends.rememberName(friendId, currentName);
             lines.add(buildFriendListEntry(player, friendId));
         }
         sendFramed(player, lines);
