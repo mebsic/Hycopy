@@ -1828,7 +1828,7 @@ public class HycopyProxyPlugin {
             return "§7" + fallback;
         }
         try {
-            String ranked = rankResolver.formatNameWithRank(playerId, fallback);
+            String ranked = rankResolver.formatRankPrefix(playerId) + fallback;
             if (ranked == null || ranked.trim().isEmpty()) {
                 return "§7" + fallback;
             }

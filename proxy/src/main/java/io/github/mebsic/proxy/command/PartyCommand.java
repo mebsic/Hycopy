@@ -1183,7 +1183,7 @@ public class PartyCommand implements SimpleCommand {
             return "§7" + safeFallback;
         }
         try {
-            String ranked = rankResolver.formatNameWithRank(uuid, safeFallback);
+            String ranked = rankResolver.formatRankPrefix(uuid) + safeFallback;
             if (ranked == null || ranked.trim().isEmpty()) {
                 return "§7" + safeFallback;
             }

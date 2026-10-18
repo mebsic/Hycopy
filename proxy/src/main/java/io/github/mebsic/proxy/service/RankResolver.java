@@ -106,6 +106,12 @@ public class RankResolver {
         return resolveProfileStatus(uuid) == ProfileStatus.APPEAR_OFFLINE;
     }
 
+    public String formatRankPrefix(UUID uuid) {
+        Document profile = loadProfile(uuid);
+        String rankName = resolveRankName(profile);
+        return fallbackPrefix(rankName, profile) + fallbackBaseColor(rankName, profile);
+    }
+
     public String formatNameWithRank(UUID uuid, String fallbackName) {
         if (uuid == null) {
             return fallbackName == null ? "" : fallbackName;

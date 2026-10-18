@@ -852,7 +852,9 @@ public class FriendCommand implements SimpleCommand {
                                            long friendSince,
                                            boolean shownOnline) {
         String safeName = friendName == null || friendName.trim().isEmpty() ? "Unknown" : friendName;
-        String coloredName = friendId == null ? safeName : friends.formatNameWithRank(friendId);
+        String coloredName = friendId == null || rankResolver == null
+                ? safeName
+                : rankResolver.formatRankPrefix(friendId) + safeName;
         Component hover = Component.empty();
         if (!shownOnline) {
             hover = hover.append(Component.text("Last seen ", NamedTextColor.GRAY))

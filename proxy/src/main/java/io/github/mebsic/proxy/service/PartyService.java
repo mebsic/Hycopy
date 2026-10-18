@@ -367,7 +367,7 @@ public class PartyService {
             return fallback;
         }
         try {
-            return rankResolver.formatNameWithRank(uuid, fallback);
+            return rankResolver.formatRankPrefix(uuid) + fallback;
         } catch (Throwable ignored) {
             return fallback;
         }

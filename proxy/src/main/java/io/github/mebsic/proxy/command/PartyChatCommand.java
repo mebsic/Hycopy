@@ -164,7 +164,7 @@ public class PartyChatCommand implements SimpleCommand {
             return "§7" + fallback;
         }
         try {
-            String ranked = rankResolver.formatNameWithRank(uuid, fallback);
+            String ranked = rankResolver.formatRankPrefix(uuid) + fallback;
             if (ranked == null || ranked.trim().isEmpty()) {
                 return "§7" + fallback;
             }
