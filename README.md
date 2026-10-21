@@ -1,4 +1,4 @@
-# Hypixel Recreation
+# Hycopy
 
 Open-source Hypixel recreation built using Paper and Velocity with core services, games, and Docker for deployment.
 
