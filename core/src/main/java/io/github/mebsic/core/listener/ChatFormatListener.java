@@ -83,7 +83,8 @@ public class ChatFormatListener implements Listener {
         }
         Profile profile = coreApi.getProfile(uuid);
         boolean canUseMvpPlusPlusEmotes = rank != null && rank.isAtLeast(Rank.MVP_PLUS_PLUS);
-        boolean canUseRankGiftingEmotes = profile != null && profile.getRanksGifted() >= 1;
+        boolean canUseRankGiftingEmotes = canUseMvpPlusPlusEmotes
+                && profile != null && profile.getRanksGifted() >= 1;
         boolean highlightGoodGame = shouldHighlightGoodGame(rank);
         event.setCancelled(true);
 

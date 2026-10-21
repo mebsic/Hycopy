@@ -41,14 +41,11 @@ public class Unlock100RanksGiftedCommand implements CommandExecutor {
             return true;
         }
 
-        int current = Math.max(0, profile.getRanksGifted());
-        if (current != TARGET_GIFTED_AMOUNT) {
-            profile.setRanksGifted(TARGET_GIFTED_AMOUNT);
-            plugin.saveProfile(profile);
-            ProfileCommandSyncService sync = plugin.getProfileCommandSyncService();
-            if (sync != null) {
-                sync.dispatchCounterSet(player.getUniqueId(), MongoManager.PROFILE_RANKS_GIFTED_KEY, TARGET_GIFTED_AMOUNT, null, null);
-            }
+        profile.setRanksGifted(TARGET_GIFTED_AMOUNT);
+        plugin.saveProfile(profile);
+        ProfileCommandSyncService sync = plugin.getProfileCommandSyncService();
+        if (sync != null) {
+            sync.dispatchCounterSet(player.getUniqueId(), MongoManager.PROFILE_RANKS_GIFTED_KEY, TARGET_GIFTED_AMOUNT, null, null);
         }
 
         player.sendMessage(ChatColor.GREEN + CommonMessages.DONE);

@@ -9,6 +9,7 @@ import io.github.mebsic.core.model.Rank;
 import io.github.mebsic.core.server.ServerRegistryStates;
 import io.github.mebsic.core.server.ServerType;
 import io.github.mebsic.core.util.ActionBarUtil;
+import io.github.mebsic.core.util.ChatEmoteUtil;
 import io.github.mebsic.core.util.RankFormatUtil;
 import io.github.mebsic.game.manager.GameManager;
 import io.github.mebsic.game.menu.SpectatorSettingsMenu;
@@ -218,10 +219,19 @@ public class SpectatorListener implements Listener {
         }
         storeSpectatorChatMessage(sender, message);
         DeadChatSenderStyle senderStyle = buildDeadChatSenderStyle(sender);
+        Rank rank = plugin.getRank(senderId);
+        Profile profile = plugin.getProfile(senderId);
+        boolean canUseMvpPlusPlusEmotes = rank != null && rank.isAtLeast(Rank.MVP_PLUS_PLUS);
+        String renderedMessage = ChatEmoteUtil.replaceEmotes(
+                message,
+                canUseMvpPlusPlusEmotes,
+                profile != null && profile.getRanksGifted() >= 1,
+                ChatColor.WHITE.toString()
+        );
         String deadLine = DEAD_CHAT_PREFIX
                 + senderStyle.formattedName
                 + senderStyle.separatorColor + ": "
-                + ChatColor.WHITE + message;
+                + ChatColor.WHITE + renderedMessage;
         for (Player online : Bukkit.getOnlinePlayers()) {
             if (!isDeadSpectator(online)) {
                 continue;

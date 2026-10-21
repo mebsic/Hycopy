@@ -23,7 +23,9 @@ public class EmotesCommand implements CommandExecutor {
         for (ChatEmoteUtil.ChatEmote emote : ChatEmoteUtil.mvpPlusPlusEmotes()) {
             sendEmoteLine(player, emote);
         }
-        player.sendMessage(ChatColor.GREEN + "Available through Rank Gifting:");
+        player.sendMessage(ChatColor.GREEN + "Available to "
+                + ChatColor.GOLD + "MVP" + ChatColor.RED + "++"
+                + ChatColor.GREEN + " or higher with at least 1 rank gifted:");
         for (ChatEmoteUtil.ChatEmote emote : ChatEmoteUtil.rankGiftingEmotes()) {
             sendEmoteLine(player, emote);
         }

@@ -38,14 +38,11 @@ public final class ChatEmoteUtil {
                                        boolean canUseMvpPlusPlusEmotes,
                                        boolean canUseRankGiftingEmotes,
                                        String restoreColor) {
-        if (message == null || message.isEmpty()) {
+        if (message == null || message.isEmpty() || !canUseMvpPlusPlusEmotes) {
             return message == null ? "" : message;
         }
-        String rendered = message;
         String restore = restoreColor == null ? "" : restoreColor;
-        if (canUseMvpPlusPlusEmotes) {
-            rendered = replaceEmotes(rendered, MVP_PLUS_PLUS_EMOTES, restore);
-        }
+        String rendered = replaceEmotes(message, MVP_PLUS_PLUS_EMOTES, restore);
         if (canUseRankGiftingEmotes) {
             rendered = replaceEmotes(rendered, RANK_GIFTING_EMOTES, restore);
         }

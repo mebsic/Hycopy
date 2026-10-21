@@ -454,7 +454,8 @@ public class MurderMysteryGameManager extends GameManager {
         if (mmPlayer != null && !mmPlayer.isAlive()) {
             lines.add(ChatColor.WHITE + "Role: " + ChatColor.GRAY + "Dead");
         } else {
-            lines.add(ChatColor.WHITE + "Role: " + formatScoreboardRoleColor(role) + formatScoreboardRoleName(role));
+            MurderMysteryRole scoreboardRole = getScoreboardRole(mmPlayer);
+            lines.add(ChatColor.WHITE + "Role: " + scoreboardRole.getColor() + scoreboardRole.getDisplayName());
         }
         lines.add(" ");
         lines.add(ChatColor.WHITE + "Innocents Left: " + ChatColor.GREEN + innocents);
@@ -2975,18 +2976,12 @@ public class MurderMysteryGameManager extends GameManager {
         return getAliveCount(MurderMysteryRole.HERO) > 0;
     }
 
-    private String formatScoreboardRoleName(MurderMysteryRole role) {
+    private MurderMysteryRole getScoreboardRole(MurderMysteryGamePlayer mmPlayer) {
+        MurderMysteryRole role = mmPlayer == null ? null : mmPlayer.getRole();
         if (role == MurderMysteryRole.HERO) {
-            return MurderMysteryRole.DETECTIVE.getDisplayName();
+            return mmPlayer.isHeroFromGold() ? MurderMysteryRole.INNOCENT : MurderMysteryRole.DETECTIVE;
         }
-        return role == null ? MurderMysteryRole.INNOCENT.getDisplayName() : role.getDisplayName();
-    }
-
-    private ChatColor formatScoreboardRoleColor(MurderMysteryRole role) {
-        if (role == MurderMysteryRole.HERO) {
-            return MurderMysteryRole.DETECTIVE.getColor();
-        }
-        return role == null ? MurderMysteryRole.INNOCENT.getColor() : role.getColor();
+        return role == null ? MurderMysteryRole.INNOCENT : role;
     }
 
     private void announceHeroWinners() {
