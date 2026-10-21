@@ -1,6 +1,7 @@
 package io.github.mebsic.core.service;
 
 import io.github.mebsic.core.CorePlugin;
+import io.github.mebsic.core.manager.MongoManager;
 import io.github.mebsic.core.menu.GiftSupport;
 import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.core.model.Rank;
@@ -78,6 +79,10 @@ public final class GiftDecisionHandler {
         plugin.saveProfile(gifterProfile);
 
         ProfileCommandSyncService sync = plugin.getProfileCommandSyncService();
+        if (sync != null) {
+            sync.dispatchCounterSet(gifter.getUniqueId(), MongoManager.PROFILE_RANKS_GIFTED_KEY,
+                    gifterProfile.getRanksGifted(), null, null);
+        }
         Integer days = request.getMvpPlusPlusDays();
         if (giftedRank == Rank.MVP_PLUS_PLUS) {
             days = GiftSupport.normalizeMvpPlusPlusDays(days);

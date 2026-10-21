@@ -3,7 +3,10 @@ package io.github.mebsic.proxy.service;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import io.github.mebsic.core.model.ProfileStatus;
+import io.github.mebsic.core.service.PubSubService;
 import io.github.mebsic.core.util.HycopyExperienceUtil;
+import io.github.mebsic.core.util.GiftedRankUtil;
+import io.github.mebsic.core.util.NetworkConstants;
 import io.github.mebsic.proxy.manager.MongoManager;
 import org.bson.Document;
 
@@ -39,11 +42,13 @@ public class RankResolver {
     private final MongoDatabase database;
     private final Map<String, Integer> weights;
     private final Map<UUID, CachedProfile> profileCache;
+    private final Map<UUID, CachedGiftedRank> giftedRankUpdates;
 
     public RankResolver(MongoDatabase database) {
         this.database = database;
         this.weights = new HashMap<>();
         this.profileCache = new ConcurrentHashMap<UUID, CachedProfile>();
+        this.giftedRankUpdates = new ConcurrentHashMap<UUID, CachedGiftedRank>();
         weights.put("DEFAULT", 0);
         weights.put("VIP", 1);
         weights.put("VIP_PLUS", 2);
@@ -80,9 +85,49 @@ public class RankResolver {
         if (database == null || uuid == null) {
             return false;
         }
-        Document profile = loadProfile(uuid);
-        Object raw = profile == null ? null : profile.get(MongoManager.PROFILE_RANKS_GIFTED_KEY);
-        return raw instanceof Number && ((Number) raw).intValue() >= 1;
+        CachedGiftedRank update = giftedRankUpdates.get(uuid);
+        if (update != null) {
+            if (System.currentTimeMillis() - update.receivedAtMillis <= PROFILE_CACHE_TTL_MILLIS) {
+                return update.count >= 1;
+            }
+            giftedRankUpdates.remove(uuid, update);
+        }
+        return GiftedRankUtil.readGiftedRanks(loadProfile(uuid)) >= 1;
+    }
+
+    public void subscribeGiftedRankUpdates(PubSubService pubSub) {
+        if (pubSub != null) {
+            pubSub.subscribe(NetworkConstants.PROFILE_COMMAND_ACTION_CHANNEL, this::handleGiftedRankUpdate);
+        }
+    }
+
+    private void handleGiftedRankUpdate(String payload) {
+        if (payload == null || payload.trim().isEmpty()) {
+            return;
+        }
+        try {
+            Document action = Document.parse(payload);
+            if (!"SET_COUNTER".equals(action.getString("action"))) {
+                return;
+            }
+            boolean setsGiftedRanks = MongoManager.PROFILE_RANKS_GIFTED_KEY.equals(action.getString("counterKey"));
+            boolean clearsGiftedRanks = MongoManager.PROFILE_RANKS_GIFTED_KEY.equals(action.getString("clearCounterKey"));
+            if (!setsGiftedRanks && !clearsGiftedRanks) {
+                return;
+            }
+            UUID uuid = UUID.fromString(action.getString("targetUuid"));
+            int count = clearsGiftedRanks ? 0 : GiftedRankUtil.readGiftedRanks(
+                    new Document(MongoManager.PROFILE_RANKS_GIFTED_KEY, action.get("counterValue")));
+            long now = System.currentTimeMillis();
+            giftedRankUpdates.entrySet().removeIf(entry -> now - entry.getValue().receivedAtMillis > PROFILE_CACHE_TTL_MILLIS);
+            // Use the event value while the backend's asynchronous profile save completes.
+            giftedRankUpdates.put(uuid, new CachedGiftedRank(count, now));
+            profileCache.computeIfPresent(uuid, (id, cached) -> new CachedProfile(
+                    new Document(cached.profile).append(MongoManager.PROFILE_RANKS_GIFTED_KEY, count),
+                    cached.loadedAtMillis));
+        } catch (RuntimeException ignored) {
+            // Ignore malformed updates and keep using the stored profile.
+        }
     }
 
     public ProfileStatus resolveProfileStatus(UUID uuid) {
@@ -307,6 +352,16 @@ public class RankResolver {
             this.level = level;
             this.code = code;
             this.giftedReward = giftedReward;
+        }
+    }
+
+    private static final class CachedGiftedRank {
+        private final int count;
+        private final long receivedAtMillis;
+
+        private CachedGiftedRank(int count, long receivedAtMillis) {
+            this.count = count;
+            this.receivedAtMillis = receivedAtMillis;
         }
     }
 

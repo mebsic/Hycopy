@@ -196,6 +196,7 @@ public class HycopyProxyPlugin {
             this.registryService = new ServerRegistryService(proxy, config, mongoDatabase);
             this.registryService.refresh();
             this.rankResolver = new RankResolver(mongoDatabase);
+            this.rankResolver.subscribeGiftedRankUpdates(pubSub);
             String friendsCollection = config == null ? null : config.getFriendsCollection();
             this.friendService = new FriendService(proxy, mongoDatabase, friendsCollection, rankResolver, registryService, redis);
             this.blockService = new BlockService(mongoDatabase, friendsCollection, redis, rankResolver);

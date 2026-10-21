@@ -4,6 +4,7 @@ public final class NetworkConstants {
     public static final String DEFAULT_DOMAIN = "example.net";
     public static final String PROTOCOL_VERSION_CHANNEL = "hycopy:protocol";
     public static final String PROFILE_STATUS_UPDATE_CHANNEL = "profile_status_update";
+    public static final String PROFILE_COMMAND_ACTION_CHANNEL = "profile_command_action";
     public static volatile String DOMAIN = DEFAULT_DOMAIN;
     public static volatile String WEBSITE = "www." + DEFAULT_DOMAIN;
 

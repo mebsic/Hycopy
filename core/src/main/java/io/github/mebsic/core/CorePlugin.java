@@ -80,6 +80,7 @@ import io.github.mebsic.core.util.GameRewardUtil;
 import io.github.mebsic.core.util.HycopyExperienceUtil;
 import io.github.mebsic.core.util.NetworkLevelUpMessageUtil;
 import io.github.mebsic.core.util.ActionBarUtil;
+import io.github.mebsic.core.util.ProfileStatusUtil;
 import io.github.mebsic.core.util.DomainSettingsStore;
 import io.github.mebsic.core.util.NetworkConstants;
 import io.github.mebsic.core.util.RankColorUtil;
@@ -1345,26 +1346,11 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
     }
 
     private boolean showsStatusActionBar(ProfileStatus status, boolean vanished) {
-        return vanished || (status != null && status != ProfileStatus.ONLINE);
+        return ProfileStatusUtil.hasNotice(status, vanished);
     }
 
     private String statusActionBarMessage(ProfileStatus status, boolean vanished) {
-        String message = ChatColor.WHITE + "You are currently ";
-        if (vanished) {
-            message += ChatColor.RED + "VANISHED";
-            if (status != null && status != ProfileStatus.ONLINE) {
-                message += ChatColor.WHITE + ", " + ChatColor.RED + statusActionBarLabel(status);
-            }
-            return message;
-        }
-        return message + ChatColor.RED + statusActionBarLabel(status);
-    }
-
-    private String statusActionBarLabel(ProfileStatus status) {
-        if (status == ProfileStatus.APPEAR_OFFLINE) {
-            return "APPEARING OFFLINE";
-        }
-        return status == null ? "" : status.name();
+        return ProfileStatusUtil.formatNotice(status, vanished);
     }
 
     @Override

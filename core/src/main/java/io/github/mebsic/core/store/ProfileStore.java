@@ -8,6 +8,7 @@ import io.github.mebsic.core.model.Rank;
 import io.github.mebsic.core.model.Stats;
 import io.github.mebsic.core.util.RankColorUtil;
 import io.github.mebsic.core.util.HycopyExperienceUtil;
+import io.github.mebsic.core.util.GiftedRankUtil;
 import io.github.mebsic.core.manager.MongoManager;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.model.Filters;
@@ -748,14 +749,7 @@ public class ProfileStore {
     }
 
     private int readGiftedRanks(Document profile) {
-        if (profile == null) {
-            return 0;
-        }
-        Object raw = profile.get(MongoManager.PROFILE_RANKS_GIFTED_KEY);
-        if (raw instanceof Number) {
-            return Math.max(0, ((Number) raw).intValue());
-        }
-        return 0;
+        return GiftedRankUtil.readGiftedRanks(profile);
     }
 
     private Set<Rank> readUnlockedRanks(Document profile) {

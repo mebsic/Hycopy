@@ -5,6 +5,7 @@ import io.github.mebsic.core.model.Rank;
 import io.github.mebsic.core.server.ServerType;
 import io.github.mebsic.core.service.CoreApi;
 import io.github.mebsic.core.util.NetworkConstants;
+import io.github.mebsic.core.util.ProfileStatusUtil;
 import io.github.mebsic.core.util.RankFormatUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -28,6 +29,7 @@ public class TablistService {
     private static final int MAX_PLAYER_LIST_NAME_LENGTH = 16;
     private static final int MAX_TEAM_TEXT_LENGTH = 16;
     private final CoreApi coreApi;
+    private final boolean hubServer;
     private boolean nameTagsHidden;
     private boolean showRankPrefix;
     private ChatColor forcedNameColor;
@@ -41,8 +43,9 @@ public class TablistService {
 
     public TablistService(CoreApi coreApi, ServerType serverType) {
         this.coreApi = coreApi;
+        this.hubServer = serverType != null && serverType.isHub();
         this.nameTagsHidden = false;
-        this.showRankPrefix = serverType != null && serverType.isHub();
+        this.showRankPrefix = hubServer;
         this.forcedNameColor = null;
         this.visibilityPolicy = null;
         this.enforceVisibilityWithHidePlayer = false;
@@ -400,7 +403,7 @@ public class TablistService {
             return;
         }
         String header = tabHeader();
-        String footer = tabFooter();
+        String footer = tabFooter(viewer);
         if (tryDirectHeaderFooter(viewer, header, footer)) {
             return;
         }
@@ -412,9 +415,18 @@ public class TablistService {
                 + ChatColor.YELLOW + ChatColor.BOLD + NetworkConstants.displayJoinHost().toUpperCase(Locale.ROOT);
     }
 
-    private String tabFooter() {
-        return ChatColor.GREEN + "Ranks, Boosters & MORE! "
+    private String tabFooter(Player viewer) {
+        String footer = ChatColor.GREEN + "Ranks, Boosters & MORE! "
                 + ChatColor.RED + ChatColor.BOLD + "STORE." + NetworkConstants.domain().toUpperCase(Locale.ROOT);
+        if (!hubServer || coreApi == null) {
+            return footer;
+        }
+        Profile profile = coreApi.getProfile(viewer.getUniqueId());
+        if (profile == null) {
+            return footer;
+        }
+        String notice = ProfileStatusUtil.formatNotice(profile.getStatus(), profile.isVanished());
+        return notice.isEmpty() ? footer : "\n" + notice + "\n\n" + footer;
     }
 
     private boolean tryDirectHeaderFooter(Player viewer, String header, String footer) {
@@ -454,7 +466,10 @@ public class TablistService {
     }
 
     private String jsonText(String text) {
-        String safe = text == null ? "" : text.replace("\\", "\\\\").replace("\"", "\\\"");
+        String safe = text == null ? "" : text.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r");
         return "{\"text\":\"" + safe + "\"}";
     }
 }

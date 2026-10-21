@@ -5,6 +5,7 @@ import io.github.mebsic.core.CorePlugin;
 import io.github.mebsic.core.manager.MongoManager;
 import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.core.model.Rank;
+import io.github.mebsic.core.util.NetworkConstants;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
@@ -12,7 +13,7 @@ import java.util.Locale;
 import java.util.UUID;
 
 public class ProfileCommandSyncService {
-    private static final String CHANNEL = "profile_command_action";
+    private static final String CHANNEL = NetworkConstants.PROFILE_COMMAND_ACTION_CHANNEL;
     private static final String ACTION_SET_RANK = "SET_RANK";
     private static final String ACTION_SET_NETWORK_LEVEL = "SET_NETWORK_LEVEL";
     private static final String ACTION_SET_NETWORK_GOLD = "SET_NETWORK_GOLD";
