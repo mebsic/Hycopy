@@ -253,7 +253,10 @@ public class KnifeSkinsMenu extends Menu {
                 sendNeedMoreTokensMessage(player, needed, displayName(entry));
                 return;
             }
-            new KnifePurchaseConfirmMenu(coreApi, costs, currentPage, menuStateService, option, cost, displayName(entry)).open(player);
+            String knifeName = displayName(entry);
+            new PurchaseConfirmMenu(knifeName, cost,
+                    buyer -> confirmPurchase(buyer, option, cost, knifeName, currentPage),
+                    buyer -> openPage(buyer, currentPage)).open(player);
             return;
         }
         coreApi.selectCosmetic(player.getUniqueId(), CosmeticType.KNIFE, option);
@@ -906,98 +909,31 @@ public class KnifeSkinsMenu extends Menu {
         }
     }
 
-    private final class KnifePurchaseConfirmMenu extends Menu {
-        private static final int CONFIRM_SIZE = 27;
-        private static final int CONFIRM_SLOT = 11;
-        private static final int CANCEL_SLOT = 15;
-
-        private final CoreApi api;
-        private final Map<String, Integer> localCosts;
-        private final int returnPage;
-        private final KnifeMenuStateService stateService;
-        private final String knifeId;
-        private final int knifeCost;
-        private final String knifeName;
-
-        private KnifePurchaseConfirmMenu(CoreApi api,
-                                         Map<String, Integer> localCosts,
-                                         int returnPage,
-                                         KnifeMenuStateService stateService,
-                                         String knifeId,
-                                         int knifeCost,
-                                         String knifeName) {
-            super("Confirm", CONFIRM_SIZE);
-            this.api = api;
-            this.localCosts = localCosts == null ? Collections.<String, Integer>emptyMap() : new HashMap<String, Integer>(localCosts);
-            this.returnPage = Math.max(1, returnPage);
-            this.stateService = stateService;
-            this.knifeId = normalizeId(knifeId);
-            this.knifeCost = Math.max(0, knifeCost);
-            this.knifeName = knifeName == null || knifeName.trim().isEmpty() ? "Knife Skin" : knifeName.trim();
+    private void confirmPurchase(Player player, String knifeId, int knifeCost, String knifeName, int returnPage) {
+        if (coreApi == null) {
+            player.sendMessage(ChatColor.RED + "Cosmetics are unavailable!");
+            return;
         }
-
-        @Override
-        protected void populate(Player player, Inventory inventory) {
-            if (inventory == null) {
-                return;
-            }
-            inventory.clear();
-            set(inventory, CONFIRM_SLOT, clayButton((short) 13, ChatColor.GREEN + "Confirm",
-                    ChatColor.GRAY + "Unlock: " + ChatColor.GOLD + knifeName,
-                    ChatColor.GRAY + "Cost: " + ChatColor.DARK_GREEN + formatCount(knifeCost, "Token", "Tokens")));
-            set(inventory, CANCEL_SLOT, clayButton((short) 14, ChatColor.RED + "Cancel"));
+        Profile profile = coreApi.getProfile(player.getUniqueId());
+        if (profile == null) {
+            player.sendMessage(ChatColor.RED + CommonMessages.PROFILE_LOADING);
+            return;
         }
-
-        @Override
-        public void onClick(MenuClick click) {
-            Player player = click.getPlayer();
-            if (player == null) {
-                return;
-            }
-            int slot = click.getRawSlot();
-            if (slot == CANCEL_SLOT) {
-                new KnifeSkinsMenu(api, localCosts, returnPage, stateService).open(player);
-                return;
-            }
-            if (slot != CONFIRM_SLOT) {
-                return;
-            }
-            if (api == null) {
-                player.sendMessage(ChatColor.RED + "Cosmetics are unavailable!");
-                return;
-            }
-            Profile profile = api.getProfile(player.getUniqueId());
-            if (profile == null) {
-                player.sendMessage(ChatColor.RED + CommonMessages.PROFILE_LOADING);
-                return;
-            }
-            Set<String> unlocked = normalizeIdSet(profile.getUnlocked().get(CosmeticType.KNIFE));
-            if (!unlocked.contains(knifeId) && !MurderMysteryStats.spendTokens(api, player.getUniqueId(), knifeCost)) {
-                int available = Math.max(0, MurderMysteryStats.getTokens(profile.getStats()));
-                int needed = Math.max(0, knifeCost - available);
-                sendNeedMoreTokensMessage(player, needed, knifeName);
-                return;
-            }
-            if (!unlocked.contains(knifeId)) {
-                api.unlockCosmetic(player.getUniqueId(), CosmeticType.KNIFE, knifeId);
-                sendPurchasedMessage(player, knifeName);
-            }
-            if (stateService != null) {
-                stateService.syncPlayer(player);
-            }
-            new KnifeSkinsMenu(api, localCosts, returnPage, stateService).open(player);
+        Set<String> unlocked = normalizeIdSet(profile.getUnlocked().get(CosmeticType.KNIFE));
+        if (!unlocked.contains(knifeId) && !MurderMysteryStats.spendTokens(coreApi, player.getUniqueId(), knifeCost)) {
+            int available = Math.max(0, MurderMysteryStats.getTokens(profile.getStats()));
+            int needed = Math.max(0, knifeCost - available);
+            sendNeedMoreTokensMessage(player, needed, knifeName);
+            return;
         }
-
-        private ItemStack clayButton(short colorData, String name, String... lore) {
-            Material terracotta = Material.matchMaterial("STAINED_CLAY");
-            Material modern = colorData == 13 ? Material.matchMaterial("GREEN_TERRACOTTA") : Material.matchMaterial("RED_TERRACOTTA");
-            Material material = modern != null ? modern : (terracotta == null ? Material.WOOL : terracotta);
-            ItemStack stack = item(material, name, lore);
-            if (terracotta != null && stack != null && stack.getType() == terracotta) {
-                stack.setDurability(colorData);
-            }
-            return stack;
+        if (!unlocked.contains(knifeId)) {
+            coreApi.unlockCosmetic(player.getUniqueId(), CosmeticType.KNIFE, knifeId);
+            sendPurchasedMessage(player, knifeName);
         }
+        if (menuStateService != null) {
+            menuStateService.syncPlayer(player);
+        }
+        openPage(player, returnPage);
     }
 
     private enum EntryType {

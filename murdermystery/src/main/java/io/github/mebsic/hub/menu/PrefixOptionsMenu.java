@@ -119,16 +119,14 @@ public class PrefixOptionsMenu extends Menu {
                         + ChatColor.RED + " to favorite it!");
                 return;
             }
-            if (!MurderMysteryStats.spendTokens(coreApi, player.getUniqueId(), definition.getTokenCost())) {
-                int availableTokens = Math.max(0, MurderMysteryStats.getTokens(profile.getStats()));
+            int availableTokens = Math.max(0, MurderMysteryStats.getTokens(profile.getStats()));
+            if (availableTokens < definition.getTokenCost()) {
                 parentMenu.sendNeedMoreTokensMessage(player, definition.getTokenCost() - availableTokens);
                 return;
             }
-            coreApi.unlockCosmetic(player.getUniqueId(), type, definition.getId());
-            profile = coreApi.getProfile(player.getUniqueId());
-            if (profile == null) {
-                return;
-            }
+            new PurchaseConfirmMenu(definition.getDisplayName(), definition.getTokenCost(),
+                    buyer -> confirmPurchase(buyer, definition), this::open).open(player);
+            return;
         }
         if (click.isShiftClick() && !isNoneSchemeDefinition(definition)) {
             if (!coreApi.toggleFavoriteCosmetic(player.getUniqueId(), type, definition.getId())) {
@@ -480,6 +478,24 @@ public class PrefixOptionsMenu extends Menu {
 
     private static String resolveTitle(CosmeticType type) {
         return type == CosmeticType.PREFIX_SCHEME ? "Prefix Schemes" : "Prefix Icons";
+    }
+
+    private void confirmPurchase(Player player, PrefixCosmeticDefinition definition) {
+        Profile profile = coreApi.getProfile(player.getUniqueId());
+        if (profile == null) {
+            return;
+        }
+        if (!isUnlocked(profile, definition.getId())) {
+            if (!MurderMysteryStats.spendTokens(coreApi, player.getUniqueId(), definition.getTokenCost())) {
+                int availableTokens = Math.max(0, MurderMysteryStats.getTokens(profile.getStats()));
+                parentMenu.sendNeedMoreTokensMessage(player, definition.getTokenCost() - availableTokens);
+                return;
+            }
+            coreApi.unlockCosmetic(player.getUniqueId(), type, definition.getId());
+        }
+        coreApi.selectCosmetic(player.getUniqueId(), type, definition.getId());
+        parentMenu.sendSelectedMessage(player, definition.getDisplayName());
+        open(player);
     }
 
     private static final class PrefixEntry {
