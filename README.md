@@ -4,11 +4,11 @@ Open-source Hypixel recreation built using Paper and Velocity with core services
 
 ## Important Note
 
-This is an unofficial project. It is not affiliated with or endorsed by Hypixel Inc.
+This is an unofficial project, not affiliated with or endorsed by Hypixel Inc.
 
 ## Preview
 
-To try out this project, connect to `mc.hycopy.net` using Minecraft Java Edition.
+To try it out, connect to `mc.hycopy.net` using Minecraft Java Edition.
 
 ## Documentation
 
@@ -23,5 +23,5 @@ For bugs or feature requests, open an [issue](https://github.com/mebsic/Hycopy/i
 
 ## License
 
-This project is licensed under the GNU General Public License v3.0.
+This project is licensed under the GNU General Public License v3.0. 
 See [LICENSE](LICENSE).
