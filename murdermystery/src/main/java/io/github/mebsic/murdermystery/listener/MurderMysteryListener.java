@@ -488,7 +488,7 @@ public class MurderMysteryListener implements Listener {
         if (item.getType() == Material.BOW) {
             event.setCancelled(true);
             MurderMysteryGamePlayer mmPlayer = gameManager.getMurderMysteryPlayer(player);
-            if (mmPlayer == null || !mmPlayer.isAlive() || mmPlayer.getRole() != MurderMysteryRole.INNOCENT) {
+            if (!gameManager.canPickUpDroppedBow(mmPlayer)) {
                 return;
             }
             event.getItem().remove();

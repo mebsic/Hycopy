@@ -167,12 +167,12 @@ public class PrefixesMenu extends Menu {
         return formatNumber(tokens);
     }
 
-    void sendNeedMoreWinsMessage(Player player, int winsNeeded) {
+    void sendNeedMoreTokensMessage(Player player, int tokensNeeded) {
         if (player == null) {
             return;
         }
-        player.sendMessage(ChatColor.RED + "You need " + ChatColor.GOLD + formatNumber(winsNeeded)
-                + ChatColor.RED + formatMoreSuffix(winsNeeded, "win", "wins") + "!");
+        player.sendMessage(ChatColor.RED + "You need " + ChatColor.GOLD + formatNumber(tokensNeeded)
+                + ChatColor.RED + formatMoreSuffix(tokensNeeded, "token", "tokens") + "!");
     }
 
     void sendSelectedMessage(Player player, String selectedName) {

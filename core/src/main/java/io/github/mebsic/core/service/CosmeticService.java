@@ -487,13 +487,12 @@ public class CosmeticService {
         if (profile == null || prefixCatalog == null || !prefixCatalog.supports(type)) {
             return;
         }
-        int wins = Math.max(0, profile.getStats().getWins());
         Set<String> unlocked = profile.getUnlocked().get(type);
         for (PrefixCatalog.Entry definition : prefixCatalog.getDefinitions(type)) {
             if (definition == null || definition.getId().isEmpty()) {
                 continue;
             }
-            if (wins >= definition.getRequiredWins()) {
+            if (definition.getTokenCost() == 0) {
                 unlocked.add(prefixCatalog.normalize(definition.getId()));
             }
         }

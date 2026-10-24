@@ -68,10 +68,10 @@ public class PrefixOptionsMenu extends Menu {
         if (profile == null) {
             return;
         }
-        int wins = Math.max(0, coreApi.getCounter(player.getUniqueId(), MongoManager.MURDER_MYSTERY_LIFETIME_WINS_KEY));
-        List<PrefixEntry> entries = buildEntries(profile, wins);
+        int availableTokens = Math.max(0, MurderMysteryStats.getTokens(profile.getStats()));
+        List<PrefixEntry> entries = buildEntries();
         for (int i = 0; i < entries.size() && i < COSMETIC_SLOTS.length; i++) {
-            set(inventory, COSMETIC_SLOTS[i], buildEntryItem(entries.get(i), profile, wins));
+            set(inventory, COSMETIC_SLOTS[i], buildEntryItem(entries.get(i), profile, availableTokens));
         }
         set(inventory, BACK_SLOT, item(Material.ARROW, ChatColor.GREEN + "Go Back", ChatColor.GRAY + "To Prefixes"));
         set(inventory, TOKENS_SLOT, item(
@@ -99,8 +99,7 @@ public class PrefixOptionsMenu extends Menu {
         if (profile == null) {
             return;
         }
-        int wins = Math.max(0, coreApi.getCounter(player.getUniqueId(), MongoManager.MURDER_MYSTERY_LIFETIME_WINS_KEY));
-        PrefixEntry entry = entryForSlot(slot, buildEntries(profile, wins));
+        PrefixEntry entry = entryForSlot(slot, buildEntries());
         if (entry == null) {
             return;
         }
@@ -114,11 +113,17 @@ public class PrefixOptionsMenu extends Menu {
         if (definition == null) {
             return;
         }
-        if (wins < definition.getRequiredWins()) {
-            parentMenu.sendNeedMoreWinsMessage(player, definition.getRequiredWins() - wins);
-            return;
-        }
         if (!isUnlocked(profile, definition.getId())) {
+            if (click.isShiftClick()) {
+                player.sendMessage(ChatColor.RED + "You need to purchase " + ChatColor.GOLD + definition.getDisplayName()
+                        + ChatColor.RED + " to favorite it!");
+                return;
+            }
+            if (!MurderMysteryStats.spendTokens(coreApi, player.getUniqueId(), definition.getTokenCost())) {
+                int availableTokens = Math.max(0, MurderMysteryStats.getTokens(profile.getStats()));
+                parentMenu.sendNeedMoreTokensMessage(player, definition.getTokenCost() - availableTokens);
+                return;
+            }
             coreApi.unlockCosmetic(player.getUniqueId(), type, definition.getId());
             profile = coreApi.getProfile(player.getUniqueId());
             if (profile == null) {
@@ -145,7 +150,7 @@ public class PrefixOptionsMenu extends Menu {
         new PrefixOptionsMenu(coreApi, knifeSkinsMenu, parentMenu, type).open(player);
     }
 
-    private List<PrefixEntry> buildEntries(Profile profile, int wins) {
+    private List<PrefixEntry> buildEntries() {
         List<PrefixEntry> entries = new ArrayList<PrefixEntry>();
         PrefixCosmeticDefinition defaultDefinition =
                 PrefixCosmeticCatalog.definition(type, PrefixCosmeticCatalog.defaultId(type));
@@ -168,7 +173,7 @@ public class PrefixOptionsMenu extends Menu {
         return entries;
     }
 
-    private ItemStack buildEntryItem(PrefixEntry entry, Profile profile, int wins) {
+    private ItemStack buildEntryItem(PrefixEntry entry, Profile profile, int availableTokens) {
         if (entry == null) {
             return null;
         }
@@ -188,7 +193,7 @@ public class PrefixOptionsMenu extends Menu {
         if (definition == null) {
             return null;
         }
-        boolean unlocked = wins >= definition.getRequiredWins() && isUnlocked(profile, definition.getId());
+        boolean unlocked = isUnlocked(profile, definition.getId());
         boolean selected = PrefixCosmeticCatalog.normalizeId(definition.getId())
                 .equals(PrefixCosmeticCatalog.normalizeId(profile.getSelected().get(type)));
         boolean favorite = isFavorite(profile, definition.getId());
@@ -222,9 +227,17 @@ public class PrefixOptionsMenu extends Menu {
             lore.add(selected ? ChatColor.GREEN + "SELECTED!" : ChatColor.YELLOW + "Click to select!");
             lore.add(ChatColor.YELLOW + "Shift-click to toggle favorite!");
         } else {
-            int needed = definition.getRequiredWins() - wins;
-            lore.add(ChatColor.RED + "You need " + ChatColor.GOLD + formatNumber(needed)
-                    + ChatColor.RED + formatMoreSuffix(needed, "win", "wins") + "!");
+            int cost = definition.getTokenCost();
+            lore.add(ChatColor.GRAY + "Cost: " + ChatColor.DARK_GREEN + formatNumber(cost)
+                    + (cost == 1 ? " Token" : " Tokens"));
+            lore.add("");
+            if (availableTokens >= cost) {
+                lore.add(ChatColor.YELLOW + "Click to purchase!");
+            } else {
+                int needed = cost - availableTokens;
+                lore.add(ChatColor.RED + "You need " + ChatColor.GOLD + formatNumber(needed)
+                        + ChatColor.RED + formatMoreSuffix(needed, "token", "tokens") + "!");
+            }
         }
         return definitionItem(definition, itemName, lore);
     }

@@ -156,18 +156,18 @@ public final class PrefixCosmeticCatalog implements PrefixCatalog {
                                                  String material,
                                                  int durability,
                                                  String displayName,
-                                                 int requiredWins,
+                                                 int tokenCost,
                                                  String symbol) {
-        return new PrefixCosmeticDefinition(id, material, (short) durability, displayName, requiredWins, symbol, "", false);
+        return new PrefixCosmeticDefinition(id, material, (short) durability, displayName, tokenCost, symbol, "", false);
     }
 
     private static PrefixCosmeticDefinition scheme(String id,
                                                    String material,
                                                    int durability,
                                                    String displayName,
-                                                   int requiredWins,
+                                                   int tokenCost,
                                                    String color,
                                                    boolean chroma) {
-        return new PrefixCosmeticDefinition(id, material, (short) durability, displayName, requiredWins, "", color, chroma);
+        return new PrefixCosmeticDefinition(id, material, (short) durability, displayName, tokenCost, "", color, chroma);
     }
 }

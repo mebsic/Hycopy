@@ -447,7 +447,7 @@ public class MurderMysteryGameManager extends GameManager {
         MurderMysteryRole role = mmPlayer == null ? MurderMysteryRole.INNOCENT : mmPlayer.getRole();
         int innocents = getAliveCount(MurderMysteryRole.INNOCENT) + getAliveCount(MurderMysteryRole.HERO) + getAliveCount(MurderMysteryRole.DETECTIVE);
         boolean detectiveAlive = hasAliveDetective();
-        boolean heroAlive = hasAliveHero();
+        boolean heroAlive = hasAliveHeroWithDetectiveBow();
 
         lines.add(buildDateAndServerLine());
         lines.add("");
@@ -1951,9 +1951,16 @@ public class MurderMysteryGameManager extends GameManager {
         convertToHero(player, false);
     }
 
+    public boolean canPickUpDroppedBow(MurderMysteryGamePlayer mmPlayer) {
+        return mmPlayer != null
+                && mmPlayer.isAlive()
+                && !mmPlayer.hasDetectiveBow()
+                && isSurvivorGoldBowHolder(mmPlayer);
+    }
+
     public void convertDroppedBowCarrierToHero(Player player) {
         MurderMysteryGamePlayer mmPlayer = getMurderMysteryPlayer(player);
-        if (mmPlayer == null || !mmPlayer.isAlive() || mmPlayer.getRole() != MurderMysteryRole.INNOCENT) {
+        if (!canPickUpDroppedBow(mmPlayer)) {
             return;
         }
         convertToHero(player, false);
@@ -1970,6 +1977,7 @@ public class MurderMysteryGameManager extends GameManager {
         if (fromGold) {
             mmPlayer.setHeroFromGold(true);
         } else {
+            mmPlayer.setHeroFromGold(false);
             mmPlayer.setHasDetectiveBow(true);
         }
         if (!player.getInventory().contains(Material.BOW)) {
@@ -2548,7 +2556,6 @@ public class MurderMysteryGameManager extends GameManager {
                 playMurdererKnifeReadySound(player);
             }
             showRoleTitle(player, selected.getRole());
-            sendTeamingWarning(player, selected.getRole());
             player.sendMessage(ChatColor.GREEN + "The previous Murderer left, you are now taking their position!");
         }
         refreshMurdererLastInnocentSpeed();
@@ -2782,14 +2789,11 @@ public class MurderMysteryGameManager extends GameManager {
         displayLocation.setYaw(droppedBowYaw);
         droppedBowDisplay.teleport(displayLocation);
         for (MurderMysteryGamePlayer mmPlayer : getMmPlayers()) {
-            if (!mmPlayer.isAlive() || mmPlayer.getRole() != MurderMysteryRole.INNOCENT) {
+            if (!canPickUpDroppedBow(mmPlayer)) {
                 continue;
             }
             Player player = Bukkit.getPlayer(mmPlayer.getUuid());
             if (player == null || !player.isOnline()) {
-                continue;
-            }
-            if (player.getInventory().contains(Material.BOW)) {
                 continue;
             }
             if (!player.getWorld().equals(displayLocation.getWorld())) {
@@ -2972,8 +2976,13 @@ public class MurderMysteryGameManager extends GameManager {
         return getAliveCount(MurderMysteryRole.DETECTIVE) > 0;
     }
 
-    private boolean hasAliveHero() {
-        return getAliveCount(MurderMysteryRole.HERO) > 0;
+    private boolean hasAliveHeroWithDetectiveBow() {
+        for (MurderMysteryGamePlayer mmPlayer : getMmPlayers()) {
+            if (mmPlayer.isAlive() && mmPlayer.getRole() == MurderMysteryRole.HERO && mmPlayer.hasDetectiveBow()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private MurderMysteryRole getScoreboardRole(MurderMysteryGamePlayer mmPlayer) {

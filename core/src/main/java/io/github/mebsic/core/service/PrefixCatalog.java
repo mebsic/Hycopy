@@ -26,7 +26,7 @@ public interface PrefixCatalog {
     interface Entry {
         String getId();
 
-        int getRequiredWins();
+        int getTokenCost();
 
         String getSymbol();
 

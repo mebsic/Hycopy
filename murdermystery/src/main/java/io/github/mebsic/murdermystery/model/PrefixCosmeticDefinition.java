@@ -7,7 +7,7 @@ public class PrefixCosmeticDefinition implements PrefixCatalog.Entry {
     private final String material;
     private final short durability;
     private final String displayName;
-    private final int requiredWins;
+    private final int tokenCost;
     private final String symbol;
     private final String color;
     private final boolean chroma;
@@ -16,7 +16,7 @@ public class PrefixCosmeticDefinition implements PrefixCatalog.Entry {
                                     String material,
                                     short durability,
                                     String displayName,
-                                    int requiredWins,
+                                    int tokenCost,
                                     String symbol,
                                     String color,
                                     boolean chroma) {
@@ -24,7 +24,7 @@ public class PrefixCosmeticDefinition implements PrefixCatalog.Entry {
         this.material = safe(material);
         this.durability = durability;
         this.displayName = safe(displayName);
-        this.requiredWins = Math.max(0, requiredWins);
+        this.tokenCost = Math.max(0, tokenCost);
         this.symbol = symbol == null ? "" : symbol;
         this.color = safe(color);
         this.chroma = chroma;
@@ -46,8 +46,8 @@ public class PrefixCosmeticDefinition implements PrefixCatalog.Entry {
         return displayName;
     }
 
-    public int getRequiredWins() {
-        return requiredWins;
+    public int getTokenCost() {
+        return tokenCost;
     }
 
     public String getSymbol() {
