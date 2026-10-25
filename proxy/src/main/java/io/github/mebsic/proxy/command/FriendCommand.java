@@ -32,6 +32,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class FriendCommand implements SimpleCommand {
@@ -509,21 +510,32 @@ public class FriendCommand implements SimpleCommand {
             sendFramed(player, Component.text("That page does not exist!", NamedTextColor.RED));
             return;
         }
-        List<Component> lines = new ArrayList<>();
-        String title = bestOnly ? "Best Friends" : "Friends";
-        String commandPrefix = bestOnly ? cmd("list best") : cmd("list");
-        lines.add(FriendComponents.pageHeader(title, page, totalPages, commandPrefix));
-        for (UUID friendId : pageSlice(ordered, page, LIST_PAGE_SIZE)) {
+        List<UUID> pageFriends = new ArrayList<>(pageSlice(ordered, page, LIST_PAGE_SIZE));
+        Map<UUID, CompletableFuture<String>> nameRefreshes = new HashMap<>();
+        for (UUID friendId : pageFriends) {
             Optional<Player> onlineFriend = proxy.getPlayer(friendId);
-            if (onlineFriend.isPresent()) {
-                friends.rememberName(friendId, onlineFriend.get().getUsername());
-            } else {
-                Thread.startVirtualThread(() ->
-                        friends.rememberName(friendId, MojangApi.lookupName(friendId)));
-            }
-            lines.add(buildFriendListEntry(player, friendId));
+            nameRefreshes.put(friendId, onlineFriend.isPresent()
+                    ? CompletableFuture.completedFuture(onlineFriend.get().getUsername())
+                    : CompletableFuture.supplyAsync(() -> MojangApi.lookupName(friendId), Thread::startVirtualThread));
         }
-        sendFramed(player, lines);
+        CompletableFuture.allOf(nameRefreshes.values().toArray(new CompletableFuture<?>[0])).thenRun(() -> {
+            if (!player.isActive()) {
+                return;
+            }
+            List<Component> lines = new ArrayList<>();
+            String title = bestOnly ? "Best Friends" : "Friends";
+            String commandPrefix = bestOnly ? cmd("list best") : cmd("list");
+            lines.add(FriendComponents.pageHeader(title, page, totalPages, commandPrefix));
+            for (UUID friendId : pageFriends) {
+                String currentName = proxy.getPlayer(friendId)
+                        .map(Player::getUsername)
+                        .orElse(nameRefreshes.get(friendId).join());
+                friends.rememberName(friendId, currentName);
+                String displayName = currentName == null ? friends.getName(friendId) : currentName;
+                lines.add(buildFriendListEntry(player, friendId, displayName));
+            }
+            sendFramed(player, lines);
+        });
     }
 
     private void handleRequests(Player player, String[] args) {
@@ -781,15 +793,14 @@ public class FriendCommand implements SimpleCommand {
         return Math.max(1, (totalItems + size - 1) / size);
     }
 
-    private Component buildFriendListEntry(Player viewer, UUID friendId) {
+    private Component buildFriendListEntry(Player viewer, UUID friendId, String plainName) {
         UUID viewerId = viewer == null ? null : viewer.getUniqueId();
         boolean bestFriend = viewerId != null && friends.isBestFriend(viewerId, friendId);
         String nickname = viewerId == null ? null : friends.getFriendNickname(viewerId, friendId);
-        Component name = friendListName(friendId, nickname);
+        Component name = friendListName(friendId, nickname, plainName);
         if (bestFriend) {
             name = name.decorate(TextDecoration.BOLD);
         }
-        String plainName = friends.getName(friendId);
         String profileTarget = (plainName == null || plainName.trim().isEmpty() || "Unknown".equalsIgnoreCase(plainName))
                 ? friendId.toString()
                 : plainName;
@@ -819,8 +830,7 @@ public class FriendCommand implements SimpleCommand {
                 .clickEvent(ClickEvent.runCommand(cmd("profile " + profileTarget)));
     }
 
-    private Component friendListName(UUID friendId, String nickname) {
-        String plainName = friends.getName(friendId);
+    private Component friendListName(UUID friendId, String nickname, String plainName) {
         String safeName = plainName == null || plainName.trim().isEmpty() ? "Unknown" : plainName;
         String formattedWithColor = friends.formatNameWithColor(friendId);
         String rankBaseColor = extractNameColorPrefix(formattedWithColor);

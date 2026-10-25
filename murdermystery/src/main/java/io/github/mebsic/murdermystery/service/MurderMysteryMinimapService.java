@@ -1,11 +1,15 @@
 package io.github.mebsic.murdermystery.service;
 
+import com.mongodb.client.MongoCollection;
+import com.mongodb.client.model.FindOneAndUpdateOptions;
+import com.mongodb.client.model.ReturnDocument;
 import io.github.mebsic.core.CorePlugin;
 import io.github.mebsic.game.map.GameMap;
 import io.github.mebsic.game.model.GameState;
 import io.github.mebsic.murdermystery.game.MurderMysteryGamePlayer;
 import io.github.mebsic.murdermystery.game.MurderMysteryRole;
 import io.github.mebsic.murdermystery.manager.MurderMysteryGameManager;
+import org.bson.Document;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
@@ -47,6 +51,8 @@ public final class MurderMysteryMinimapService {
     private static final long MAP_FIRST_RESEND_DELAY_TICKS = 1L;
     private static final long MAP_JOIN_RESEND_DELAY_TICKS = 20L;
     private static final int MAP_PIXEL_SIZE = 128;
+    private static final int MINIMAP_ID_START = 16384;
+    private static final int MINIMAP_ID_COUNT = Short.MAX_VALUE - MINIMAP_ID_START + 1;
     private static final MapView.Scale STATIC_MAP_SCALE = MapView.Scale.CLOSEST;
     private static final int MAP_CURSOR_MIN = -128;
     private static final int MAP_CURSOR_MAX = 127;
@@ -77,6 +83,7 @@ public final class MurderMysteryMinimapService {
     private final MurderMysteryMapStateWriter mapStateWriter;
     private final byte[] blankMapPixels;
     private boolean loggedMapPacketFallback;
+    private boolean loggedMapIdFallback;
     private boolean loggedEmptyTerrainCapture;
     private long mapSessionId;
     private BukkitTask refreshTask;
@@ -143,7 +150,6 @@ public final class MurderMysteryMinimapService {
         UUID uuid = player.getUniqueId();
         mapEligiblePlayers.remove(uuid);
         PlayerMinimap minimap = playerMinimaps.remove(uuid);
-        retireMinimap(player, minimap);
         removeRenderer(minimap);
         if (clearMapItems(player)) {
             player.updateInventory();
@@ -236,7 +242,8 @@ public final class MurderMysteryMinimapService {
             boolean shouldMaintainMap = mapEligiblePlayers.contains(playerUuid)
                     || state == GameState.STARTING
                     || state == GameState.IN_GAME;
-            if (shouldMaintainMap && (!hasMinimap || !isAssignedMinimapItem(heldSlotItem, minimap))) {
+            if (shouldMaintainMap && (!hasMinimap || !isAssignedMinimapItem(heldSlotItem, minimap)
+                    || !isReusableMinimap(minimap, resolveMapAnchor(minimap, player)))) {
                 giveMap(player);
                 continue;
             }
@@ -300,7 +307,7 @@ public final class MurderMysteryMinimapService {
         }
         MapAnchor anchor = resolveMapAnchor(player);
         World mapWorld = anchor == null || anchor.world == null ? player.getWorld() : anchor.world;
-        MapView mapView = Bukkit.createMap(mapWorld);
+        MapView mapView = createMinimapView(mapWorld, player);
         applyMapView(mapView, anchor);
         for (MapRenderer existingRenderer : new ArrayList<>(mapView.getRenderers())) {
             mapView.removeRenderer(existingRenderer);
@@ -312,6 +319,40 @@ public final class MurderMysteryMinimapService {
         configureMapView(created, player);
         primeStaticMapState(created, player);
         return created;
+    }
+
+    private MapView createMinimapView(World world, Player player) {
+        if (mapPacketSender != null && plugin.getMongoManager() != null) {
+            try {
+                MongoCollection<Document> counters = plugin.getMongoManager().getCollection("murdermystery_minimap_ids");
+                Document filter = new Document("_id", player.getUniqueId().toString());
+                FindOneAndUpdateOptions options = new FindOneAndUpdateOptions().upsert(true).returnDocument(ReturnDocument.AFTER);
+                while (true) {
+                    Document counter = counters.findOneAndUpdate(filter,
+                            new Document("$inc", new Document("sequence", 1L)), options);
+                    long sequence = ((Number) counter.get("sequence")).longValue();
+                    int mapId = MINIMAP_ID_START + (int) Math.floorMod(sequence - 1L, (long) MINIMAP_ID_COUNT);
+                    int skipped = 0;
+                    while (MurderMysteryMapStateWriter.isMapIdInUse(mapId)) {
+                        if (++skipped >= MINIMAP_ID_COUNT) {
+                            throw new IllegalStateException("No free minimap IDs remain on this server");
+                        }
+                        mapId = MINIMAP_ID_START + (mapId - MINIMAP_ID_START + 1) % MINIMAP_ID_COUNT;
+                    }
+                    if (skipped > 0) {
+                        counters.updateOne(filter, new Document("$max", new Document("sequence", sequence + skipped - 1L)));
+                        continue;
+                    }
+                    return MurderMysteryMapStateWriter.createMap(world, mapId);
+                }
+            } catch (ReflectiveOperationException | RuntimeException ex) {
+                if (!loggedMapIdFallback) {
+                    loggedMapIdFallback = true;
+                    plugin.getLogger().warning("Murder Mystery minimap could not allocate a persistent map ID: " + ex.getMessage());
+                }
+            }
+        }
+        return Bukkit.createMap(world);
     }
 
     private boolean isReusableMinimap(PlayerMinimap minimap, MapAnchor anchor) {
@@ -364,25 +405,6 @@ public final class MurderMysteryMinimapService {
         }
     }
 
-    private void retireMinimap(Player player, PlayerMinimap minimap) {
-        if (player == null || minimap == null || minimap.mapView == null) {
-            return;
-        }
-        if (mapStateWriter != null) {
-            mapStateWriter.write(minimap.mapView, blankMapPixels);
-        }
-        Integer mapId = readMapId(minimap.mapView);
-        if (mapPacketSender != null && mapId != null) {
-            mapPacketSender.send(
-                    player,
-                    mapId,
-                    (byte) scaleValue(minimap.mapView.getScale()),
-                    blankMapPixels,
-                    new MapCursorCollection()
-            );
-        }
-    }
-
     private byte[] blankPixels() {
         byte[] pixels = new byte[MAP_PIXEL_SIZE * MAP_PIXEL_SIZE];
         Arrays.fill(pixels, shadePalette(PALETTE_LIGHT_BROWN, 1));
@@ -410,7 +432,8 @@ public final class MurderMysteryMinimapService {
 
     private MapAnchor resolveMapAnchor(PlayerMinimap minimap, Player player) {
         MapAnchor activeMapAnchor = activeMapAnchor();
-        if (activeMapAnchor != null) {
+        if (gameManager.getState() == GameState.IN_GAME && activeMapAnchor != null
+                && sameWorld(activeMapAnchor.world, player.getWorld())) {
             return activeMapAnchor;
         }
         if (minimap.fallbackAnchor == null || !sameWorld(minimap.fallbackAnchor.world, player.getWorld())) {
@@ -421,7 +444,8 @@ public final class MurderMysteryMinimapService {
 
     private MapAnchor resolveMapAnchor(Player player) {
         MapAnchor activeMapAnchor = activeMapAnchor();
-        if (activeMapAnchor != null) {
+        if (gameManager.getState() == GameState.IN_GAME && activeMapAnchor != null
+                && sameWorld(activeMapAnchor.world, player.getWorld())) {
             return activeMapAnchor;
         }
         return playerAnchor(player);
@@ -913,6 +937,9 @@ public final class MurderMysteryMinimapService {
         }
         try {
             Block block = world.getHighestBlockAt(x, z);
+            while (block != null && block.getType() == Material.AIR && block.getY() > 0) {
+                block = world.getBlockAt(x, block.getY() - 1, z);
+            }
             Material material = block == null ? Material.AIR : block.getType();
             return new TerrainSample(
                     terrainPaletteBase(material, readBlockData(block)),

@@ -1,6 +1,8 @@
 package io.github.mebsic.murdermystery.service;
 
 import org.bukkit.Bukkit;
+import org.bukkit.World;
+import org.bukkit.event.server.MapInitializeEvent;
 import org.bukkit.map.MapView;
 
 import java.lang.reflect.Field;
@@ -59,6 +61,32 @@ final class MurderMysteryMapStateWriter {
         } catch (Throwable ignored) {
             return false;
         }
+    }
+
+    static boolean isMapIdInUse(int mapId) throws ReflectiveOperationException {
+        Class<?> worldMapClass = Class.forName("net.minecraft.server." + serverVersion() + ".WorldMap");
+        Object collection = mapCollection();
+        return collection.getClass().getMethod("get", Class.class, String.class)
+                .invoke(collection, worldMapClass, "map_" + mapId) != null;
+    }
+
+    static MapView createMap(World world, int mapId) throws ReflectiveOperationException {
+        Class<?> worldMapClass = Class.forName("net.minecraft.server." + serverVersion() + ".WorldMap");
+        String mapName = "map_" + mapId;
+        Object worldMap = worldMapClass.getConstructor(String.class).newInstance(mapName);
+        MapView mapView = (MapView) worldMapClass.getField("mapView").get(worldMap);
+        mapView.setWorld(world);
+        Object collection = mapCollection();
+        collection.getClass().getMethod("a", String.class, worldMapClass.getSuperclass())
+                .invoke(collection, mapName, worldMap);
+        Bukkit.getPluginManager().callEvent(new MapInitializeEvent(mapView));
+        return mapView;
+    }
+
+    private static Object mapCollection() throws ReflectiveOperationException {
+        World primaryWorld = Bukkit.getWorlds().get(0);
+        Object handle = primaryWorld.getClass().getMethod("getHandle").invoke(primaryWorld);
+        return handle.getClass().getField("worldMaps").get(handle);
     }
 
     boolean clearDecorations(MapView mapView) {

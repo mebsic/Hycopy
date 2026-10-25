@@ -62,6 +62,8 @@ import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 public class MurderMysteryListener implements Listener {
+    private static final double VOID_DEATH_Y = 0.0D;
+
     private enum DeathType {
         DROWNING("You drowned!"),
         LAVA("You took a swim in lava!"),
@@ -220,9 +222,14 @@ public class MurderMysteryListener implements Listener {
         if (!gameManager.isInGame(player) || gameManager.getState() != GameState.IN_GAME || to == null) {
             return;
         }
-        if (to.getY() < 0.0D) {
-            event.setCancelled(true);
+        if (to.getY() <= VOID_DEATH_Y) {
+            Location stopped = to.clone();
+            stopped.setY(VOID_DEATH_Y);
+            event.setTo(stopped);
             handleDeathType(player, DeathType.FELL_OFF_MAP);
+            player.setVelocity(new Vector());
+            player.setAllowFlight(true);
+            player.setFlying(true);
             return;
         }
         if (to.getBlock().getType() == Material.ENDER_PORTAL) {

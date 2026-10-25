@@ -157,6 +157,7 @@ public class MurderMysteryGameManager extends GameManager {
     private static final double DROPPED_BOW_PICKUP_RADIUS_SQUARED = 2.25D;
     private static final float DROPPED_BOW_ROTATION_DEGREES_PER_TICK = 8.0f;
     private static final double DROPPED_BOW_HEIGHT_OFFSET = 0.35D;
+    private static final int DROPPED_BOW_SAFE_SEARCH_RADIUS = 5;
     private static final long DROPPED_BOW_DEATH_DELAY_TICKS = 2L;
     private static final int POST_GAME_RESULT_TEXT_WIDTH = 75;
     private static final int POST_GAME_REWARD_SUMMARY_TEXT_WIDTH = 80;
@@ -341,6 +342,7 @@ public class MurderMysteryGameManager extends GameManager {
         }
         if (remainingSeconds <= 0) {
             innocentsWon = true;
+            updateScoreboardAll();
             endGame();
             return true;
         }
@@ -379,7 +381,7 @@ public class MurderMysteryGameManager extends GameManager {
             return;
         }
         if (mmPlayer.getRole() == MurderMysteryRole.DETECTIVE || mmPlayer.getRole() == MurderMysteryRole.HERO) {
-            boolean showDetectiveStatusMessages = getAliveNonMurdererCount() > 2;
+            boolean showDetectiveStatusMessages = getAliveNonMurdererCount() > 1;
             if (originalDetectiveUuid != null && originalDetectiveUuid.equals(mmPlayer.getUuid())) {
                 originalDetectiveEliminated = true;
             }
@@ -390,6 +392,7 @@ public class MurderMysteryGameManager extends GameManager {
                         && originalDetectiveUuid != null
                         && originalDetectiveUuid.equals(mmPlayer.getUuid())) {
                     broadcast(DETECTIVE_LEFT_BOW_MESSAGE);
+                    broadcastDetectiveStatusSubtitle(ChatColor.GOLD + "The Bow has been dropped!");
                 } else if (showDetectiveStatusMessages) {
                     broadcast(BOW_DROPPED_CHAT_MESSAGE);
                     broadcastDetectiveStatusSubtitle(ChatColor.GOLD + "The Bow has been dropped!");
@@ -752,7 +755,7 @@ public class MurderMysteryGameManager extends GameManager {
         victim.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, 60, 1, false, false), true);
         sendSpectatorChatHint(victim);
         boolean endingElimination = aliveBeforeDeath <= 2;
-        boolean showDetectiveStatusMessages = getAliveNonMurdererCount() > 1;
+        boolean showDetectiveStatusMessages = getAliveNonMurdererCount() > 0;
         if (endingElimination) {
             showLoseTitle(victim);
             showWinTitleToAlivePlayers();
@@ -1991,7 +1994,7 @@ public class MurderMysteryGameManager extends GameManager {
             playVanillaPickupSound(player);
             player.getInventory().setHeldItemSlot(BOW_HOTBAR_SLOT);
             player.sendMessage(ChatColor.GREEN + "You picked up the bow! "
-                    + ChatColor.GOLD + "GOAL: Find and kill the murderer!");
+                    + ChatColor.GOLD + "GOAL: Find and kill the Murderer!");
             broadcast(ChatColor.YELLOW + "A player has picked up the Bow!");
         }
         updateScoreboardAll();
@@ -2559,6 +2562,7 @@ public class MurderMysteryGameManager extends GameManager {
             player.sendMessage(ChatColor.GREEN + "The previous Murderer left, you are now taking their position!");
         }
         refreshMurdererLastInnocentSpeed();
+        updateScoreboardAll();
     }
 
     private void forceGamePlayersToHotbarSlotOne() {
@@ -2752,8 +2756,12 @@ public class MurderMysteryGameManager extends GameManager {
         if (location == null || location.getWorld() == null) {
             return;
         }
+        Location dropLocation = resolveBowDropLocation(location);
+        if (dropLocation == null) {
+            return;
+        }
         clearDroppedBowDisplay();
-        Location spawn = location.clone().add(0.0D, DROPPED_BOW_HEIGHT_OFFSET, 0.0D);
+        Location spawn = dropLocation.clone().add(0.0D, DROPPED_BOW_HEIGHT_OFFSET, 0.0D);
         ArmorStand stand = spawn.getWorld().spawn(spawn, ArmorStand.class);
         stand.setVisible(false);
         stand.setGravity(false);
@@ -2770,6 +2778,72 @@ public class MurderMysteryGameManager extends GameManager {
                 1L,
                 1L
         );
+    }
+
+    private Location resolveBowDropLocation(Location location) {
+        if (location.getY() >= 0.0D
+                && isSafeBowDropGround(location.getBlock().getRelative(BlockFace.DOWN))) {
+            return location;
+        }
+        World world = location.getWorld();
+        Location closest = null;
+        double closestDistanceSquared = Double.MAX_VALUE;
+        GameMap map = getActiveGameMap();
+        if (map != null) {
+            for (Location spawn : map.getSpawnPoints()) {
+                if (spawn.getWorld() == null || !world.equals(spawn.getWorld())
+                        || !isSafeBowDropGround(spawn.getBlock().getRelative(BlockFace.DOWN))) {
+                    continue;
+                }
+                double distanceSquared = spawn.distanceSquared(location);
+                if (distanceSquared < closestDistanceSquared) {
+                    closest = spawn;
+                    closestDistanceSquared = distanceSquared;
+                }
+            }
+        }
+        for (int x = location.getBlockX() - DROPPED_BOW_SAFE_SEARCH_RADIUS;
+             x <= location.getBlockX() + DROPPED_BOW_SAFE_SEARCH_RADIUS; x++) {
+            for (int z = location.getBlockZ() - DROPPED_BOW_SAFE_SEARCH_RADIUS;
+                 z <= location.getBlockZ() + DROPPED_BOW_SAFE_SEARCH_RADIUS; z++) {
+                if (!world.isChunkLoaded(x >> 4, z >> 4)) {
+                    continue;
+                }
+                int maxY = Math.min(world.getMaxHeight() - 3, world.getHighestBlockYAt(x, z));
+                for (int y = 0; y <= maxY; y++) {
+                    double dx = x + 0.5D - location.getX();
+                    double dy = y + 1.0D - location.getY();
+                    double dz = z + 0.5D - location.getZ();
+                    double distanceSquared = dx * dx + dy * dy + dz * dz;
+                    if (distanceSquared >= closestDistanceSquared) {
+                        continue;
+                    }
+                    Block ground = world.getBlockAt(x, y, z);
+                    if (isSafeBowDropGround(ground)) {
+                        closest = ground.getLocation().add(0.5D, 1.0D, 0.5D);
+                        closestDistanceSquared = distanceSquared;
+                    }
+                }
+            }
+        }
+        return closest;
+    }
+
+    private boolean isSafeBowDropGround(Block ground) {
+        if (!ground.getType().isSolid()
+                || ground.getRelative(BlockFace.UP).getType() != Material.AIR
+                || ground.getRelative(BlockFace.UP, 2).getType() != Material.AIR) {
+            return false;
+        }
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                if (ground.getRelative(dx, 1, dz).getType().isSolid()
+                        || ground.getRelative(dx, 2, dz).getType().isSolid()) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     private void tickDroppedBowDisplay() {
