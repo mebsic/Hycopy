@@ -379,7 +379,6 @@ public class FriendService {
                         );
                     }
                 }
-                // Spread requests out rather than sending the whole network's friend lists at once.
                 Thread.sleep(1_000L);
             }
         } catch (InterruptedException ex) {
