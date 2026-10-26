@@ -32,7 +32,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class FriendCommand implements SimpleCommand {
@@ -510,32 +509,14 @@ public class FriendCommand implements SimpleCommand {
             sendFramed(player, Component.text("That page does not exist!", NamedTextColor.RED));
             return;
         }
-        List<UUID> pageFriends = new ArrayList<>(pageSlice(ordered, page, LIST_PAGE_SIZE));
-        Map<UUID, CompletableFuture<String>> nameRefreshes = new HashMap<>();
-        for (UUID friendId : pageFriends) {
-            Optional<Player> onlineFriend = proxy.getPlayer(friendId);
-            nameRefreshes.put(friendId, onlineFriend.isPresent()
-                    ? CompletableFuture.completedFuture(onlineFriend.get().getUsername())
-                    : CompletableFuture.supplyAsync(() -> MojangApi.lookupName(friendId), Thread::startVirtualThread));
+        List<Component> lines = new ArrayList<>();
+        String title = bestOnly ? "Best Friends" : "Friends";
+        String commandPrefix = bestOnly ? cmd("list best") : cmd("list");
+        lines.add(FriendComponents.pageHeader(title, page, totalPages, commandPrefix));
+        for (UUID friendId : pageSlice(ordered, page, LIST_PAGE_SIZE)) {
+            lines.add(buildFriendListEntry(player, friendId, friends.getName(friendId)));
         }
-        CompletableFuture.allOf(nameRefreshes.values().toArray(new CompletableFuture<?>[0])).thenRun(() -> {
-            if (!player.isActive()) {
-                return;
-            }
-            List<Component> lines = new ArrayList<>();
-            String title = bestOnly ? "Best Friends" : "Friends";
-            String commandPrefix = bestOnly ? cmd("list best") : cmd("list");
-            lines.add(FriendComponents.pageHeader(title, page, totalPages, commandPrefix));
-            for (UUID friendId : pageFriends) {
-                String currentName = proxy.getPlayer(friendId)
-                        .map(Player::getUsername)
-                        .orElse(nameRefreshes.get(friendId).join());
-                friends.rememberName(friendId, currentName);
-                String displayName = currentName == null ? friends.getName(friendId) : currentName;
-                lines.add(buildFriendListEntry(player, friendId, displayName));
-            }
-            sendFramed(player, lines);
-        });
+        sendFramed(player, lines);
     }
 
     private void handleRequests(Player player, String[] args) {

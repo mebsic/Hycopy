@@ -46,6 +46,10 @@ public final class MojangApi {
         return cached.name;
     }
 
+    public static String lookupCurrentName(UUID uuid) {
+        return uuid == null ? null : fetchName(uuid);
+    }
+
     private static String fetchName(UUID uuid) {
         HttpURLConnection connection = null;
         try {

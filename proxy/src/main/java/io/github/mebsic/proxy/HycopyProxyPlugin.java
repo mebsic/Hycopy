@@ -78,6 +78,7 @@ import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier;
 import com.velocitypowered.api.util.Favicon;
 import com.velocitypowered.api.proxy.server.ServerPing;
+import com.velocitypowered.api.scheduler.ScheduledTask;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
@@ -148,6 +149,7 @@ public class HycopyProxyPlugin {
     private QueueOrchestrator queueOrchestrator;
     private RankResolver rankResolver;
     private FriendService friendService;
+    private ScheduledTask friendNameRefreshTask;
     private BlockService blockService;
     private ChatChannelService chatChannelService;
     private ChatMessageService chatMessageService;
@@ -352,6 +354,16 @@ public class HycopyProxyPlugin {
                     friendService.expirePendingRequests();
                 }
             }).repeat(1, TimeUnit.SECONDS).schedule();
+            friendNameRefreshTask = proxy.getScheduler().buildTask(this, () -> {
+                FriendService service = friendService;
+                if (service != null) {
+                    try {
+                        service.refreshNames();
+                    } catch (Exception ex) {
+                        logger.warn("Failed to refresh friend names", ex);
+                    }
+                }
+            }).delay(0, TimeUnit.SECONDS).repeat(1, TimeUnit.HOURS).schedule();
             proxy.getScheduler().buildTask(this, () -> {
                 if (partyService != null) {
                     partyService.expirePendingInvites();
@@ -759,6 +771,13 @@ public class HycopyProxyPlugin {
             watchdogAnnouncementService = null;
         }
         registryService = null;
+        if (friendService != null) {
+            friendService.stopNameRefresh();
+        }
+        if (friendNameRefreshTask != null) {
+            friendNameRefreshTask.cancel();
+            friendNameRefreshTask = null;
+        }
         friendService = null;
         blockService = null;
         chatChannelService = null;
