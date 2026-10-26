@@ -52,6 +52,10 @@ public class UnmuteCommand implements CommandExecutor {
             sender.sendMessage(ChatColor.RED + CommonMessages.PLAYER_NOT_FOUND_COMMAND);
             return true;
         }
+        if (sender instanceof Player && targetUuid.equals(((Player) sender).getUniqueId())) {
+            sender.sendMessage(ChatColor.RED + "You cannot unmute yourself!");
+            return true;
+        }
         UUID actorUuid = sender instanceof Player ? ((Player) sender).getUniqueId() : null;
         String actorName = sender.getName();
         boolean removed = punishments.unpunish(PunishmentType.MUTE, targetUuid, actorUuid, actorName);

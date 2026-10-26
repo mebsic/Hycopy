@@ -75,12 +75,12 @@ final class MurderMysteryMapPacketSender {
         }
     }
 
-    boolean send(Player player, int mapId, byte scale, byte[] pixels, MapCursorCollection cursors) {
+    boolean send(Player player, int mapId, byte scale, byte[] pixels, MapCursorCollection markers) {
         if (player == null || pixels == null || pixels.length < MAP_PIXEL_SIZE * MAP_PIXEL_SIZE) {
             return false;
         }
         try {
-            List<Object> icons = createMapIcons(cursors);
+            List<Object> icons = createMapIcons(markers);
             Object packet = packetConstructor.newInstance(
                     mapId,
                     scale,
@@ -97,29 +97,29 @@ final class MurderMysteryMapPacketSender {
         }
     }
 
-    private List<Object> createMapIcons(MapCursorCollection cursors) throws Exception {
+    private List<Object> createMapIcons(MapCursorCollection markers) throws Exception {
         List<Object> icons = new ArrayList<>();
-        if (cursors == null) {
+        if (markers == null) {
             return icons;
         }
-        for (int i = 0; i < cursors.size(); i++) {
-            MapCursor cursor = cursors.getCursor(i);
-            if (cursor == null || !cursor.isVisible()) {
+        for (int i = 0; i < markers.size(); i++) {
+            MapCursor marker = markers.getCursor(i);
+            if (marker == null || !marker.isVisible()) {
                 continue;
             }
-            icons.add(createMapIcon(cursor));
+            icons.add(createMapIcon(marker));
         }
         return icons;
     }
 
-    private Object createMapIcon(MapCursor cursor) throws Exception {
-        byte type = cursorTypeId(cursor.getType());
+    private Object createMapIcon(MapCursor marker) throws Exception {
+        byte type = cursorTypeId(marker.getType());
         if (rawMapIconConstructor != null) {
-            return rawMapIconConstructor.newInstance(type, cursor.getX(), cursor.getY(), cursor.getDirection());
+            return rawMapIconConstructor.newInstance(type, marker.getX(), marker.getY(), marker.getDirection());
         }
         int index = type & 15;
         Object iconType = index < mapIconTypes.length ? mapIconTypes[index] : mapIconTypes[0];
-        return typedMapIconConstructor.newInstance(iconType, cursor.getX(), cursor.getY(), cursor.getDirection());
+        return typedMapIconConstructor.newInstance(iconType, marker.getX(), marker.getY(), marker.getDirection());
     }
 
     private boolean sendPacket(Player player, Object packet) {
