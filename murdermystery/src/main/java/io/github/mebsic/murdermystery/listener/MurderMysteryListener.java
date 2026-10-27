@@ -1301,6 +1301,7 @@ public class MurderMysteryListener implements Listener {
         }
         spawnThrownKnifeTrailParticle(bladeFrom, knife);
         display.teleport(to);
+        gameManager.sendArmorStandInvisibility(display);
     }
 
     private boolean isValidKnifeShooter(Player shooter) {

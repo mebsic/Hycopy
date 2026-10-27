@@ -2863,7 +2863,7 @@ public class MurderMysteryGameManager extends GameManager {
         }
         displayLocation.setYaw(droppedBowYaw);
         droppedBowDisplay.teleport(displayLocation);
-        sendDroppedBowInvisibility(droppedBowDisplay);
+        sendArmorStandInvisibility(droppedBowDisplay);
         for (MurderMysteryGamePlayer mmPlayer : getMmPlayers()) {
             if (!canPickUpDroppedBow(mmPlayer)) {
                 continue;
@@ -2887,7 +2887,7 @@ public class MurderMysteryGameManager extends GameManager {
         }
     }
 
-    private void sendDroppedBowInvisibility(ArmorStand stand) {
+    public void sendArmorStandInvisibility(ArmorStand stand) {
         stand.setVisible(false);
         try {
             Object handle = stand.getClass().getMethod("getHandle").invoke(stand);
