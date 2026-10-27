@@ -226,6 +226,12 @@ public class MapManager {
         }
 
         String current = safeText(activeMapName);
+        if (plugin.getServerType() != null && plugin.getServerType().isGame()) {
+            String runtimeMap = resolvePreferredMapFromRuntimeWorld();
+            if (runtimeMap != null) {
+                current = runtimeMap;
+            }
+        }
         List<String> candidates = new ArrayList<>();
         for (String mapName : eligibleMaps) {
             if (!current.equalsIgnoreCase(mapName)) {

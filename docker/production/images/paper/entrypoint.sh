@@ -791,6 +791,16 @@ resolve_map_name_from_mongo() {
 
 stage_required_runtime_plugins
 
+excluded_map_name=""
+if [[ "${SERVER_KIND,,}" == "game" ]]; then
+  existing_level_name="$(read_existing_level_name)"
+  data_world_dir="${DATA_DIR}/${WORLD_NAME}"
+  if [[ -n "${existing_level_name}" ]]; then
+    data_world_dir="${DATA_DIR}/${existing_level_name}"
+  fi
+  excluded_map_name="$(resolve_map_name_from_data_world "${data_world_dir}")"
+fi
+
 next_map_selection_file="${DATA_DIR}/.hycopy-next-map"
 staged_map_selection="false"
 if [[ -z "${MAP_NAME}" && "${SERVER_KIND,,}" == "game" && -f "${next_map_selection_file}" ]]; then
@@ -803,21 +813,17 @@ if [[ -z "${MAP_NAME}" && "${SERVER_KIND,,}" == "game" && -f "${next_map_selecti
     echo "[bootstrap] Invalid staged game map selection; refusing to use a fallback map." >&2
     exit 1
   fi
-  MAP_NAME="${pending_map_name}"
   staged_map_selection="true"
-  echo "[bootstrap] Using game-end map selection ${GAME_TYPE}/${MAP_NAME}."
+  if [[ -n "${excluded_map_name}" \
+      && "$(normalize_map_dir_name "${pending_map_name}")" == "$(normalize_map_dir_name "${excluded_map_name}")" ]]; then
+    echo "[bootstrap] Staged game map repeats ${excluded_map_name}; selecting another map."
+  else
+    MAP_NAME="${pending_map_name}"
+    echo "[bootstrap] Using game-end map selection ${GAME_TYPE}/${MAP_NAME}."
+  fi
 fi
 
 if [[ -z "${MAP_NAME}" && "${SERVER_KIND,,}" != "build" ]]; then
-  excluded_map_name=""
-  if [[ "${SERVER_KIND,,}" == "game" ]]; then
-    existing_level_name="$(read_existing_level_name)"
-    data_world_dir="${DATA_DIR}/${WORLD_NAME}"
-    if [[ -n "${existing_level_name}" ]]; then
-      data_world_dir="${DATA_DIR}/${existing_level_name}"
-    fi
-    excluded_map_name="$(resolve_map_name_from_data_world "${data_world_dir}")"
-  fi
   resolved_map_name="$(resolve_map_name_from_mongo "${excluded_map_name}")"
   if [[ -n "${resolved_map_name}" ]] && ! is_placeholder_map_name "${resolved_map_name}"; then
     MAP_NAME="${resolved_map_name}"

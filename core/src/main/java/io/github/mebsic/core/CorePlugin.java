@@ -741,6 +741,9 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
             weatherCycle = false;
         }
         Map<String, String> configuredGameRules = resolveConfiguredGameRules();
+        if (serverType != null && serverType.isBuild()) {
+            configuredGameRules.put("doFireTick", "false");
+        }
         for (World world : getServer().getWorlds()) {
             if (world == null) {
                 continue;

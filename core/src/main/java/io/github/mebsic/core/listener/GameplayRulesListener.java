@@ -550,6 +550,8 @@ public class GameplayRulesListener implements Listener {
                 || "ENDER_CHEST".equals(name)
                 || "WORKBENCH".equals(name)
                 || "CRAFTING_TABLE".equals(name)
+                || "ENCHANTMENT_TABLE".equals(name)
+                || "ENCHANTING_TABLE".equals(name)
                 || "ANVIL".equals(name)
                 || name.endsWith("_ANVIL")) {
             return true;
