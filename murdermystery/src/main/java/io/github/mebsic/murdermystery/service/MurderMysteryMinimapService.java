@@ -41,12 +41,11 @@ import java.util.UUID;
 
 public final class MurderMysteryMinimapService {
     public static final int HOTBAR_SLOT = 4;
+    public static final int PLAYER_REVEAL_REMAINING_SECONDS = 30;
 
     private static final String DISPLAY_NAME = ChatColor.GREEN + "Minimap";
     private static final String LORE_LINE = ChatColor.GRAY + "Use this Map to navigate in the world.";
-    private static final int PLAYER_REVEAL_REMAINING_SECONDS = 30;
     private static final int PLAYER_REVEAL_ALIVE_NON_MURDERERS = 2;
-    private static final double NEARBY_PLAYER_REVEAL_MAX_Y_DELTA = 5.0D;
     private static final long REFRESH_PERIOD_TICKS = 1L;
     private static final long MAP_FIRST_RESEND_DELAY_TICKS = 1L;
     private static final long MAP_JOIN_RESEND_DELAY_TICKS = 20L;
@@ -552,7 +551,7 @@ public final class MurderMysteryMinimapService {
         minimap.renderedSampledTerrainKey = null;
     }
 
-    private boolean shouldRevealOpposingPlayers() {
+    private boolean shouldRevealAllPlayers() {
         if (gameManager.getState() != GameState.IN_GAME) {
             return false;
         }
@@ -652,7 +651,7 @@ public final class MurderMysteryMinimapService {
         if (viewerData == null || !viewerData.isAlive()) {
             return;
         }
-        boolean revealOpposingPlayers = shouldRevealOpposingPlayers();
+        boolean revealAllPlayers = shouldRevealAllPlayers();
         boolean revealNonMurderersToMurderer = shouldRevealNonMurderersToMurderer(viewerData);
         Set<UUID> addedPlayers = new HashSet<>();
         for (MurderMysteryGamePlayer targetData : gameManager.getMurderMysteryPlayersSnapshot()) {
@@ -669,7 +668,7 @@ public final class MurderMysteryMinimapService {
                     viewerData,
                     target,
                     targetData,
-                    revealOpposingPlayers,
+                    revealAllPlayers,
                     revealNonMurderersToMurderer
             )) {
                 continue;
@@ -683,36 +682,16 @@ public final class MurderMysteryMinimapService {
                                              MurderMysteryGamePlayer viewerData,
                                              Player target,
                                              MurderMysteryGamePlayer targetData,
-                                             boolean revealOpposingPlayers,
+                                             boolean revealAllPlayers,
                                              boolean revealNonMurderersToMurderer) {
         if (viewer == null || viewerData == null || target == null || targetData == null || !target.isOnline()
                 || !targetData.isAlive()) {
             return false;
         }
-        if (isNearbyPlayer(viewer, target)) {
-            return true;
-        }
         if (revealNonMurderersToMurderer && isMurderer(viewerData) && isAliveNonMurderer(targetData)) {
             return true;
         }
-        return revealOpposingPlayers && isOpposingSide(viewerData, targetData);
-    }
-
-    private boolean isNearbyPlayer(Player viewer, Player target) {
-        if (viewer == null || target == null) {
-            return false;
-        }
-        Location viewerLocation = viewer.getLocation();
-        Location targetLocation = target.getLocation();
-        return sameWorld(viewerLocation, targetLocation)
-                && Math.abs(targetLocation.getY() - viewerLocation.getY()) <= NEARBY_PLAYER_REVEAL_MAX_Y_DELTA;
-    }
-
-    private boolean isOpposingSide(MurderMysteryGamePlayer viewerData, MurderMysteryGamePlayer targetData) {
-        if (viewerData == null || targetData == null) {
-            return false;
-        }
-        return isMurderer(viewerData) != isMurderer(targetData);
+        return revealAllPlayers;
     }
 
     private boolean isAliveNonMurderer(MurderMysteryGamePlayer mmPlayer) {

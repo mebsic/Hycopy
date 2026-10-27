@@ -124,14 +124,13 @@ public abstract class GameManager {
 
     public GameManager(CorePlugin plugin, BossBarService bossBarService) {
         this.plugin = plugin;
+        this.players = new HashMap<>();
         this.mapManager = new MapManager(plugin);
         this.tablistService = new TablistService(plugin.getCoreApi(), plugin.getServerType());
         this.tablistService.setVisibilityPolicy(this::isVisibleInTabForViewer);
-        this.tablistService.setEnforceVisibilityWithHidePlayer(true);
         this.scoreboardService = new ScoreboardService(tablistService);
         this.titleService = new TitleService();
         this.bossBarService = bossBarService;
-        this.players = new HashMap<>();
         this.roundRewardSummary = new HashMap<>();
         this.roundMysteryDustRewards = new HashMap<>();
         this.lastCountdownTickSoundSeconds = new HashMap<>();
@@ -883,10 +882,14 @@ public abstract class GameManager {
         player.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, Integer.MAX_VALUE, 0, false, false), true);
         updateSpectatorVisibility(player);
         refreshDeadSpectatorViewerVisibility();
+        tablistService.updateAll();
     }
 
     public void restoreDeadSpectatorState(Player player) {
         applyDeadSpectatorState(player);
+        if (player != null && state == GameState.ENDING) {
+            SpectatorItems.applyPostGameTo(player, plugin.getServerType());
+        }
     }
 
     private void setPlayerEntityCollision(Player player, boolean collidesWithEntities) {
@@ -953,15 +956,8 @@ public abstract class GameManager {
         if (viewer == null || target == null) {
             return false;
         }
-        if (viewer.getUniqueId().equals(target.getUniqueId())) {
-            return true;
-        }
-        if (state != GameState.IN_GAME) {
-            return true;
-        }
-        GamePlayer viewerData = players.get(viewer.getUniqueId());
-        if (viewerData == null || !viewerData.isAlive()) {
-            return true;
+        if (target.getGameMode() == GameMode.SPECTATOR) {
+            return false;
         }
         GamePlayer targetData = players.get(target.getUniqueId());
         return targetData == null || targetData.isAlive();

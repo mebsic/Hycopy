@@ -15,8 +15,11 @@ import org.bukkit.scoreboard.NameTagVisibility;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.Team;
 
+import java.lang.reflect.Array;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -35,6 +38,7 @@ public class TablistService {
     private ChatColor forcedNameColor;
     private VisibilityPolicy visibilityPolicy;
     private boolean enforceVisibilityWithHidePlayer;
+    private final Map<UUID, Set<UUID>> hiddenPlayerListEntries = new HashMap<>();
 
     @FunctionalInterface
     public interface VisibilityPolicy {
@@ -52,8 +56,14 @@ public class TablistService {
     }
 
     public void updateAll() {
+        Set<UUID> onlineIds = new HashSet<>();
         for (Player viewer : Bukkit.getOnlinePlayers()) {
+            onlineIds.add(viewer.getUniqueId());
             updateFor(viewer);
+        }
+        hiddenPlayerListEntries.keySet().retainAll(onlineIds);
+        for (Set<UUID> hidden : hiddenPlayerListEntries.values()) {
+            hidden.retainAll(onlineIds);
         }
     }
 
@@ -65,6 +75,7 @@ public class TablistService {
         applyHeaderFooter(viewer);
         for (Player target : Bukkit.getOnlinePlayers()) {
             updatePlayer(target);
+            applyPlayerListVisibility(viewer, target);
         }
     }
 
@@ -273,9 +284,6 @@ public class TablistService {
         if (viewer == null || target == null) {
             return false;
         }
-        if (viewer.getUniqueId().equals(target.getUniqueId())) {
-            return true;
-        }
         if (visibilityPolicy == null) {
             return true;
         }
@@ -297,6 +305,44 @@ public class TablistService {
             viewer.showPlayer(target);
         } else {
             viewer.hidePlayer(target);
+        }
+    }
+
+    private void applyPlayerListVisibility(Player viewer, Player target) {
+        if (visibilityPolicy == null) {
+            return;
+        }
+        Set<UUID> hidden = hiddenPlayerListEntries.computeIfAbsent(viewer.getUniqueId(), key -> new HashSet<>());
+        UUID targetId = target.getUniqueId();
+        if (!isVisibleToViewer(viewer, target)) {
+            if (sendPlayerListEntry(viewer, target, "REMOVE_PLAYER")) {
+                hidden.add(targetId);
+            }
+        } else if (hidden.contains(targetId) && viewer.canSee(target)
+                && sendPlayerListEntry(viewer, target, "ADD_PLAYER")) {
+            hidden.remove(targetId);
+        }
+    }
+
+    private boolean sendPlayerListEntry(Player viewer, Player target, String actionName) {
+        try {
+            String version = viewer.getServer().getClass().getPackage().getName().split("\\.")[3];
+            Class<?> craftPlayer = Class.forName("org.bukkit.craftbukkit." + version + ".entity.CraftPlayer");
+            Object viewerHandle = craftPlayer.getMethod("getHandle").invoke(viewer);
+            Object targetHandle = craftPlayer.getMethod("getHandle").invoke(target);
+            Class<?> entityPlayer = Class.forName("net.minecraft.server." + version + ".EntityPlayer");
+            Object targets = Array.newInstance(entityPlayer, 1);
+            Array.set(targets, 0, targetHandle);
+            Class<?> packetClass = Class.forName("net.minecraft.server." + version + ".PacketPlayOutPlayerInfo");
+            Class<?> actionClass = Class.forName(packetClass.getName() + "$EnumPlayerInfoAction");
+            Object action = actionClass.getField(actionName).get(null);
+            Object packet = packetClass.getConstructor(actionClass, targets.getClass()).newInstance(action, targets);
+            Object connection = viewerHandle.getClass().getField("playerConnection").get(viewerHandle);
+            Class<?> packetBase = Class.forName("net.minecraft.server." + version + ".Packet");
+            connection.getClass().getMethod("sendPacket", packetBase).invoke(connection, packet);
+            return true;
+        } catch (Exception ignored) {
+            return false;
         }
     }
 

@@ -328,6 +328,10 @@ public class MurderMysteryGameManager extends GameManager {
     @Override
     protected boolean onGameTimerTick(int remainingSeconds) {
         handleMurdererSwordTimeline(remainingSeconds);
+        if (remainingSeconds == MurderMysteryMinimapService.PLAYER_REVEAL_REMAINING_SECONDS) {
+            broadcast(ChatColor.RED + "Watch out! " + ChatColor.YELLOW
+                    + "The Murderer can now find survivors easily.");
+        }
         if (remainingSeconds == INNOCENTS_WIN_WARNING_SECONDS) {
             broadcast(ChatColor.YELLOW + "Innocents win in "
                     + ChatColor.RED + INNOCENTS_WIN_WARNING_SECONDS
@@ -429,9 +433,6 @@ public class MurderMysteryGameManager extends GameManager {
         getTablistService().setNameTagsHidden(true);
         getTablistService().setForcedNameColor(ChatColor.WHITE);
         playWinSoundToWinners();
-        if (innocentsWon) {
-            announceHeroWinners();
-        }
         int roundDurationSeconds = Math.max(0, elapsedGameSeconds);
         publishResults(roundDurationSeconds);
         elapsedGameSeconds = 0;
@@ -2862,6 +2863,7 @@ public class MurderMysteryGameManager extends GameManager {
         }
         displayLocation.setYaw(droppedBowYaw);
         droppedBowDisplay.teleport(displayLocation);
+        sendDroppedBowInvisibility(droppedBowDisplay);
         for (MurderMysteryGamePlayer mmPlayer : getMmPlayers()) {
             if (!canPickUpDroppedBow(mmPlayer)) {
                 continue;
@@ -2882,6 +2884,26 @@ public class MurderMysteryGameManager extends GameManager {
             }
             clearDroppedBowDisplay();
             return;
+        }
+    }
+
+    private void sendDroppedBowInvisibility(ArmorStand stand) {
+        stand.setVisible(false);
+        try {
+            Object handle = stand.getClass().getMethod("getHandle").invoke(stand);
+            String nmsPackage = handle.getClass().getPackage().getName();
+            Object watcher = handle.getClass().getMethod("getDataWatcher").invoke(handle);
+            Class<?> watcherClass = Class.forName(nmsPackage + ".DataWatcher");
+            Class<?> packetClass = Class.forName(nmsPackage + ".Packet");
+            Object packet = Class.forName(nmsPackage + ".PacketPlayOutEntityMetadata")
+                    .getConstructor(int.class, watcherClass, boolean.class)
+                    .newInstance(stand.getEntityId(), watcher, true);
+            for (Player viewer : stand.getWorld().getPlayers()) {
+                Object playerHandle = viewer.getClass().getMethod("getHandle").invoke(viewer);
+                Object connection = playerHandle.getClass().getField("playerConnection").get(playerHandle);
+                connection.getClass().getMethod("sendPacket", packetClass).invoke(connection, packet);
+            }
+        } catch (Exception ignored) {
         }
     }
 
@@ -3065,23 +3087,6 @@ public class MurderMysteryGameManager extends GameManager {
             return mmPlayer.isHeroFromGold() ? MurderMysteryRole.INNOCENT : MurderMysteryRole.DETECTIVE;
         }
         return role == null ? MurderMysteryRole.INNOCENT : role;
-    }
-
-    private void announceHeroWinners() {
-        List<String> heroes = new ArrayList<>();
-        for (MurderMysteryGamePlayer mmPlayer : getMmPlayers()) {
-            if (mmPlayer.getRole() != MurderMysteryRole.HERO) {
-                continue;
-            }
-            if (!mmPlayer.isHeroFromGold() || !mmPlayer.hasKilledMurderer()) {
-                continue;
-            }
-            Player player = Bukkit.getPlayer(mmPlayer.getUuid());
-            heroes.add(player == null ? mmPlayer.getUuid().toString() : player.getName());
-        }
-        if (!heroes.isEmpty()) {
-            broadcast(ChatColor.GOLD + "Hero: " + ChatColor.WHITE + String.join(", ", heroes));
-        }
     }
 
     private static Sound resolveMurderKillDamageSound() {

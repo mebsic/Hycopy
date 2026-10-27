@@ -400,6 +400,7 @@ public class SpectatorListener implements Listener {
         spectator.setGameMode(GameMode.SPECTATOR);
         setSpectatorTarget(spectator, target);
         followStates.put(spectator.getUniqueId(), FollowState.following(target.getUniqueId()));
+        gameManager.getTablistService().updateAll();
         sendFollowActionBar(spectator, target);
         showSpectatingTitle(spectator, target);
         ensureFollowActionBarTask();
@@ -444,8 +445,13 @@ public class SpectatorListener implements Listener {
                 continue;
             }
             Player spectator = Bukkit.getPlayer(spectatorId);
-            if (spectator == null || !spectator.isOnline() || !isDeadSpectator(spectator)) {
+            if (spectator == null || !spectator.isOnline()) {
                 removeFollowEntry(spectatorId);
+                continue;
+            }
+            if (!isDeadSpectator(spectator)) {
+                stopFollowingTarget(spectator, gameManager.getState() == GameState.ENDING);
+                ActionBarUtil.send(spectator, " ");
                 continue;
             }
             if (spectator.getGameMode() != GameMode.SPECTATOR) {
@@ -600,6 +606,11 @@ public class SpectatorListener implements Listener {
             return;
         }
         Player replacement = findReplacementTarget(state.targetId);
+        if (replacement == null && spectator != null && spectator.isOnline()) {
+            stopFollowingTarget(spectator, true);
+            sendTargetLostActionBar(spectator);
+            return;
+        }
         state.markTargetLost(
                 replacement == null ? null : replacement.getUniqueId(),
                 now + TARGET_LOST_ACTION_BAR_MILLIS
@@ -677,14 +688,17 @@ public class SpectatorListener implements Listener {
         if (targetId == null || followStates.isEmpty()) {
             return;
         }
-        long now = System.currentTimeMillis();
         for (Map.Entry<UUID, FollowState> entry : followStates.entrySet()) {
             FollowState state = entry.getValue();
             if (state == null || !state.hasTarget() || !targetId.equals(state.targetId)) {
                 continue;
             }
             Player spectator = Bukkit.getPlayer(entry.getKey());
-            markTargetLost(spectator, state, now);
+            if (spectator != null && spectator.isOnline()) {
+                stopFollowingTarget(spectator, true);
+            } else {
+                removeFollowEntry(entry.getKey());
+            }
         }
     }
 
@@ -735,7 +749,8 @@ public class SpectatorListener implements Listener {
     }
 
     private boolean isAliveTarget(Player player) {
-        if (player == null || !player.isOnline() || gameManager == null) {
+        if (player == null || !player.isOnline() || gameManager == null
+                || gameManager.getState() != GameState.IN_GAME) {
             return false;
         }
         GamePlayer gamePlayer = gameManager.getPlayer(player);
@@ -753,7 +768,7 @@ public class SpectatorListener implements Listener {
     }
 
     private void setSpectatorTarget(Player spectator, Player target) {
-        if (spectator == null) {
+        if (spectator == null || spectator.getGameMode() != GameMode.SPECTATOR) {
             return;
         }
         spectator.setSpectatorTarget(target);
