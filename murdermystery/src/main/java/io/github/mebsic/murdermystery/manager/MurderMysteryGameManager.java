@@ -1994,8 +1994,8 @@ public class MurderMysteryGameManager extends GameManager {
         if (!fromGold) {
             playVanillaPickupSound(player);
             player.getInventory().setHeldItemSlot(BOW_HOTBAR_SLOT);
-            player.sendMessage(ChatColor.GREEN + "You picked up the bow! "
-                    + ChatColor.GOLD + "GOAL: Find and kill the Murderer!");
+            player.sendMessage(ChatColor.GREEN + "You picked up the Bow! "
+                    + ChatColor.GOLD + "GOAL: " + ChatColor.YELLOW + "Find and kill the Murderer!");
             broadcast(ChatColor.YELLOW + "A player has picked up the Bow!");
         }
         updateScoreboardAll();
