@@ -16,8 +16,11 @@ import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.Team;
 
 import java.lang.reflect.Array;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -33,6 +36,7 @@ public class TablistService {
     private static final int MAX_TEAM_TEXT_LENGTH = 16;
     private final CoreApi coreApi;
     private final boolean hubServer;
+    private final boolean sortByNetworkLevel;
     private boolean nameTagsHidden;
     private boolean showRankPrefix;
     private ChatColor forcedNameColor;
@@ -48,6 +52,7 @@ public class TablistService {
     public TablistService(CoreApi coreApi, ServerType serverType) {
         this.coreApi = coreApi;
         this.hubServer = serverType != null && serverType.isHub();
+        this.sortByNetworkLevel = hubServer || (serverType != null && serverType.isBuild());
         this.nameTagsHidden = false;
         this.showRankPrefix = hubServer;
         this.forcedNameColor = null;
@@ -169,6 +174,7 @@ public class TablistService {
             legacy.unregister();
         }
 
+        Map<UUID, Integer> sortPositions = resolveSortPositions();
         Set<String> visibleNames = new HashSet<>();
         for (Player target : Bukkit.getOnlinePlayers()) {
             boolean visible = isVisibleToViewer(viewer, target);
@@ -180,7 +186,7 @@ public class TablistService {
             visibleNames.add(target.getName());
             UUID targetId = target.getUniqueId();
             Rank rank = resolveRank(targetId);
-            String teamName = nameTagTeamName(targetId, rank, target.getName());
+            String teamName = nameTagTeamName(targetId, rank, target.getName(), sortPositions.get(targetId));
             Team team = scoreboard.getTeam(teamName);
             if (team == null) {
                 team = scoreboard.registerNewTeam(teamName);
@@ -378,11 +384,31 @@ public class TablistService {
         return trimmed;
     }
 
-    private String nameTagTeamName(UUID uuid, Rank rank, String playerName) {
+    private Map<UUID, Integer> resolveSortPositions() {
+        Map<UUID, Integer> positions = new HashMap<>();
+        if (!sortByNetworkLevel) {
+            return positions;
+        }
+        List<Player> players = new ArrayList<>(Bukkit.getOnlinePlayers());
+        players.sort(Comparator
+                .comparingInt((Player player) -> rankPriority(resolveRank(player.getUniqueId())))
+                .thenComparing(Comparator.comparingInt((Player player) -> coreApi == null
+                        ? 0 : coreApi.getNetworkLevel(player.getUniqueId())).reversed())
+                .thenComparing(Player::getName, String.CASE_INSENSITIVE_ORDER)
+                .thenComparing(Player::getUniqueId));
+        for (int i = 0; i < players.size(); i++) {
+            positions.put(players.get(i).getUniqueId(), i);
+        }
+        return positions;
+    }
+
+    private String nameTagTeamName(UUID uuid, Rank rank, String playerName, Integer sortPosition) {
         String compactUuid = uuid.toString().replace("-", "");
         int idStart = Math.max(0, compactUuid.length() - SORT_ID_PART_LENGTH);
         String idPart = compactUuid.substring(idStart);
-        String namePart = sanitizeNamePart(playerName);
+        String namePart = sortPosition == null
+                ? sanitizeNamePart(playerName)
+                : String.format(Locale.ROOT, "%08x", sortPosition);
         return NAME_TAG_TEAM_PREFIX
                 + twoDigitPriority(rankPriority(rank))
                 + namePart

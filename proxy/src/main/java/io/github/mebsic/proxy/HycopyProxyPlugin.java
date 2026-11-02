@@ -38,6 +38,7 @@ import io.github.mebsic.proxy.service.ChatChannelService;
 import io.github.mebsic.proxy.service.ChatMessageService;
 import io.github.mebsic.proxy.service.ChatRestrictionService;
 import io.github.mebsic.proxy.service.FriendService;
+import io.github.mebsic.proxy.service.PlayerNameService;
 import io.github.mebsic.proxy.service.PartyService;
 import io.github.mebsic.proxy.service.PrivateMessageReplyService;
 import io.github.mebsic.proxy.service.QueueOrchestrator;
@@ -149,7 +150,8 @@ public class HycopyProxyPlugin {
     private QueueOrchestrator queueOrchestrator;
     private RankResolver rankResolver;
     private FriendService friendService;
-    private ScheduledTask friendNameRefreshTask;
+    private PlayerNameService playerNameService;
+    private ScheduledTask playerNameRefreshTask;
     private BlockService blockService;
     private ChatChannelService chatChannelService;
     private ChatMessageService chatMessageService;
@@ -200,7 +202,8 @@ public class HycopyProxyPlugin {
             this.rankResolver = new RankResolver(mongoDatabase);
             this.rankResolver.subscribeGiftedRankUpdates(pubSub);
             String friendsCollection = config == null ? null : config.getFriendsCollection();
-            this.friendService = new FriendService(proxy, mongoDatabase, friendsCollection, rankResolver, registryService, redis);
+            this.playerNameService = new PlayerNameService(proxy, mongoDatabase, friendsCollection);
+            this.friendService = new FriendService(proxy, mongoDatabase, friendsCollection, rankResolver, registryService, redis, playerNameService);
             this.blockService = new BlockService(mongoDatabase, friendsCollection, redis, rankResolver);
             this.friendService.bootstrapOnlinePlayers();
             this.blockService.bootstrapOnlinePlayers(proxy);
@@ -258,7 +261,7 @@ public class HycopyProxyPlugin {
                     privateMessageReplyService,
                     "f"
             );
-            BlockCommand blockCommand = new BlockCommand(proxy, blockService, friendService);
+            BlockCommand blockCommand = new BlockCommand(proxy, blockService, friendService, playerNameService);
             BoopCommand boopCommand = new BoopCommand(
                     proxy,
                     friendService,
@@ -354,13 +357,13 @@ public class HycopyProxyPlugin {
                     friendService.expirePendingRequests();
                 }
             }).repeat(1, TimeUnit.SECONDS).schedule();
-            friendNameRefreshTask = proxy.getScheduler().buildTask(this, () -> {
-                FriendService service = friendService;
+            playerNameRefreshTask = proxy.getScheduler().buildTask(this, () -> {
+                PlayerNameService service = playerNameService;
                 if (service != null) {
                     try {
                         service.refreshNames();
                     } catch (Exception ex) {
-                        logger.warn("Failed to refresh friend names", ex);
+                        logger.warn("Failed to refresh player names", ex);
                     }
                 }
             }).delay(0, TimeUnit.SECONDS).repeat(1, TimeUnit.HOURS).schedule();
@@ -771,13 +774,14 @@ public class HycopyProxyPlugin {
             watchdogAnnouncementService = null;
         }
         registryService = null;
-        if (friendService != null) {
-            friendService.stopNameRefresh();
+        if (playerNameService != null) {
+            playerNameService.stop();
         }
-        if (friendNameRefreshTask != null) {
-            friendNameRefreshTask.cancel();
-            friendNameRefreshTask = null;
+        if (playerNameRefreshTask != null) {
+            playerNameRefreshTask.cancel();
+            playerNameRefreshTask = null;
         }
+        playerNameService = null;
         friendService = null;
         blockService = null;
         chatChannelService = null;

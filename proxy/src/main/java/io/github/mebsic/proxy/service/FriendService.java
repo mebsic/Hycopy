@@ -2,12 +2,10 @@ package io.github.mebsic.proxy.service;
 
 import io.github.mebsic.core.server.ServerType;
 import io.github.mebsic.core.manager.RedisManager;
-import io.github.mebsic.core.util.MojangApi;
 import io.github.mebsic.proxy.util.Components;
 import io.github.mebsic.proxy.util.FriendComponents;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
-import com.mongodb.client.MongoCursor;
 import com.mongodb.client.model.UpdateOptions;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
@@ -18,8 +16,6 @@ import java.util.ArrayList;
 import java.util.AbstractMap;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Locale;
@@ -27,9 +23,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 
-import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 
 public class FriendService {
@@ -42,16 +36,14 @@ public class FriendService {
     private final RankResolver rankResolver;
     private final ServerRegistryService registryService;
     private final RedisManager redis;
+    private final PlayerNameService playerNames;
     private final Map<UUID, Set<UUID>> friends = new ConcurrentHashMap<>();
     private final Map<UUID, Map<UUID, Long>> pending = new ConcurrentHashMap<>();
-    private final Map<UUID, String> lastKnownName = new ConcurrentHashMap<>();
     private final Map<UUID, FriendPresence> presenceByPlayer = new ConcurrentHashMap<>();
     private final Map<UUID, Map<UUID, Long>> friendSinceByPlayer = new ConcurrentHashMap<>();
     private final Map<UUID, Set<UUID>> bestFriendsByPlayer = new ConcurrentHashMap<>();
     private final Map<UUID, Map<UUID, String>> friendNicknamesByPlayer = new ConcurrentHashMap<>();
     private final Map<UUID, Boolean> friendJoinLeaveNotifications = new ConcurrentHashMap<>();
-    private final AtomicBoolean nameRefreshRunning = new AtomicBoolean(false);
-    private volatile boolean nameRefreshStopped;
 
     public FriendService(ProxyServer proxy, MongoDatabase database, String collectionName) {
         this(proxy, database, collectionName, null, null, null);
@@ -75,10 +67,22 @@ public class FriendService {
                          RankResolver rankResolver,
                          ServerRegistryService registryService,
                          RedisManager redis) {
+        this(proxy, database, collectionName, rankResolver, registryService, redis,
+                new PlayerNameService(proxy, database, collectionName));
+    }
+
+    public FriendService(ProxyServer proxy,
+                         MongoDatabase database,
+                         String collectionName,
+                         RankResolver rankResolver,
+                         ServerRegistryService registryService,
+                         RedisManager redis,
+                         PlayerNameService playerNames) {
         this.proxy = proxy;
         this.rankResolver = rankResolver;
         this.registryService = registryService;
         this.redis = redis;
+        this.playerNames = playerNames;
         if (database == null || collectionName == null || collectionName.trim().isEmpty()) {
             this.collection = null;
         } else {
@@ -211,7 +215,7 @@ public class FriendService {
         if (ownerId == null || targetId == null || ownerId.equals(targetId)) {
             return;
         }
-        setBestFriend(ownerId, targetId, false);
+        removeFriend(ownerId, targetId);
         removePending(ownerId, targetId);
         removePending(targetId, ownerId);
     }
@@ -278,129 +282,11 @@ public class FriendService {
     }
 
     public String getName(UUID uuid) {
-        if (uuid == null) {
-            return "Unknown";
-        }
-        Optional<Player> online = proxy == null ? Optional.empty() : proxy.getPlayer(uuid);
-        if (online.isPresent()) {
-            String name = online.get().getUsername();
-            rememberName(uuid, name);
-            return name;
-        }
-        String cached = lastKnownName.get(uuid);
-        if (cached != null && !cached.trim().isEmpty()) {
-            return cached;
-        }
-        if (collection == null) {
-            return "Unknown";
-        }
-        Document doc = collection.find(eq("uuid", uuid.toString()))
-                .projection(new Document("name", 1))
-                .first();
-        String loaded = doc == null ? null : doc.getString("name");
-        if (loaded == null || loaded.trim().isEmpty()) {
-            return "Unknown";
-        }
-        String current = lastKnownName.putIfAbsent(uuid, loaded);
-        return current == null ? loaded : current;
+        return playerNames.getName(uuid);
     }
 
     public void rememberName(UUID uuid, String name) {
-        if (uuid == null || name == null || name.trim().isEmpty()) {
-            return;
-        }
-        lastKnownName.put(uuid, name);
-    }
-
-    public void refreshNames() {
-        if (nameRefreshStopped || !nameRefreshRunning.compareAndSet(false, true)) {
-            return;
-        }
-        try {
-            Set<UUID> friendIds = new LinkedHashSet<>();
-            Map<UUID, String> storedNames = new HashMap<>();
-            if (collection != null) {
-                try (MongoCursor<Document> cursor = collection.find()
-                        .projection(new Document("uuid", 1).append("name", 1).append("friends", 1))
-                        .iterator()) {
-                    while (cursor.hasNext()) {
-                        if (nameRefreshStopped) {
-                            return;
-                        }
-                        Document doc = cursor.next();
-                        UUID playerId = parseNameRefreshUuid(doc.get("uuid"));
-                        String storedName = doc.getString("name");
-                        if (playerId != null) {
-                            storedNames.put(playerId, storedName);
-                            if (storedName != null && !storedName.trim().isEmpty()) {
-                                lastKnownName.putIfAbsent(playerId, storedName);
-                            }
-                        }
-                        Object rawFriends = doc.get("friends");
-                        if (rawFriends instanceof List<?>) {
-                            for (Object rawFriend : (List<?>) rawFriends) {
-                                UUID friendId = parseNameRefreshUuid(rawFriend);
-                                if (friendId != null) {
-                                    friendIds.add(friendId);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            for (Set<UUID> list : friends.values()) {
-                friendIds.addAll(list);
-            }
-            for (UUID friendId : friendIds) {
-                if (nameRefreshStopped || Thread.currentThread().isInterrupted()) {
-                    return;
-                }
-                Optional<Player> online = proxy == null ? Optional.empty() : proxy.getPlayer(friendId);
-                if (online.isPresent()) {
-                    rememberName(friendId, online.get().getUsername());
-                    continue;
-                }
-                String previousName = lastKnownName.get(friendId);
-                String refreshedName = MojangApi.lookupCurrentName(friendId);
-                if (nameRefreshStopped) {
-                    return;
-                }
-                online = proxy == null ? Optional.empty() : proxy.getPlayer(friendId);
-                if (online.isPresent()) {
-                    rememberName(friendId, online.get().getUsername());
-                } else if (refreshedName != null) {
-                    boolean updated = previousName == null
-                            ? lastKnownName.putIfAbsent(friendId, refreshedName) == null
-                            : lastKnownName.replace(friendId, previousName, refreshedName);
-                    if (updated && collection != null && !refreshedName.equals(storedNames.get(friendId))) {
-                        collection.updateOne(
-                                and(eq("uuid", friendId.toString()), eq("name", storedNames.get(friendId))),
-                                new Document("$set", new Document("name", refreshedName))
-                        );
-                    }
-                }
-                Thread.sleep(1_000L);
-            }
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-        } finally {
-            nameRefreshRunning.set(false);
-        }
-    }
-
-    public void stopNameRefresh() {
-        nameRefreshStopped = true;
-    }
-
-    private UUID parseNameRefreshUuid(Object raw) {
-        if (!(raw instanceof String)) {
-            return null;
-        }
-        try {
-            return UUID.fromString((String) raw);
-        } catch (IllegalArgumentException ex) {
-            return null;
-        }
+        playerNames.rememberName(uuid, name);
     }
 
     public String formatNameWithRank(UUID uuid) {
@@ -575,15 +461,7 @@ public class FriendService {
     }
 
     public UUID resolveByName(String name) {
-        if (name == null) {
-            return null;
-        }
-        for (Map.Entry<UUID, String> entry : lastKnownName.entrySet()) {
-            if (entry.getValue() != null && entry.getValue().equalsIgnoreCase(name)) {
-                return entry.getKey();
-            }
-        }
-        return null;
+        return playerNames.resolveByName(name);
     }
 
     public void expirePendingRequests() {
@@ -748,7 +626,7 @@ public class FriendService {
         }
         String storedName = doc.getString("name");
         if (storedName != null && !storedName.trim().isEmpty()) {
-            lastKnownName.putIfAbsent(uuid, storedName);
+            playerNames.rememberStoredName(uuid, storedName);
         }
         Object raw = doc.get("status");
         if (!(raw instanceof Document)) {

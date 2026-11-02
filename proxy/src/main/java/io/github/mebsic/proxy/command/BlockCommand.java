@@ -7,6 +7,7 @@ import io.github.mebsic.core.util.CommonMessages;
 import io.github.mebsic.core.util.MojangApi;
 import io.github.mebsic.proxy.service.BlockService;
 import io.github.mebsic.proxy.service.FriendService;
+import io.github.mebsic.proxy.service.PlayerNameService;
 import io.github.mebsic.proxy.util.BlockComponent;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -31,12 +32,14 @@ public class BlockCommand implements SimpleCommand {
     private final ProxyServer proxy;
     private final BlockService blocks;
     private final FriendService friends;
+    private final PlayerNameService playerNames;
     private final Set<UUID> removeAllConfirmations = ConcurrentHashMap.newKeySet();
 
-    public BlockCommand(ProxyServer proxy, BlockService blocks, FriendService friends) {
+    public BlockCommand(ProxyServer proxy, BlockService blocks, FriendService friends, PlayerNameService playerNames) {
         this.proxy = proxy;
         this.blocks = blocks;
         this.friends = friends;
+        this.playerNames = playerNames;
     }
 
     @Override
@@ -316,12 +319,10 @@ public class BlockCommand implements SimpleCommand {
         }
         UUID online = proxy.getPlayer(name).map(Player::getUniqueId).orElse(null);
         if (online != null) {
-            if (friends != null) {
-                proxy.getPlayer(online).ifPresent(player -> friends.rememberName(online, player.getUsername()));
-            }
+            proxy.getPlayer(online).ifPresent(player -> playerNames.rememberName(online, player.getUsername()));
             return online;
         }
-        UUID cached = friends == null ? null : friends.resolveByName(name);
+        UUID cached = playerNames.resolveByName(name);
         if (cached != null) {
             return cached;
         }
@@ -332,9 +333,7 @@ public class BlockCommand implements SimpleCommand {
             mojang = null;
         }
         if (mojang != null) {
-            if (friends != null) {
-                friends.rememberName(mojang, name);
-            }
+            playerNames.rememberName(mojang, name);
         }
         return mojang;
     }
@@ -346,14 +345,12 @@ public class BlockCommand implements SimpleCommand {
         Optional<Player> online = proxy.getPlayer(uuid);
         if (online.isPresent()) {
             String onlineName = online.get().getUsername();
-            if (friends != null) {
-                friends.rememberName(uuid, onlineName);
-            }
+            playerNames.rememberName(uuid, onlineName);
             return onlineName;
         }
         String remembered;
         try {
-            remembered = friends == null ? null : friends.getName(uuid);
+            remembered = playerNames.getName(uuid);
         } catch (Throwable ignored) {
             remembered = null;
         }
@@ -378,7 +375,7 @@ public class BlockCommand implements SimpleCommand {
             return Component.text(safeFallback, NamedTextColor.GRAY);
         }
         try {
-            return LEGACY.deserialize(colored);
+            return formatCurrentName(colored, uuid, safeFallback);
         } catch (Throwable ignored) {
             return Component.text(safeFallback, NamedTextColor.GRAY);
         }
@@ -399,10 +396,16 @@ public class BlockCommand implements SimpleCommand {
             return Component.text(safeFallback, NamedTextColor.GRAY);
         }
         try {
-            return LEGACY.deserialize(ranked);
+            return formatCurrentName(ranked, uuid, safeFallback);
         } catch (Throwable ignored) {
             return Component.text(safeFallback, NamedTextColor.GRAY);
         }
+    }
+
+    private Component formatCurrentName(String formatted, UUID uuid, String fallback) {
+        int lastColor = formatted.lastIndexOf('§');
+        String prefix = lastColor < 0 ? "" : formatted.substring(0, lastColor + 2);
+        return LEGACY.deserialize(prefix + resolveName(uuid, fallback));
     }
 
     private boolean isStaff(UUID uuid) {

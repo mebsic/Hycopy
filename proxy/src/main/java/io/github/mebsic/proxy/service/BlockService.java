@@ -153,8 +153,7 @@ public class BlockService {
                 collection.updateOne(
                         eq("uuid", ownerId.toString()),
                         new Document("$set", new Document("blockedPlayers", new ArrayList<String>()))
-                                .append("$setOnInsert", new Document("uuid", ownerId.toString())
-                                        .append("blockedPlayers", new ArrayList<String>())),
+                                .append("$setOnInsert", new Document("uuid", ownerId.toString())),
                         new UpdateOptions().upsert(true)
                 );
             } catch (Exception ignored) {
@@ -216,8 +215,7 @@ public class BlockService {
             collection.updateOne(
                     eq("uuid", owner.toString()),
                     new Document("$addToSet", new Document("blockedPlayers", blocked.toString()))
-                            .append("$setOnInsert", new Document("uuid", owner.toString())
-                                    .append("blockedPlayers", new ArrayList<String>())),
+                            .append("$setOnInsert", new Document("uuid", owner.toString())),
                     new UpdateOptions().upsert(true)
             );
         } catch (Exception ignored) {
