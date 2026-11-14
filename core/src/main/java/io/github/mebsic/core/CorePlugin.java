@@ -191,6 +191,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
         this.serverType = ServerTypeResolver.resolve(getConfig(), ServerType.MURDER_MYSTERY);
         getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
         getServer().getMessenger().registerOutgoingPluginChannel(this, PLAY_AGAIN_INTENT_CHANNEL);
+        getServer().getMessenger().registerOutgoingPluginChannel(this, NetworkConstants.FIND_TRANSFER_CHANNEL);
         getServer().getMessenger().registerIncomingPluginChannel(this, NetworkConstants.PROTOCOL_VERSION_CHANNEL, this);
         applyWorldDefaults();
         getServer().getServicesManager().register(CoreApi.class, this, this, ServicePriority.Normal);

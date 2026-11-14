@@ -15,7 +15,9 @@ repositories {
 dependencies {
     compileOnly("com.velocitypowered:velocity-api:4.1.0-SNAPSHOT")
     annotationProcessor("com.velocitypowered:velocity-api:4.1.0-SNAPSHOT")
-    implementation(project(":core"))
+    implementation(project(":core")) {
+        exclude(group = "net.wesjd", module = "anvilgui")
+    }
     implementation("org.mongodb:mongodb-driver-sync:4.11.1")
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("redis.clients:jedis:5.1.2")

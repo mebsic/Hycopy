@@ -6,9 +6,10 @@ import io.github.mebsic.core.CorePlugin;
 import io.github.mebsic.core.manager.MongoManager;
 import io.github.mebsic.core.model.Rank;
 import io.github.mebsic.core.server.ServerType;
-import io.github.mebsic.core.util.HubMessageUtil;
 import io.github.mebsic.core.util.HycopyExperienceUtil;
+import io.github.mebsic.core.util.NetworkConstants;
 import io.github.mebsic.core.util.RankFormatUtil;
+import io.github.mebsic.core.util.RankUtil;
 import org.bson.Document;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -39,11 +40,14 @@ import java.util.concurrent.ConcurrentHashMap;
 public class FindMenu extends Menu {
     private static final int SIZE = 54;
     private static final int PAGE_SIZE = 21;
+    private static final int MAX_TITLE_LENGTH = 32;
     private static final int PREVIOUS_SLOT = 45;
+    private static final int BACK_SLOT = 48;
     private static final int CLOSE_SLOT = 49;
+    private static final int SEARCH_SLOT = 50;
     private static final int NEXT_SLOT = 53;
+    private static final int NO_RESULTS_SLOT = 22;
     private static final long DEFAULT_REFRESH_TICKS = 20L;
-    private static final String CHANNEL = "BungeeCord";
     private static final Map<UUID, BukkitTask> LIVE_REFRESH_TASKS = new ConcurrentHashMap<UUID, BukkitTask>();
     private static final int[] PLAYER_SLOTS = new int[] {
             10, 11, 12, 13, 14, 15, 16,
@@ -55,42 +59,42 @@ public class FindMenu extends Menu {
 
     private final CorePlugin plugin;
     private final Map<Integer, FindPlayer> slots;
+    private final String search;
+    private final int returnPage;
     private List<FindPlayer> players;
     private int page;
     private int totalPages;
 
-    private FindMenu(CorePlugin plugin, List<FindPlayer> players, int page, int totalPages) {
-        super(formatTitle(page), SIZE);
+    private FindMenu(CorePlugin plugin, List<FindPlayer> players, int page, String search, int returnPage) {
+        super(formatTitle(page, search, players.size()), SIZE);
         this.plugin = plugin;
-        this.players = players == null ? Collections.emptyList() : players;
-        this.page = Math.max(1, page);
-        this.totalPages = Math.max(1, totalPages);
+        this.players = players;
+        this.search = search;
+        this.returnPage = returnPage;
+        this.page = page;
+        this.totalPages = totalPages(players);
         this.slots = new HashMap<Integer, FindPlayer>();
     }
 
     public static void openFor(CorePlugin plugin, Player viewer, int requestedPage) {
-        if (viewer == null) {
-            return;
-        }
-        List<FindPlayer> players = loadPlayers(plugin);
-        openWithPlayers(plugin, viewer, players, requestedPage);
+        openPage(plugin, viewer, requestedPage, null, 1);
     }
 
-    private static void openWithPlayers(CorePlugin plugin, Player viewer, List<FindPlayer> players, int requestedPage) {
-        int totalPages = totalPages(players);
-        int page = clampPage(requestedPage, totalPages);
-        openSnapshot(plugin, viewer, players, page, totalPages);
+    private static void openPage(CorePlugin plugin, Player viewer, int page, String search, int returnPage) {
+        if (viewer == null || !viewer.isOnline() || !RankUtil.hasAtLeast(plugin, viewer, Rank.STAFF)) {
+            return;
+        }
+        openSnapshot(plugin, viewer, loadPlayers(plugin, search), page, search, returnPage);
     }
 
     private static void openSnapshot(CorePlugin plugin,
                                      Player viewer,
                                      List<FindPlayer> players,
-                                     int page,
-                                     int totalPages) {
-        if (viewer == null) {
-            return;
-        }
-        FindMenu menu = new FindMenu(plugin, players, page, totalPages);
+                                     int requestedPage,
+                                     String search,
+                                     int returnPage) {
+        int page = clampPage(requestedPage, totalPages(players));
+        FindMenu menu = new FindMenu(plugin, players, page, search, returnPage);
         menu.open(viewer);
         startLiveRefresh(plugin, viewer, menu);
     }
@@ -165,14 +169,14 @@ public class FindMenu extends Menu {
         if (viewer == null || inventory == null) {
             return;
         }
-        List<FindPlayer> refreshedPlayers = loadPlayers(plugin);
+        List<FindPlayer> refreshedPlayers = loadPlayers(plugin, search);
         int refreshedTotalPages = totalPages(refreshedPlayers);
         int refreshedPage = clampPage(page, refreshedTotalPages);
-        if (!formatTitle(refreshedPage).equals(getTitle())) {
-            openSnapshot(plugin, viewer, refreshedPlayers, refreshedPage, refreshedTotalPages);
+        if (!formatTitle(refreshedPage, search, refreshedPlayers.size()).equals(getTitle())) {
+            openSnapshot(plugin, viewer, refreshedPlayers, refreshedPage, search, returnPage);
             return;
         }
-        this.players = refreshedPlayers == null ? Collections.<FindPlayer>emptyList() : refreshedPlayers;
+        this.players = refreshedPlayers;
         this.page = refreshedPage;
         this.totalPages = refreshedTotalPages;
         populate(viewer, inventory);
@@ -187,7 +191,16 @@ public class FindMenu extends Menu {
         return Math.max(1, Math.min(Math.max(1, requestedPage), Math.max(1, totalPages)));
     }
 
-    private static String formatTitle(int page) {
+    private static String formatTitle(int page, String search, int count) {
+        if (search != null) {
+            if (count == 0) {
+                return "0 results";
+            }
+            String prefix = count + (count == 1 ? " result" : " results") + " for \"";
+            int available = MAX_TITLE_LENGTH - prefix.length() - 1;
+            String displayedSearch = search.length() <= available ? search : search.substring(0, available - 1) + "…";
+            return prefix + displayedSearch + "\"";
+        }
         int safePage = Math.max(1, page);
         return safePage <= 1 ? "Players" : "Players (Page " + safePage + ")";
     }
@@ -199,6 +212,11 @@ public class FindMenu extends Menu {
         }
         inventory.clear();
         slots.clear();
+        if (search != null && players.isEmpty()) {
+            ItemStack notFound = item(Material.STAINED_GLASS_PANE, ChatColor.RED + "Player not found!");
+            notFound.setDurability((short) 14);
+            set(inventory, NO_RESULTS_SLOT, notFound);
+        }
         int start = (page - 1) * PAGE_SIZE;
         int end = Math.min(players.size(), start + PAGE_SIZE);
         for (int index = start; index < end; index++) {
@@ -208,7 +226,14 @@ public class FindMenu extends Menu {
             set(inventory, slot, playerHead(target, isCurrentServer(target.serverId)));
         }
         if (page > 1) {
-            set(inventory, PREVIOUS_SLOT, item(Material.ARROW, ChatColor.GREEN + "Go Back"));
+            set(inventory, PREVIOUS_SLOT, item(Material.ARROW, ChatColor.GREEN + "Previous Page"));
+        }
+        if (search != null) {
+            set(inventory, BACK_SLOT, item(Material.ARROW, ChatColor.GREEN + "Go Back"));
+        } else {
+            set(inventory, SEARCH_SLOT, item(Material.SIGN, ChatColor.GREEN + "Search",
+                    ChatColor.GRAY + "Use this feature to easily find a",
+                    ChatColor.GRAY + "specific player."));
         }
         set(inventory, CLOSE_SLOT, item(Material.BARRIER, ChatColor.RED + "Close"));
         if (page < totalPages) {
@@ -218,21 +243,34 @@ public class FindMenu extends Menu {
 
     @Override
     public void onClick(MenuClick click) {
-        if (click == null || click.getPlayer() == null) {
+        if (click == null || click.getPlayer() == null || !RankUtil.hasAtLeast(plugin, click.getPlayer(), Rank.STAFF)) {
             return;
         }
         Player viewer = click.getPlayer();
         int slot = click.getRawSlot();
         if (slot == CLOSE_SLOT) {
-            viewer.closeInventory();
+            onNextTick(viewer, viewer::closeInventory);
             return;
         }
         if (slot == PREVIOUS_SLOT && page > 1) {
-            openFor(plugin, viewer, page - 1);
+            int previousPage = page - 1;
+            onNextTick(viewer, () -> openPage(plugin, viewer, previousPage, search, returnPage));
             return;
         }
         if (slot == NEXT_SLOT && page < totalPages) {
-            openFor(plugin, viewer, page + 1);
+            int nextPage = page + 1;
+            onNextTick(viewer, () -> openPage(plugin, viewer, nextPage, search, returnPage));
+            return;
+        }
+        if (slot == BACK_SLOT && search != null) {
+            onNextTick(viewer, () -> openFor(plugin, viewer, returnPage));
+            return;
+        }
+        if (slot == SEARCH_SLOT && search == null) {
+            int sourcePage = page;
+            onNextTick(viewer, () -> AnvilInput.open(plugin, viewer, "Player name",
+                    text -> openPage(plugin, viewer, 1, safeString(text), sourcePage),
+                    () -> openFor(plugin, viewer, sourcePage)));
             return;
         }
         FindPlayer target = slots.get(slot);
@@ -243,9 +281,18 @@ public class FindMenu extends Menu {
             viewer.sendMessage(ChatColor.RED + "You are already connected to that server!");
             return;
         }
-        viewer.closeInventory();
-        viewer.sendMessage(ChatColor.GREEN + HubMessageUtil.transferToServerMessage(target.serverId));
-        sendConnect(viewer, target.serverId);
+        onNextTick(viewer, () -> {
+            viewer.closeInventory();
+            sendConnect(viewer, target.uuid);
+        });
+    }
+
+    private void onNextTick(Player viewer, Runnable action) {
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (viewer.isOnline() && isViewingMenu(viewer, this)) {
+                action.run();
+            }
+        });
     }
 
     private ItemStack playerHead(FindPlayer target, boolean currentServer) {
@@ -293,16 +340,11 @@ public class FindMenu extends Menu {
         return prefix + RankFormatUtil.baseColor(rank, target.mvpPlusPlusPrefixColor) + target.name;
     }
 
-    private void sendConnect(Player player, String targetServer) {
-        if (player == null || targetServer == null || targetServer.trim().isEmpty() || plugin == null) {
-            return;
-        }
-        try {
-            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-            DataOutputStream out = new DataOutputStream(bytes);
-            out.writeUTF("Connect");
-            out.writeUTF(targetServer.trim());
-            player.sendPluginMessage(plugin, CHANNEL, bytes.toByteArray());
+    private void sendConnect(Player player, UUID targetId) {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (DataOutputStream out = new DataOutputStream(bytes)) {
+            out.writeUTF(targetId.toString());
+            player.sendPluginMessage(plugin, NetworkConstants.FIND_TRANSFER_CHANNEL, bytes.toByteArray());
         } catch (Exception ex) {
             player.sendMessage(ChatColor.RED + "Failed to connect right now!");
             plugin.getLogger().warning("Failed to send find menu connect request!\n" + ex.getMessage());
@@ -315,11 +357,15 @@ public class FindMenu extends Menu {
         return !current.isEmpty() && current.equalsIgnoreCase(target);
     }
 
-    private static List<FindPlayer> loadPlayers(CorePlugin plugin) {
+    private static List<FindPlayer> loadPlayers(CorePlugin plugin, String search) {
         if (plugin == null || plugin.getMongoManager() == null) {
             return Collections.emptyList();
         }
         Map<UUID, FindPlayer> online = loadOnlinePlayers(plugin);
+        if (search != null) {
+            String query = search.toLowerCase(Locale.ROOT);
+            online.values().removeIf(player -> query.isEmpty() || !player.name.toLowerCase(Locale.ROOT).contains(query));
+        }
         if (online.isEmpty()) {
             return Collections.emptyList();
         }

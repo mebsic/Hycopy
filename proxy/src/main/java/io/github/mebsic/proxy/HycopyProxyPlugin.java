@@ -3,6 +3,7 @@ package io.github.mebsic.proxy;
 import com.google.inject.Inject;
 import com.mongodb.ConnectionString;
 import com.mongodb.MongoClientSettings;
+import io.github.mebsic.core.server.ServerRegistryStates;
 import io.github.mebsic.core.server.ServerType;
 import io.github.mebsic.core.util.CommonMessages;
 import io.github.mebsic.core.util.ChatEmoteUtil;
@@ -73,8 +74,10 @@ import com.velocitypowered.api.event.player.ServerPreConnectEvent;
 import com.velocitypowered.api.network.ProtocolVersion;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
+import com.velocitypowered.api.proxy.ConnectionRequestBuilder;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
+import com.velocitypowered.api.proxy.ServerConnection;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier;
 import com.velocitypowered.api.util.Favicon;
@@ -133,6 +136,8 @@ public class HycopyProxyPlugin {
             MinecraftChannelIdentifier.from("hycopy:playagain");
     private static final MinecraftChannelIdentifier PROTOCOL_VERSION_CHANNEL =
             MinecraftChannelIdentifier.from(NetworkConstants.PROTOCOL_VERSION_CHANNEL);
+    private static final MinecraftChannelIdentifier FIND_TRANSFER_CHANNEL =
+            MinecraftChannelIdentifier.from(NetworkConstants.FIND_TRANSFER_CHANNEL);
     private static final Pattern LEGACY_CODE = Pattern.compile("(?i)§[0-9A-FK-OR]");
     private final ProxyServer proxy;
     private final Logger logger;
@@ -171,6 +176,7 @@ public class HycopyProxyPlugin {
     private static volatile boolean connectUsingDomain = false;
     private final Map<UUID, DeferredQueueRequest> deferredPostGameQueueRequests = new ConcurrentHashMap<UUID, DeferredQueueRequest>();
     private final Map<UUID, Long> recentPlayAgainIntents = new ConcurrentHashMap<UUID, Long>();
+    private final Map<UUID, FindTransfer> findTransfers = new ConcurrentHashMap<>();
 
     @Inject
     public HycopyProxyPlugin(ProxyServer proxy, Logger logger, @DataDirectory Path dataDir) {
@@ -346,6 +352,7 @@ public class HycopyProxyPlugin {
             registerCommand(commands, "sc", staffChatCommand);
             proxy.getChannelRegistrar().register(PLAY_AGAIN_INTENT_CHANNEL);
             proxy.getChannelRegistrar().register(PROTOCOL_VERSION_CHANNEL);
+            proxy.getChannelRegistrar().register(FIND_TRANSFER_CHANNEL);
             int refresh = config == null ? 1 : Math.max(1, config.getRegistryRefreshSeconds());
             proxy.getScheduler().buildTask(this, () -> {
                 if (registryService != null) {
@@ -464,15 +471,98 @@ public class HycopyProxyPlugin {
         if (event == null) {
             return;
         }
+        if (FIND_TRANSFER_CHANNEL.equals(event.getIdentifier())) {
+            event.setResult(PluginMessageEvent.ForwardResult.handled());
+            if (event.getSource() instanceof ServerConnection) {
+                ServerConnection source = (ServerConnection) event.getSource();
+                Player player = source.getPlayer();
+                if (player.getCurrentServer().filter(connection -> connection == source).isPresent()) {
+                    startFindTransfer(player, readPluginMessagePlayerId(event.getData()));
+                }
+            }
+            return;
+        }
         if (!PLAY_AGAIN_INTENT_CHANNEL.equals(event.getIdentifier())) {
             return;
         }
         event.setResult(PluginMessageEvent.ForwardResult.handled());
         cleanupExpiredPlayAgainIntents(System.currentTimeMillis());
-        UUID playerId = readPlayAgainIntentPlayerId(event.getData());
+        UUID playerId = readPluginMessagePlayerId(event.getData());
         if (playerId != null) {
             recentPlayAgainIntents.put(playerId, System.currentTimeMillis());
         }
+    }
+
+    private void startFindTransfer(Player player, UUID targetId) {
+        UUID playerId = player.getUniqueId();
+        RankResolver ranks = rankResolver;
+        if (targetId == null) {
+            return;
+        }
+        if (ranks == null || !ranks.isStaff(playerId)) {
+            player.sendMessage(Component.text(CommonMessages.NO_PERMISSION_COMMAND, NamedTextColor.RED));
+            return;
+        }
+        ServerConnection targetConnection = proxy.getPlayer(targetId).flatMap(Player::getCurrentServer).orElse(null);
+        if (targetConnection == null) {
+            player.sendMessage(Component.text("That player is no longer online!", NamedTextColor.RED));
+            return;
+        }
+        RegisteredServer destination = targetConnection.getServer();
+        RegisteredServer request = proxy.createRawRegisteredServer(destination.getServerInfo());
+        FindTransfer transfer = new FindTransfer(request, destination, targetId);
+        if (findTransfers.putIfAbsent(playerId, transfer) != null) {
+            player.sendMessage(Component.text("Your transfer is already in progress!", NamedTextColor.RED));
+            return;
+        }
+        player.createConnectionRequest(request).connect().whenComplete((result, error) -> {
+            if (!findTransfers.remove(playerId, transfer)) {
+                return;
+            }
+            if (error != null) {
+                player.sendMessage(Component.text("Failed to connect right now!", NamedTextColor.RED));
+            } else if (result.getStatus() == ConnectionRequestBuilder.Status.ALREADY_CONNECTED) {
+                player.sendMessage(Component.text("You are already connected to that server!", NamedTextColor.RED));
+            } else if (!result.isSuccessful() && result.getStatus() != ConnectionRequestBuilder.Status.CONNECTION_CANCELLED) {
+                player.sendMessage(result.getReasonComponent()
+                        .orElse(Component.text("Failed to connect right now!", NamedTextColor.RED)));
+            }
+        });
+    }
+
+    private void checkFindTransfer(ServerPreConnectEvent event, FindTransfer transfer) {
+        Player player = event.getPlayer();
+        String serverName = transfer.destination.getServerInfo().getName();
+        ServerRegistryService registry = registryService;
+        ServerRegistryService.ServerDetails details = registry == null ? null : registry.findServerDetails(serverName).orElse(null);
+        String failure = null;
+        if (details == null || !allowsFindTransfer(details)
+                || proxy.getServer(serverName).orElse(null) != transfer.destination) {
+            failure = "That server is no longer accepting players!";
+        } else if (!hasCapacity(details, 1)
+                || (details.getMaxPlayers() > 0 && transfer.destination.getPlayersConnected().size() >= details.getMaxPlayers())) {
+            failure = "That server is full!";
+        } else if (proxy.getPlayer(transfer.targetId).flatMap(Player::getCurrentServer)
+                .filter(connection -> connection.getServer() == transfer.destination).isEmpty()) {
+            failure = "That player has left the server!";
+        }
+        if (failure != null) {
+            event.setResult(ServerPreConnectEvent.ServerResult.denied());
+            player.sendMessage(Component.text(failure, NamedTextColor.RED));
+            return;
+        }
+        transfer.approved = true;
+        event.setResult(ServerPreConnectEvent.ServerResult.allowed(transfer.destination));
+        player.sendMessage(Component.text(HubMessageUtil.transferToServerMessage(serverName), NamedTextColor.GREEN));
+    }
+
+    private boolean allowsFindTransfer(ServerRegistryService.ServerDetails details) {
+        String state = ServerRegistryStates.normalize(details.getState());
+        if (!details.getType().isGame()) {
+            return ServerRegistryStates.isConnectableState(state);
+        }
+        return ServerRegistryStates.IN_GAME.equals(state)
+                || (ServerRegistryStates.isJoinableGameState(state) && details.isJoinableGame());
     }
 
     @Subscribe
@@ -695,11 +785,23 @@ public class HycopyProxyPlugin {
             return;
         }
 
-        if (registryService == null || !event.getResult().isAllowed()) {
+        if (!event.getResult().isAllowed()) {
             return;
         }
 
         RegisteredServer targetServer = event.getResult().getServer().orElse(event.getOriginalServer());
+        FindTransfer transfer = findTransfers.get(event.getPlayer().getUniqueId());
+        if (transfer != null && transfer.request == event.getOriginalServer()) {
+            if (targetServer != transfer.request) {
+                event.setResult(ServerPreConnectEvent.ServerResult.denied());
+            } else {
+                checkFindTransfer(event, transfer);
+            }
+            return;
+        }
+        if (registryService == null) {
+            return;
+        }
         String targetName = targetServer.getServerInfo().getName();
         ServerType targetType = registryService.findServerType(targetName).orElse(ServerType.UNKNOWN);
         if (!targetType.isGame()) {
@@ -764,7 +866,9 @@ public class HycopyProxyPlugin {
         infrastructureFailure.set(true);
         proxy.getChannelRegistrar().unregister(PLAY_AGAIN_INTENT_CHANNEL);
         proxy.getChannelRegistrar().unregister(PROTOCOL_VERSION_CHANNEL);
+        proxy.getChannelRegistrar().unregister(FIND_TRANSFER_CHANNEL);
         recentPlayAgainIntents.clear();
+        findTransfers.clear();
         if (queueOrchestrator != null) {
             queueOrchestrator.stop();
             queueOrchestrator = null;
@@ -877,6 +981,7 @@ public class HycopyProxyPlugin {
     public void onDisconnect(DisconnectEvent event) {
         UUID playerId = event.getPlayer().getUniqueId();
         recentPlayAgainIntents.remove(playerId);
+        findTransfers.remove(playerId);
         deferredPostGameQueueRequests.remove(playerId);
         if (chatChannelService != null) {
             chatChannelService.clear(playerId);
@@ -1683,9 +1788,11 @@ public class HycopyProxyPlugin {
             return;
         }
         if (details != null && !details.isJoinableGame()) {
-            if (!retryAttempt) {
-                leader.sendMessage(Component.text(
-                        "Your party couldn't follow because that game is no longer accepting players.",
+            FindTransfer transfer = findTransfers.get(leaderId);
+            boolean findArrival = transfer != null && transfer.approved && transfer.destination == target;
+            if (!retryAttempt && !findArrival) {
+                sendPartyChatFramed(leader, Component.text(
+                        "Your party couldn't follow because that game is no longer accepting players!",
                         NamedTextColor.RED
                 ));
             }
@@ -1903,7 +2010,7 @@ public class HycopyProxyPlugin {
         return alias.toLowerCase(Locale.ROOT);
     }
 
-    private UUID readPlayAgainIntentPlayerId(byte[] data) {
+    private UUID readPluginMessagePlayerId(byte[] data) {
         if (data == null || data.length == 0) {
             return null;
         }
@@ -2131,6 +2238,19 @@ public class HycopyProxyPlugin {
 
     public static String domainToConnectHost() {
         return normalizeDomainToConnectHost(domainToConnect);
+    }
+
+    private static final class FindTransfer {
+        private final RegisteredServer request;
+        private final RegisteredServer destination;
+        private final UUID targetId;
+        private volatile boolean approved;
+
+        private FindTransfer(RegisteredServer request, RegisteredServer destination, UUID targetId) {
+            this.request = request;
+            this.destination = destination;
+            this.targetId = targetId;
+        }
     }
 
     private static final class DeferredQueueRequest {

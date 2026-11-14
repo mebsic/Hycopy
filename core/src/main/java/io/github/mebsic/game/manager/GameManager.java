@@ -444,15 +444,14 @@ public abstract class GameManager {
         if (bossBarService != null) {
             bossBarService.show(player);
         }
-        if (state == GameState.WAITING || state == GameState.STARTING) {
+        if (state == GameState.IN_GAME) {
+            gamePlayer.setAlive(false);
+            preparePregamePlayer(player);
+            applyDeadSpectatorState(player);
+        } else if (state == GameState.WAITING || state == GameState.STARTING) {
             preparePregamePlayer(player);
         } else {
             prepareLobbyPlayer(player);
-        }
-        if (state == GameState.IN_GAME) {
-            gamePlayer.setAlive(false);
-            applyDeadSpectatorState(player);
-            player.sendMessage(ChatColor.GRAY + "You joined as a spectator.");
         }
         updateScoreboardAll();
         attemptStartCountdown();

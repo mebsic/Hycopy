@@ -43,6 +43,10 @@ public class GameJoinListener implements Listener {
         if (!serverType.isGame()) {
             return;
         }
+        if (resolveGameState() == GameState.IN_GAME) {
+            event.setJoinMessage(null);
+            return;
+        }
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
         ChatColor nameColor = resolveNameColor(uuid, player.getName());
