@@ -45,7 +45,7 @@ public final class MurderMysteryMinimapService {
 
     private static final String DISPLAY_NAME = ChatColor.GREEN + "Minimap";
     private static final String LORE_LINE = ChatColor.GRAY + "Use this Map to navigate in the world.";
-    private static final int PLAYER_REVEAL_ALIVE_NON_MURDERERS = 2;
+    private static final int PLAYER_REVEAL_ALIVE_PLAYERS = 2;
     private static final long REFRESH_PERIOD_TICKS = 1L;
     private static final long MAP_FIRST_RESEND_DELAY_TICKS = 1L;
     private static final long MAP_JOIN_RESEND_DELAY_TICKS = 20L;
@@ -551,24 +551,20 @@ public final class MurderMysteryMinimapService {
         minimap.renderedSampledTerrainKey = null;
     }
 
-    private boolean shouldRevealAllPlayers() {
-        if (gameManager.getState() != GameState.IN_GAME) {
-            return false;
-        }
-        return gameManager.getRemainingGameSeconds() <= PLAYER_REVEAL_REMAINING_SECONDS;
-    }
-
     private boolean shouldRevealNonMurderersToMurderer(MurderMysteryGamePlayer viewerData) {
-        if (gameManager.getState() != GameState.IN_GAME || !isMurderer(viewerData)) {
+        if (!isMurderer(viewerData) || !viewerData.isAlive()) {
             return false;
         }
-        int aliveNonMurderers = 0;
+        if (gameManager.getRemainingGameSeconds() <= PLAYER_REVEAL_REMAINING_SECONDS) {
+            return true;
+        }
+        int alivePlayers = 0;
         for (MurderMysteryGamePlayer mmPlayer : gameManager.getMurderMysteryPlayersSnapshot()) {
-            if (isAliveNonMurderer(mmPlayer)) {
-                aliveNonMurderers++;
+            if (mmPlayer != null && mmPlayer.isAlive()) {
+                alivePlayers++;
             }
         }
-        return aliveNonMurderers > 0 && aliveNonMurderers <= PLAYER_REVEAL_ALIVE_NON_MURDERERS;
+        return alivePlayers <= PLAYER_REVEAL_ALIVE_PLAYERS;
     }
 
     private void render(MapView mapView, MapCanvas canvas, Player viewer) {
@@ -648,14 +644,12 @@ public final class MurderMysteryMinimapService {
             return;
         }
         MurderMysteryGamePlayer viewerData = gameManager.getMurderMysteryPlayer(viewer);
-        if (viewerData == null || !viewerData.isAlive()) {
+        if (!shouldRevealNonMurderersToMurderer(viewerData)) {
             return;
         }
-        boolean revealAllPlayers = shouldRevealAllPlayers();
-        boolean revealNonMurderersToMurderer = shouldRevealNonMurderersToMurderer(viewerData);
         Set<UUID> addedPlayers = new HashSet<>();
         for (MurderMysteryGamePlayer targetData : gameManager.getMurderMysteryPlayersSnapshot()) {
-            if (targetData == null || !targetData.isAlive()) {
+            if (!isAliveNonMurderer(targetData)) {
                 continue;
             }
             UUID targetUuid = targetData.getUuid();
@@ -663,35 +657,12 @@ public final class MurderMysteryMinimapService {
                 continue;
             }
             Player target = Bukkit.getPlayer(targetUuid);
-            if (!isVisiblePlayerForViewer(
-                    viewer,
-                    viewerData,
-                    target,
-                    targetData,
-                    revealAllPlayers,
-                    revealNonMurderersToMurderer
-            )) {
+            if (target == null || !target.isOnline()) {
                 continue;
             }
             addLocationCursor(markers, anchor, target.getLocation(), viewerDirection(target), MapCursor.Type.RED_POINTER);
             addedPlayers.add(targetUuid);
         }
-    }
-
-    private boolean isVisiblePlayerForViewer(Player viewer,
-                                             MurderMysteryGamePlayer viewerData,
-                                             Player target,
-                                             MurderMysteryGamePlayer targetData,
-                                             boolean revealAllPlayers,
-                                             boolean revealNonMurderersToMurderer) {
-        if (viewer == null || viewerData == null || target == null || targetData == null || !target.isOnline()
-                || !targetData.isAlive()) {
-            return false;
-        }
-        if (revealNonMurderersToMurderer && isMurderer(viewerData) && isAliveNonMurderer(targetData)) {
-            return true;
-        }
-        return revealAllPlayers;
     }
 
     private boolean isAliveNonMurderer(MurderMysteryGamePlayer mmPlayer) {

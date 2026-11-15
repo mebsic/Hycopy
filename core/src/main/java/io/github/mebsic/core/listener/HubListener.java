@@ -43,8 +43,6 @@ public class HubListener implements Listener {
     private static final double JOIN_FLIGHT_MIN_UPWARD_VELOCITY = 0.1D;
     private static final int HUB_SPAWN_HORIZONTAL_RADIUS_BLOCKS = 2;
     private static final int HUB_SPAWN_OFFSET_ATTEMPTS = 24;
-    private static final double HUB_HEIGHT_LIMIT_DOWNWARD_VELOCITY = -0.3D;
-    private static final double HUB_HEIGHT_LIMIT_FLYING_DOWNWARD_VELOCITY = -0.4D;
 
     private final HubContext plugin;
     private final CoreApi coreApi;
@@ -116,31 +114,10 @@ public class HubListener implements Listener {
             return;
         }
         Location to = event.getTo();
-        if (to == null) {
+        if (to == null || to.getY() >= 0.0D) {
             return;
         }
-        double maxHeight = to.getWorld().getMaxHeight();
-        if (to.getY() > maxHeight) {
-            Location from = event.getFrom();
-            if (from.getY() <= maxHeight) {
-                event.setCancelled(true);
-            } else {
-                Location corrected = from.clone();
-                corrected.setY(maxHeight);
-                event.setTo(corrected);
-            }
-            double downwardVelocity = player.isFlying()
-                    ? HUB_HEIGHT_LIMIT_FLYING_DOWNWARD_VELOCITY
-                    : HUB_HEIGHT_LIMIT_DOWNWARD_VELOCITY;
-            Vector velocity = player.getVelocity();
-            velocity.setY(Math.min(velocity.getY(), downwardVelocity));
-            player.setVelocity(velocity);
-            player.sendMessage(ChatColor.RED + "You are not allowed to leave this area!");
-            return;
-        }
-        if (to.getY() < 0.0D) {
-            teleportToHubSpawn(player, false);
-        }
+        teleportToHubSpawn(player, false);
     }
 
     private void applySpeed(Player player, Rank rank) {

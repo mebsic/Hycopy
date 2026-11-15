@@ -39,6 +39,7 @@ import io.github.mebsic.core.listener.ChatFormatListener;
 import io.github.mebsic.core.listener.CommandBlockListener;
 import io.github.mebsic.core.listener.GameJoinListener;
 import io.github.mebsic.core.listener.GameplayRulesListener;
+import io.github.mebsic.core.listener.HeightLimitListener;
 import io.github.mebsic.core.listener.HubItemListener;
 import io.github.mebsic.core.listener.InventoryLockListener;
 import io.github.mebsic.core.listener.MenuListener;
@@ -199,6 +200,9 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
         getServer().getServicesManager().register(CoreApi.class, this, this, ServicePriority.Normal);
         getServer().getPluginManager().registerEvents(this, this);
         getServer().getPluginManager().registerEvents(new GameplayRulesListener(this), this);
+        if (serverType.isHub() || serverType.isGame()) {
+            getServer().getPluginManager().registerEvents(new HeightLimitListener(), this);
+        }
         getServer().getPluginManager().registerEvents(new InventoryLockListener(this), this);
         getServer().getPluginManager().registerEvents(new PunishmentListener(punishments), this);
         getServer().getPluginManager().registerEvents(new ChatFormatListener(this, this), this);
