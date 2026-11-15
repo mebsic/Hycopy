@@ -5,7 +5,7 @@ plugins {
 
 repositories {
     maven("https://maven.citizensnpcs.co/repo")
-    maven("https://mvn.wesjd.net") {
+    maven("https://repo.codemc.io/repository/maven-snapshots/") {
         content { includeGroup("net.wesjd") }
     }
 }
@@ -14,7 +14,7 @@ dependencies {
     implementation("org.mongodb:mongodb-driver-sync:4.11.1")
     implementation("redis.clients:jedis:5.1.2")
     implementation("com.google.code.gson:gson:2.10.1")
-    implementation("net.wesjd:anvilgui:1.10.13-SNAPSHOT")
+    implementation("net.wesjd:anvilgui:1.10.9-SNAPSHOT")
     compileOnly("net.citizensnpcs:citizensapi:2.0.30-SNAPSHOT")
 }
 

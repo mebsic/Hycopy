@@ -6,6 +6,7 @@ import io.github.mebsic.core.CorePlugin;
 import io.github.mebsic.core.manager.MongoManager;
 import io.github.mebsic.core.model.Rank;
 import io.github.mebsic.core.server.ServerType;
+import io.github.mebsic.core.util.CustomHeadUtil;
 import io.github.mebsic.core.util.HycopyExperienceUtil;
 import io.github.mebsic.core.util.NetworkConstants;
 import io.github.mebsic.core.util.RankFormatUtil;
@@ -14,12 +15,10 @@ import org.bson.Document;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
-import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.io.ByteArrayOutputStream;
@@ -34,6 +33,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -210,34 +210,36 @@ public class FindMenu extends Menu {
         if (inventory == null) {
             return;
         }
-        inventory.clear();
         slots.clear();
-        if (search != null && players.isEmpty()) {
-            ItemStack notFound = item(Material.STAINED_GLASS_PANE, ChatColor.RED + "Player not found!");
-            notFound.setDurability((short) 14);
-            set(inventory, NO_RESULTS_SLOT, notFound);
-        }
         int start = (page - 1) * PAGE_SIZE;
-        int end = Math.min(players.size(), start + PAGE_SIZE);
-        for (int index = start; index < end; index++) {
-            int slot = PLAYER_SLOTS[index - start];
-            FindPlayer target = players.get(index);
-            slots.put(slot, target);
-            set(inventory, slot, playerHead(target, isCurrentServer(target.serverId)));
+        for (int index = 0; index < PLAYER_SLOTS.length; index++) {
+            int slot = PLAYER_SLOTS[index];
+            ItemStack icon = null;
+            if (start + index < players.size()) {
+                FindPlayer target = players.get(start + index);
+                slots.put(slot, target);
+                icon = playerHead(target, isCurrentServer(target.serverId));
+            } else if (slot == NO_RESULTS_SLOT && search != null && players.isEmpty()) {
+                icon = item(Material.STAINED_GLASS_PANE, ChatColor.RED + "Player not found!");
+                icon.setDurability((short) 14);
+            }
+            setIfChanged(inventory, slot, icon);
         }
-        if (page > 1) {
-            set(inventory, PREVIOUS_SLOT, item(Material.ARROW, ChatColor.GREEN + "Previous Page"));
-        }
+        setIfChanged(inventory, PREVIOUS_SLOT, page > 1 ? item(Material.ARROW, ChatColor.GREEN + "Previous Page") : null);
         if (search != null) {
-            set(inventory, BACK_SLOT, item(Material.ARROW, ChatColor.GREEN + "Go Back"));
+            setIfChanged(inventory, BACK_SLOT, item(Material.ARROW, ChatColor.GREEN + "Go Back"));
         } else {
-            set(inventory, SEARCH_SLOT, item(Material.SIGN, ChatColor.GREEN + "Search",
+            setIfChanged(inventory, SEARCH_SLOT, item(Material.SIGN, ChatColor.GREEN + "Search",
                     ChatColor.GRAY + "Use this feature to easily find a",
                     ChatColor.GRAY + "specific player."));
         }
-        set(inventory, CLOSE_SLOT, item(Material.BARRIER, ChatColor.RED + "Close"));
-        if (page < totalPages) {
-            set(inventory, NEXT_SLOT, item(Material.ARROW, ChatColor.GREEN + "Next Page"));
+        setIfChanged(inventory, CLOSE_SLOT, item(Material.BARRIER, ChatColor.RED + "Close"));
+        setIfChanged(inventory, NEXT_SLOT, page < totalPages ? item(Material.ARROW, ChatColor.GREEN + "Next Page") : null);
+    }
+
+    private void setIfChanged(Inventory inventory, int slot, ItemStack item) {
+        if (!Objects.equals(item, inventory.getItem(slot))) {
+            set(inventory, slot, item);
         }
     }
 
@@ -268,7 +270,7 @@ public class FindMenu extends Menu {
         }
         if (slot == SEARCH_SLOT && search == null) {
             int sourcePage = page;
-            onNextTick(viewer, () -> AnvilInput.open(plugin, viewer, "Player name",
+            onNextTick(viewer, () -> AnvilInput.open(plugin, viewer, "Enter a player name",
                     text -> openPage(plugin, viewer, 1, safeString(text), sourcePage),
                     () -> openFor(plugin, viewer, sourcePage)));
             return;
@@ -296,17 +298,10 @@ public class FindMenu extends Menu {
     }
 
     private ItemStack playerHead(FindPlayer target, boolean currentServer) {
-        Material head = resolveHeadMaterial();
-        ItemStack item;
-        if (head == null) {
-            item = new ItemStack(Material.PAPER);
-        } else if ("SKULL_ITEM".equals(head.name())) {
-            item = new ItemStack(head, 1, (short) 3);
-        } else {
-            item = new ItemStack(head, 1);
-        }
+        String texture = CustomHeadUtil.getPlayerTexture(plugin, target.uuid);
+        ItemStack item = CustomHeadUtil.createPlayerHead(texture);
         ItemMeta meta = item.getItemMeta();
-        if (meta == null || target == null) {
+        if (meta == null) {
             return item;
         }
         meta.setDisplayName(displayName(target));
@@ -316,9 +311,6 @@ public class FindMenu extends Menu {
         lore.add("");
         lore.add(currentServer ? ChatColor.RED + "Already connected!" : ChatColor.YELLOW + "Click to connect!");
         meta.setLore(lore);
-        if (meta instanceof SkullMeta) {
-            applySkullOwner((SkullMeta) meta, target.uuid, target.name);
-        }
         item.setItemMeta(meta);
         return item;
     }
@@ -524,33 +516,6 @@ public class FindMenu extends Menu {
         } catch (Exception ignored) {
             return value;
         }
-    }
-
-    private static void applySkullOwner(SkullMeta meta, UUID uuid, String ownerName) {
-        if (meta == null) {
-            return;
-        }
-        if (uuid != null) {
-            try {
-                java.lang.reflect.Method setOwningPlayer = meta.getClass()
-                        .getMethod("setOwningPlayer", OfflinePlayer.class);
-                setOwningPlayer.invoke(meta, Bukkit.getOfflinePlayer(uuid));
-                return;
-            } catch (Exception ignored) {
-            }
-        }
-        String safeOwner = safeString(ownerName);
-        if (!safeOwner.isEmpty()) {
-            meta.setOwner(safeOwner);
-        }
-    }
-
-    private static Material resolveHeadMaterial() {
-        Material modern = Material.matchMaterial("PLAYER_HEAD");
-        if (modern != null) {
-            return modern;
-        }
-        return Material.matchMaterial("SKULL_ITEM");
     }
 
     private static UUID parseUuid(String value) {

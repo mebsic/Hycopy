@@ -242,15 +242,12 @@ public class PunishmentService {
 
     public String formatKickMessage(Punishment punishment) {
         String reason = normalizeReason(punishment == null ? null : punishment.getReason());
-        if (reason == null || reason.trim().isEmpty()) {
-            reason = "No reason provided";
-        }
-        String header = ChatColor.RED + "You have been kicked from this server!\n";
-        String findOutMore = ChatColor.GRAY + "Find out more: " + ChatColor.AQUA + resolveSupportUrl(reason) + "\n";
-        return header
-                + "\n"
-                + ChatColor.GRAY + "Reason: " + ChatColor.WHITE + reason + "\n"
-                + findOutMore;
+        String header = ChatColor.RED + "You have been kicked from this server!\n\n";
+        String reasonLine = reason == null || reason.isEmpty()
+                ? ""
+                : ChatColor.GRAY + "Reason: " + ChatColor.WHITE + reason + "\n";
+        String findOutMore = ChatColor.GRAY + "Find out more: " + ChatColor.AQUA + resolveSupportUrl(reason);
+        return header + reasonLine + findOutMore;
     }
 
     public void dispatchPunishment(PunishmentType type,
@@ -401,10 +398,7 @@ public class PunishmentService {
         if (normalizedReason != null && !normalizedReason.isEmpty()) {
             return normalizedReason;
         }
-        if (type == PunishmentType.KICK) {
-            return "Kicked by staff";
-        }
-        return "No reason provided";
+        return type == PunishmentType.KICK ? null : "No reason provided";
     }
 
     private String generatePunishmentId(PunishmentType type) {

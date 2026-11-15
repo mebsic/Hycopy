@@ -10,6 +10,7 @@ import io.github.mebsic.core.command.EmotesCommand;
 import io.github.mebsic.core.command.FindCommand;
 import io.github.mebsic.core.command.FlyCommand;
 import io.github.mebsic.core.command.FireworkCommand;
+import io.github.mebsic.core.command.GetOffMyFaceCommand;
 import io.github.mebsic.core.command.GiveCommand;
 import io.github.mebsic.core.command.GamemodeCommand;
 import io.github.mebsic.core.command.GiftCommand;
@@ -89,6 +90,7 @@ import io.github.mebsic.game.listener.ReturnToLobbyListener;
 import io.github.mebsic.game.model.GameState;
 import io.github.mebsic.game.service.TablistService;
 import org.bukkit.ChatColor;
+import org.bukkit.command.PluginCommand;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -335,6 +337,12 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
             }
             this.hubItemListener = new HubItemListener(this, queueClient, registrySnapshot);
             getServer().getPluginManager().registerEvents(hubItemListener, this);
+        }
+        PluginCommand getOffMyFace = getCommand("getoffmyface");
+        if (getOffMyFace != null) {
+            GetOffMyFaceCommand command = new GetOffMyFaceCommand(serverType, hubItemListener);
+            getOffMyFace.setExecutor(command);
+            getOffMyFace.setTabCompleter(command);
         }
         if (serverType != null && serverType.isBuild()) {
             this.buildTablistService = new TablistService(this, serverType);

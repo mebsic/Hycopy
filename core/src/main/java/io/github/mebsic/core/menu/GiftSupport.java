@@ -6,27 +6,24 @@ import io.github.mebsic.core.manager.MongoManager;
 import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.core.model.Rank;
 import io.github.mebsic.core.util.CommonMessages;
+import io.github.mebsic.core.util.CustomHeadUtil;
 import io.github.mebsic.core.util.NetworkConstants;
 import io.github.mebsic.core.util.RankFormatUtil;
 import org.bson.Document;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
-import org.bukkit.OfflinePlayer;
 import org.bukkit.Sound;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.inventory.meta.SkullMeta;
 
-import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
 public final class GiftSupport {
-    static final String PRESENT_HEAD_OWNER = "MHF_Present";
     public static final String PROFILE_LOADING_SELF_MESSAGE = ChatColor.RED + CommonMessages.PROFILE_LOADING;
     public static final String PROFILE_LOADING_TARGET_MESSAGE = ChatColor.RED + "That player's profile is still loading! Try again in a moment.";
     public static final String GIFT_LOADING_MESSAGE = ChatColor.RED + "That gift is still loading! Try again in a moment.";
@@ -146,34 +143,14 @@ public final class GiftSupport {
         return buildGiftRankText(rank, null);
     }
 
-    public static ItemStack createHeadItem(String ownerName, String displayName, List<String> lore) {
-        Material material = resolveHeadMaterial();
-        ItemStack item;
-        if (material == null) {
-            item = new ItemStack(Material.PAPER);
-        } else if ("SKULL_ITEM".equals(material.name())) {
-            item = new ItemStack(material, 1, (short) 3);
-        } else {
-            item = new ItemStack(material, 1);
-        }
+    static ItemStack createHeadItem(String texture, String displayName, List<String> lore) {
+        ItemStack item = CustomHeadUtil.createPlayerHead(texture);
         ItemMeta meta = item.getItemMeta();
-        if (!(meta instanceof SkullMeta)) {
-            if (meta != null) {
-                meta.setDisplayName(displayName);
-                if (lore != null) {
-                    meta.setLore(lore);
-                }
-                item.setItemMeta(meta);
-            }
-            return item;
+        if (meta != null) {
+            meta.setDisplayName(displayName);
+            meta.setLore(lore);
+            item.setItemMeta(meta);
         }
-        SkullMeta skull = (SkullMeta) meta;
-        applySkullOwner(skull, ownerName);
-        skull.setDisplayName(displayName);
-        if (lore != null) {
-            skull.setLore(lore);
-        }
-        item.setItemMeta(skull);
         return item;
     }
 
@@ -321,33 +298,6 @@ public final class GiftSupport {
             return;
         }
         player.playSound(player.getLocation(), sound, 1.0f, 1.0f);
-    }
-
-    private static Material resolveHeadMaterial() {
-        Material modern = Material.matchMaterial("PLAYER_HEAD");
-        if (modern != null) {
-            return modern;
-        }
-        Material legacy = Material.matchMaterial("SKULL_ITEM");
-        if (legacy != null) {
-            return legacy;
-        }
-        return null;
-    }
-
-    private static void applySkullOwner(SkullMeta meta, String ownerName) {
-        if (meta == null || ownerName == null || ownerName.trim().isEmpty()) {
-            return;
-        }
-        String safeOwner = ownerName.trim();
-        try {
-            Method setOwningPlayer = meta.getClass().getMethod("setOwningPlayer", OfflinePlayer.class);
-            setOwningPlayer.invoke(meta, Bukkit.getOfflinePlayer(safeOwner));
-            return;
-        } catch (Exception ignored) {
-            // Legacy API fallback below.
-        }
-        meta.setOwner(safeOwner);
     }
 
     private static Sound resolveGiftAnnouncementSound() {

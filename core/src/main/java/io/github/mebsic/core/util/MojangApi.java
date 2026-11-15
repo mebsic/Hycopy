@@ -1,5 +1,6 @@
 package io.github.mebsic.core.util;
 
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -50,7 +51,37 @@ public final class MojangApi {
         return uuid == null ? null : fetchName(uuid);
     }
 
+    static String lookupSkinTexture(UUID uuid) {
+        JsonObject profile = fetchProfile(uuid);
+        if (profile == null || !profile.has("properties") || !profile.get("properties").isJsonArray()) {
+            return null;
+        }
+        for (JsonElement value : profile.getAsJsonArray("properties")) {
+            if (!value.isJsonObject()) {
+                continue;
+            }
+            JsonObject property = value.getAsJsonObject();
+            JsonElement name = property.get("name");
+            JsonElement texture = property.get("value");
+            if (name != null && name.isJsonPrimitive() && "textures".equals(name.getAsString())
+                    && texture != null && texture.isJsonPrimitive() && texture.getAsJsonPrimitive().isString()) {
+                return texture.getAsString();
+            }
+        }
+        return null;
+    }
+
     private static String fetchName(UUID uuid) {
+        JsonObject profile = fetchProfile(uuid);
+        JsonElement value = profile == null ? null : profile.get("name");
+        if (value == null || !value.isJsonPrimitive()) {
+            return null;
+        }
+        String name = value.getAsString().trim();
+        return name.matches("[A-Za-z0-9_]{1,16}") ? name : null;
+    }
+
+    private static JsonObject fetchProfile(UUID uuid) {
         HttpURLConnection connection = null;
         try {
             connection = (HttpURLConnection) new URL(SESSION_ENDPOINT + uuid.toString().replace("-", "")).openConnection();
@@ -62,11 +93,7 @@ public final class MojangApi {
             }
             try (InputStream input = connection.getInputStream()) {
                 JsonObject obj = new JsonParser().parse(new InputStreamReader(input, StandardCharsets.UTF_8)).getAsJsonObject();
-                if (!obj.has("id") || !uuid.equals(formatUuid(obj.get("id").getAsString())) || !obj.has("name")) {
-                    return null;
-                }
-                String name = obj.get("name").getAsString().trim();
-                return name.matches("[A-Za-z0-9_]{1,16}") ? name : null;
+                return obj.has("id") && uuid.equals(formatUuid(obj.get("id").getAsString())) ? obj : null;
             }
         } catch (Exception ignored) {
             return null;

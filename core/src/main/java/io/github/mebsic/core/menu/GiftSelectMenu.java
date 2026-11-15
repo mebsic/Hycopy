@@ -4,6 +4,7 @@ import io.github.mebsic.core.CorePlugin;
 import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.core.model.Rank;
 import io.github.mebsic.core.server.ServerType;
+import io.github.mebsic.core.util.CustomHeadUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -53,7 +54,7 @@ public class GiftSelectMenu extends Menu {
         int walletGold = resolveWalletGold(player);
         Profile targetProfile = plugin == null || targetUuid == null ? null : plugin.getProfile(targetUuid);
         Rank targetRank = targetProfile == null ? Rank.DEFAULT : GiftSupport.safeRank(targetProfile.getRank());
-        set(inventory, TARGET_SLOT, buildTargetItem());
+        set(inventory, TARGET_SLOT, buildTargetItem(targetProfile));
         set(inventory, VIP_SLOT, buildRankItem(Rank.VIP, false, vipCost(), walletGold, targetRank));
         set(inventory, VIP_PLUS_SLOT, buildRankItem(Rank.VIP_PLUS, true, vipPlusCost(), walletGold, targetRank));
         set(inventory, MVP_SLOT, buildRankItem(Rank.MVP, false, mvpCost(), walletGold, targetRank));
@@ -162,16 +163,16 @@ public class GiftSelectMenu extends Menu {
         new GiftConfirmMenu(plugin, target, giftedRank, safeCost).open(sender);
     }
 
-    private ItemStack buildTargetItem() {
+    private ItemStack buildTargetItem(Profile targetProfile) {
         String safeTargetName = GiftSupport.safeString(targetName);
         if (safeTargetName.isEmpty()) {
             safeTargetName = "Player";
         }
-        Profile targetProfile = plugin == null || targetUuid == null ? null : plugin.getProfile(targetUuid);
         String display = GiftSupport.buildTargetDisplayName(targetProfile, safeTargetName);
         List<String> lore = new ArrayList<String>();
         lore.add(ChatColor.GRAY + "You are sending a gift to this player!");
-        return GiftSupport.createHeadItem(safeTargetName, display, lore);
+        Player target = targetUuid == null ? null : Bukkit.getPlayer(targetUuid);
+        return GiftSupport.createHeadItem(CustomHeadUtil.getPlayerTexture(target), display, lore);
     }
 
     private ItemStack buildRankItem(Rank rank, boolean enchanted, int costGold, int walletGold, Rank targetRank) {

@@ -16,6 +16,11 @@ public class GiftMenu extends Menu {
     private static final int SIZE = 36;
     private static final int GIFT_SLOT = 13;
     private static final int CLOSE_SLOT = 31;
+    private static final String PRESENT_TEXTURE =
+            "ewogICJ0aW1lc3RhbXAiIDogMTc5NDc2Njk3MTI4NywKICAicHJvZmlsZUlkIiA6ICI4MjlmZjZjN2FmMzE0NWZhYTc5NTcwZGJl"
+            + "OWVmZTlhYiIsCiAgInByb2ZpbGVOYW1lIiA6ICJNSEZfUHJlc2VudCIsCiAgInRleHR1cmVzIiA6IHsKICAgICJTS0lOIiA6IHsK"
+            + "ICAgICAgInVybCIgOiAiaHR0cDovL3RleHR1cmVzLm1pbmVjcmFmdC5uZXQvdGV4dHVyZS8yNGVhM2YwNWNmYTQyZGRmMjU5ZTE0"
+            + "YTQzYzBjNDdmZjNlMjM2MmZhMzI0NTZkOGE1MDFjOWQ1NTdhNmY5YzIwIgogICAgfQogIH0KfQ==";
 
     private final CorePlugin plugin;
     private final UUID targetUuid;
@@ -75,11 +80,7 @@ public class GiftMenu extends Menu {
         lore.add(ChatColor.GRAY + "Gift a rank to " + targetDisplayName + ChatColor.GRAY + ".");
         lore.add("");
         lore.add(ChatColor.YELLOW + "Click to gift!");
-        return GiftSupport.createHeadItem(
-                GiftSupport.PRESENT_HEAD_OWNER,
-                ChatColor.GREEN + "Gift a Rank",
-                lore
-        );
+        return GiftSupport.createHeadItem(PRESENT_TEXTURE, ChatColor.GREEN + "Gift a Rank", lore);
     }
 
     private String resolveTargetDisplayName() {

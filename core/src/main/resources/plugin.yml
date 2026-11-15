@@ -78,3 +78,5 @@ commands:
   emotes:
     usage: /emotes
     aliases: [emojis]
+  getoffmyface:
+    usage: /getoffmyface

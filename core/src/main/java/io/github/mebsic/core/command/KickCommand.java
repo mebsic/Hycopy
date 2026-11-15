@@ -50,7 +50,7 @@ public class KickCommand implements CommandExecutor {
             sender.sendMessage(ChatColor.RED + "You cannot kick yourself!");
             return true;
         }
-        String reason = args.length > 1 ? join(args, 1) : "Kicked by Staff!";
+        String reason = args.length > 1 ? join(args, 1) : null;
         UUID actorUuid = sender instanceof Player ? ((Player) sender).getUniqueId() : null;
         String actorName = sender.getName();
         io.github.mebsic.core.model.Punishment punishment = punishments.punish(
