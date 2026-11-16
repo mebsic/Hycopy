@@ -66,6 +66,8 @@ commands:
     usage: /displayendcredits <player/all>
   parkour:
     usage: /parkour [start/reset/checkpoint/cancel]
+  spawn:
+    usage: /spawn
   news:
     usage: /news
   help:

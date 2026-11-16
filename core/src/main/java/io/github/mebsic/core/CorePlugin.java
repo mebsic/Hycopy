@@ -28,6 +28,7 @@ import io.github.mebsic.core.command.PunishmentHistoryCommand;
 import io.github.mebsic.core.command.RankCommand;
 import io.github.mebsic.core.command.RankColorCommand;
 import io.github.mebsic.core.command.Reset100RanksGiftedCommand;
+import io.github.mebsic.core.command.SpawnCommand;
 import io.github.mebsic.core.command.StatusCommand;
 import io.github.mebsic.core.command.TeleportCommand;
 import io.github.mebsic.core.command.Unlock100RanksGiftedCommand;
@@ -315,6 +316,9 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
         }
         if (getCommand("parkour") != null) {
             getCommand("parkour").setExecutor(new ParkourCommand(this));
+        }
+        if (getCommand("spawn") != null) {
+            getCommand("spawn").setExecutor(new SpawnCommand(this));
         }
         if (getCommand("news") != null) {
             getCommand("news").setExecutor(new NewsCommand(this, newsEditService));

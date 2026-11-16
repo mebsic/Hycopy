@@ -551,22 +551,6 @@ public final class MurderMysteryMinimapService {
         minimap.renderedSampledTerrainKey = null;
     }
 
-    private boolean shouldRevealNonMurderersToMurderer(MurderMysteryGamePlayer viewerData) {
-        if (!isMurderer(viewerData) || !viewerData.isAlive()) {
-            return false;
-        }
-        if (gameManager.getRemainingGameSeconds() <= PLAYER_REVEAL_REMAINING_SECONDS) {
-            return true;
-        }
-        int alivePlayers = 0;
-        for (MurderMysteryGamePlayer mmPlayer : gameManager.getMurderMysteryPlayersSnapshot()) {
-            if (mmPlayer != null && mmPlayer.isAlive()) {
-                alivePlayers++;
-            }
-        }
-        return alivePlayers <= PLAYER_REVEAL_ALIVE_PLAYERS;
-    }
-
     private void render(MapView mapView, MapCanvas canvas, Player viewer) {
         if (mapView == null || canvas == null || viewer == null || !viewer.isOnline()) {
             return;
@@ -644,12 +628,18 @@ public final class MurderMysteryMinimapService {
             return;
         }
         MurderMysteryGamePlayer viewerData = gameManager.getMurderMysteryPlayer(viewer);
-        if (!shouldRevealNonMurderersToMurderer(viewerData)) {
+        if (viewerData == null || !viewerData.isAlive()) {
             return;
         }
+        List<MurderMysteryGamePlayer> players = gameManager.getMurderMysteryPlayersSnapshot();
+        if (gameManager.getRemainingGameSeconds() > PLAYER_REVEAL_REMAINING_SECONDS
+                && players.stream().filter(MurderMysteryGamePlayer::isAlive).count() > PLAYER_REVEAL_ALIVE_PLAYERS) {
+            return;
+        }
+        boolean viewerIsMurderer = isMurderer(viewerData);
         Set<UUID> addedPlayers = new HashSet<>();
-        for (MurderMysteryGamePlayer targetData : gameManager.getMurderMysteryPlayersSnapshot()) {
-            if (!isAliveNonMurderer(targetData)) {
+        for (MurderMysteryGamePlayer targetData : players) {
+            if (targetData == null || !targetData.isAlive() || isMurderer(targetData) == viewerIsMurderer) {
                 continue;
             }
             UUID targetUuid = targetData.getUuid();
@@ -663,10 +653,6 @@ public final class MurderMysteryMinimapService {
             addLocationCursor(markers, anchor, target.getLocation(), viewerDirection(target), MapCursor.Type.RED_POINTER);
             addedPlayers.add(targetUuid);
         }
-    }
-
-    private boolean isAliveNonMurderer(MurderMysteryGamePlayer mmPlayer) {
-        return mmPlayer != null && mmPlayer.isAlive() && !isMurderer(mmPlayer);
     }
 
     private boolean isMurderer(MurderMysteryGamePlayer mmPlayer) {

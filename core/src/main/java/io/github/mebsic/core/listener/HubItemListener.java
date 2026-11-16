@@ -75,7 +75,7 @@ public class HubItemListener implements Listener {
     private static final String COWBOY_GADGET_ID = "cowboy";
     private static final String COWBOY_SEAT_NAME = "hycopy:cowboy_seat";
     private static final double COWBOY_RANGE = 3.0D;
-    private static final double COWBOY_SEAT_HEIGHT = 0.98D;
+    private static final double COWBOY_SEAT_HEIGHT = 0.94D;
     private static final int COWBOY_MAX_PLAYERS = 10;
     private static final String GRAPPLING_HOOK_GADGET_ID = "grappling_hook";
     private static final String VISIBILITY_ENABLED_MESSAGE = ChatColor.GREEN + "Player visibility enabled!";
