@@ -7,6 +7,7 @@ import io.github.mebsic.core.service.CoreApi;
 import io.github.mebsic.core.util.RankFormatUtil;
 import io.github.mebsic.core.service.HubContext;
 import io.github.mebsic.core.util.ActionBarUtil;
+import io.github.mebsic.core.util.HubFlightUtil;
 import io.github.mebsic.game.service.TitleService;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -25,7 +26,6 @@ import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitTask;
-import org.bukkit.util.Vector;
 
 import java.util.Map;
 import java.util.Objects;
@@ -40,7 +40,6 @@ public class HubListener implements Listener {
     private static final int JOIN_MESSAGE_MAX_RETRIES = 40;
     private static final long JOIN_PROFILE_REFRESH_DELAY_TICKS = 1L;
     private static final long JOIN_FLIGHT_REAPPLY_DELAY_TICKS = 50L;
-    private static final double JOIN_FLIGHT_MIN_UPWARD_VELOCITY = 0.1D;
     private static final int HUB_SPAWN_HORIZONTAL_RADIUS_BLOCKS = 2;
     private static final int HUB_SPAWN_OFFSET_ATTEMPTS = 24;
 
@@ -84,8 +83,8 @@ public class HubListener implements Listener {
         String mvpPlusPlusPrefixColor = profile == null ? null : profile.getMvpPlusPlusPrefixColor();
         teleportToHubSpawn(player, true);
         plugin.handleHubJoin(player);
-        boolean flightEnabled = applyJoinFlight(player, rank);
-        boolean immediateVelocityApplied = !flightEnabled || applyJoinVelocityIfFlightEnabled(player);
+        boolean flightEnabled = HubFlightUtil.applyFlight(player, rank);
+        boolean immediateVelocityApplied = !flightEnabled || HubFlightUtil.applyVelocityIfFlightEnabled(player);
         if (flightEnabled && !immediateVelocityApplied) {
             scheduleJoinFlightAndVelocityApply(uuid, JOIN_FLIGHT_REAPPLY_DELAY_TICKS);
         }
@@ -158,7 +157,7 @@ public class HubListener implements Listener {
             if (refreshed == null) {
                 refreshed = Rank.DEFAULT;
             }
-            applyJoinFlight(online, refreshed);
+            HubFlightUtil.applyFlight(online, refreshed);
             applySpeed(online, refreshed);
             sendStatusJoinReminderIfNeeded(online, refreshedProfile);
             if (!pendingJoinAnnouncements.remove(uuid)) {
@@ -180,39 +179,6 @@ public class HubListener implements Listener {
         }, JOIN_PROFILE_REFRESH_DELAY_TICKS);
     }
 
-    private boolean applyJoinFlight(Player player, Rank rank) {
-        if (player == null) {
-            return false;
-        }
-        Rank effectiveRank = rank == null ? Rank.DEFAULT : rank;
-        boolean enabled = effectiveRank.isAtLeast(Rank.VIP);
-        player.setAllowFlight(enabled);
-        if (!enabled) {
-            player.setFlying(false);
-            return false;
-        }
-        if (!player.isFlying()) {
-            player.setFlying(true);
-        }
-        return true;
-    }
-
-    private boolean applyJoinVelocityIfFlightEnabled(Player player) {
-        if (player == null) {
-            return false;
-        }
-        if (!player.getAllowFlight()) {
-            return true;
-        }
-        Vector velocity = player.getVelocity();
-        if (velocity == null) {
-            return false;
-        }
-        double y = Math.max(JOIN_FLIGHT_MIN_UPWARD_VELOCITY, velocity.getY());
-        player.setVelocity(new Vector(velocity.getX(), y, velocity.getZ()));
-        return true;
-    }
-
     private void scheduleJoinFlightAndVelocityApply(UUID uuid, long delayTicks) {
         if (uuid == null || !(plugin instanceof Plugin)) {
             return;
@@ -223,7 +189,7 @@ public class HubListener implements Listener {
             if (player == null || !player.isOnline()) {
                 return;
             }
-            applyJoinVelocityIfFlightEnabled(player);
+            HubFlightUtil.applyVelocityIfFlightEnabled(player);
         }, safeDelay);
     }
 

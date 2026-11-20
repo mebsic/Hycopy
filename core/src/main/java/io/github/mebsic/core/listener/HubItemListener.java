@@ -27,10 +27,12 @@ import org.bukkit.OfflinePlayer;
 import org.bukkit.World;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.Pig;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.player.PlayerFishEvent;
 import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
@@ -54,8 +56,6 @@ import org.bson.Document;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -75,7 +75,6 @@ public class HubItemListener implements Listener {
     private static final String COWBOY_GADGET_ID = "cowboy";
     private static final String COWBOY_SEAT_NAME = "hycopy:cowboy_seat";
     private static final double COWBOY_RANGE = 3.0D;
-    private static final double COWBOY_SEAT_HEIGHT = 0.94D;
     private static final int COWBOY_MAX_PLAYERS = 10;
     private static final String GRAPPLING_HOOK_GADGET_ID = "grappling_hook";
     private static final String VISIBILITY_ENABLED_MESSAGE = ChatColor.GREEN + "Player visibility enabled!";
@@ -139,7 +138,7 @@ public class HubItemListener implements Listener {
     private final Map<UUID, PotionEffect> speedsterReplacedSpeedEffects;
     private final Map<UUID, Location> speedsterCloudLocations;
     private final Set<UUID> parkourSuitSuspended;
-    private final Map<Player, ArmorStand> cowboySeatsByCarrier = new HashMap<>();
+    private final Map<Player, Pig> cowboySeatsByCarrier = new HashMap<>();
     private final Map<Entity, Player> cowboyCarriersBySeat = new HashMap<>();
     private final ServerType hubType;
     private final String group;
@@ -147,10 +146,6 @@ public class HubItemListener implements Listener {
     private final int staleSeconds;
     private BukkitTask suitEffectTask;
     private BukkitTask cowboySeatTask;
-    private Method getCowboySeatHandle;
-    private Method setCowboySeatPosition;
-    private Method positionCowboyRider;
-    private CowboyTracking cowboyTracking;
 
     public HubItemListener(CorePlugin plugin, QueueClient queueClient, ServerRegistrySnapshot registrySnapshot) {
         this.plugin = plugin;
@@ -321,8 +316,12 @@ public class HubItemListener implements Listener {
     @EventHandler(ignoreCancelled = true)
     public void onCowboyInteractEntity(PlayerInteractEntityEvent event) {
         Entity clicked = event.getRightClicked();
-        if (clicked instanceof Player ? isNpcPlayer((Player) clicked) : !cowboyCarriersBySeat.containsKey(clicked)) {
+        boolean cowboySeat = cowboyCarriersBySeat.containsKey(clicked);
+        if (clicked instanceof Player ? isNpcPlayer((Player) clicked) : !cowboySeat) {
             return;
+        }
+        if (cowboySeat) {
+            event.setCancelled(true);
         }
         Player player = event.getPlayer();
         if (isNpcPlayer(player)) {
@@ -339,6 +338,13 @@ public class HubItemListener implements Listener {
     @EventHandler(ignoreCancelled = true)
     public void onCowboyInteractAtEntity(PlayerInteractAtEntityEvent event) {
         onCowboyInteractEntity(event);
+    }
+
+    @EventHandler
+    public void onCowboySeatDamage(EntityDamageEvent event) {
+        if (cowboyCarriersBySeat.containsKey(event.getEntity())) {
+            event.setCancelled(true);
+        }
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -856,7 +862,7 @@ public class HubItemListener implements Listener {
     }
 
     private Entity cowboyPassenger(Entity carrier) {
-        ArmorStand seat = cowboySeatsByCarrier.get(carrier);
+        Pig seat = cowboySeatsByCarrier.get(carrier);
         return seat == null ? carrier.getPassenger() : seat.getPassenger();
     }
 
@@ -870,25 +876,26 @@ public class HubItemListener implements Listener {
         if (!carrier.getWorld().equals(rider.getWorld())) {
             return;
         }
-        Location location = carrier.getLocation().add(0, COWBOY_SEAT_HEIGHT, 0);
-        ArmorStand seat = carrier.getWorld().spawn(location, ArmorStand.class);
+        Pig seat = carrier.getWorld().spawn(carrier.getLocation(), Pig.class);
         if (!seat.isValid()) {
             return;
         }
-        seat.setVisible(false);
-        seat.setSmall(true);
-        seat.setGravity(false);
-        seat.setBasePlate(false);
+        seat.setAdult();
+        seat.setAgeLock(true);
+        seat.setRemoveWhenFarAway(false);
+        seat.setCanPickupItems(false);
+        seat.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, Integer.MAX_VALUE, 0, false, false));
         seat.setCustomName(COWBOY_SEAT_NAME);
         try {
-            if (positionCowboyRider == null) {
-                getCowboySeatHandle = seat.getClass().getMethod("getHandle");
-                Class<?> seatHandle = getCowboySeatHandle.invoke(seat).getClass();
-                setCowboySeatPosition = seatHandle.getMethod("setPosition", double.class, double.class, double.class);
-                positionCowboyRider = seatHandle.getMethod("al");
-                cowboyTracking = CowboyTracking.create(carrier.getWorld());
-            }
+            Object handle = seat.getClass().getMethod("getHandle").invoke(seat);
+            handle.getClass().getMethod("k", boolean.class).invoke(handle, true);
+            handle.getClass().getMethod("b", boolean.class).invoke(handle, true);
         } catch (ReflectiveOperationException ignored) {
+            discardCowboySeat(seat);
+            return;
+        }
+        carrier.setPassenger(seat);
+        if (!carrier.equals(seat.getVehicle())) {
             discardCowboySeat(seat);
             return;
         }
@@ -905,19 +912,23 @@ public class HubItemListener implements Listener {
     }
 
     public void ejectCowboyRiders(Player player) {
-        ArmorStand seat = cowboySeatsByCarrier.get(player);
+        List<Player> riders = new ArrayList<>();
+        Pig seat = cowboySeatsByCarrier.get(player);
         while (seat != null) {
             Entity rider = seat.getPassenger();
             removeTrackedCowboySeat(seat);
             if (rider instanceof Player) {
-                Location landing = rider.getLocation();
-                int maxHeight = landing.getWorld().getMaxHeight();
-                if (landing.getY() > maxHeight) {
-                    landing.setY(maxHeight);
-                    rider.teleport(landing);
-                }
+                riders.add((Player) rider);
             }
             seat = cowboySeatsByCarrier.get(rider);
+        }
+        for (Player rider : riders) {
+            Location landing = rider.getLocation();
+            int maxHeight = landing.getWorld().getMaxHeight();
+            if (landing.getY() > maxHeight) {
+                landing.setY(maxHeight);
+                rider.teleport(landing);
+            }
         }
     }
 
@@ -930,7 +941,7 @@ public class HubItemListener implements Listener {
     }
 
     private void removeOrphanedCowboySeat(Entity entity) {
-        if (entity instanceof ArmorStand && COWBOY_SEAT_NAME.equals(entity.getCustomName())
+        if ((entity instanceof Pig || entity instanceof ArmorStand) && COWBOY_SEAT_NAME.equals(entity.getCustomName())
                 && !cowboyCarriersBySeat.containsKey(entity)) {
             discardCowboySeat(entity);
         }
@@ -945,10 +956,11 @@ public class HubItemListener implements Listener {
     private void tickCowboySeats() {
         cowboySeatsByCarrier.entrySet().removeIf(entry -> {
             Player carrier = entry.getKey();
-            ArmorStand seat = entry.getValue();
+            Pig seat = entry.getValue();
             Entity rider = seat.getPassenger();
             if (seat.isValid() && carrier.isOnline() && !carrier.isDead()
                     && carrier.getWorld().equals(seat.getWorld())
+                    && carrier.equals(seat.getVehicle())
                     && rider instanceof Player && rider.isValid() && seat.equals(rider.getVehicle())
                     && rider.getWorld().equals(seat.getWorld())) {
                 return false;
@@ -961,34 +973,24 @@ public class HubItemListener implements Listener {
             clearCowboySeats();
             return;
         }
-        try {
-            List<Player> stacksAtHeightLimit = new ArrayList<>();
-            for (Player base : cowboySeatsByCarrier.keySet()) {
-                if (cowboyCarriersBySeat.containsKey(base.getVehicle())) {
-                    continue;
-                }
-                Location location = base.getLocation();
-                int maxHeight = location.getWorld().getMaxHeight();
-                ArmorStand seat = cowboySeatsByCarrier.get(base);
-                while (seat != null && location.getY() < maxHeight) {
-                    location.add(0, COWBOY_SEAT_HEIGHT, 0);
-                    Object handle = getCowboySeatHandle.invoke(seat);
-                    setCowboySeatPosition.invoke(handle, location.getX(), location.getY(), location.getZ());
-                    positionCowboyRider.invoke(handle);
-                    Entity rider = seat.getPassenger();
-                    location = rider.getLocation();
-                    seat = cowboySeatsByCarrier.get(rider);
-                }
-                if (location.getY() >= maxHeight) {
-                    stacksAtHeightLimit.add(base);
-                } else if (cowboyTracking != null) {
-                    cowboyTracking.alignSeats(base, cowboySeatsByCarrier);
-                }
+        List<Player> stacksAtHeightLimit = new ArrayList<>();
+        for (Player base : cowboySeatsByCarrier.keySet()) {
+            if (cowboyCarriersBySeat.containsKey(base.getVehicle())) {
+                continue;
             }
-            stacksAtHeightLimit.forEach(this::ejectCowboyRiders);
-        } catch (ReflectiveOperationException ignored) {
-            clearCowboySeats();
+            Location location = base.getLocation();
+            int maxHeight = location.getWorld().getMaxHeight();
+            Pig seat = cowboySeatsByCarrier.get(base);
+            while (seat != null && location.getY() < maxHeight) {
+                Entity rider = seat.getPassenger();
+                location = rider.getLocation();
+                seat = cowboySeatsByCarrier.get(rider);
+            }
+            if (location.getY() >= maxHeight) {
+                stacksAtHeightLimit.add(base);
+            }
         }
+        stacksAtHeightLimit.forEach(this::ejectCowboyRiders);
     }
 
     private void clearCowboySeats() {
@@ -1696,58 +1698,5 @@ public class HubItemListener implements Listener {
 
     private boolean isNpcPlayer(Player player) {
         return player != null && player.hasMetadata("NPC");
-    }
-
-    private static final class CowboyTracking {
-        private final Method getWorldHandle;
-        private final Method getTracker;
-        private final Field trackedEntities;
-        private final Method getEntry;
-        private final Field updateInterval;
-        private final Field trackingTick;
-
-        private CowboyTracking(World world) throws ReflectiveOperationException {
-            getWorldHandle = world.getClass().getMethod("getHandle");
-            getTracker = getWorldHandle.getReturnType().getMethod("getTracker");
-            Class<?> trackerType = getTracker.getReturnType();
-            trackedEntities = trackerType.getField("trackedEntities");
-            getEntry = trackedEntities.getType().getMethod("get", int.class);
-            Class<?> entryType = Class.forName(trackerType.getPackage().getName() + ".EntityTrackerEntry");
-            updateInterval = entryType.getField("c");
-            trackingTick = entryType.getField("m");
-        }
-
-        private static CowboyTracking create(World world) {
-            try {
-                return new CowboyTracking(world);
-            } catch (ReflectiveOperationException ignored) {
-                return null;
-            }
-        }
-
-        private void alignSeats(Player base, Map<Player, ArmorStand> seatsByCarrier) {
-            Entity movementSource = base;
-            while (movementSource.isInsideVehicle()) {
-                movementSource = movementSource.getVehicle();
-            }
-            try {
-                Object world = getWorldHandle.invoke(base.getWorld());
-                Object entries = trackedEntities.get(getTracker.invoke(world));
-                Object sourceEntry = getEntry.invoke(entries, movementSource.getEntityId());
-                if (sourceEntry == null) {
-                    return;
-                }
-                int interval = updateInterval.getInt(sourceEntry);
-                int tick = trackingTick.getInt(sourceEntry);
-                for (ArmorStand seat = seatsByCarrier.get(base); seat != null; seat = seatsByCarrier.get(seat.getPassenger())) {
-                    Object seatEntry = getEntry.invoke(entries, seat.getEntityId());
-                    if (seatEntry != null) {
-                        updateInterval.setInt(seatEntry, interval);
-                        trackingTick.setInt(seatEntry, tick);
-                    }
-                }
-            } catch (ReflectiveOperationException ignored) {
-            }
-        }
     }
 }

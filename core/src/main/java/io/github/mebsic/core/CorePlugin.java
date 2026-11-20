@@ -81,6 +81,7 @@ import io.github.mebsic.core.service.PubSubService;
 import io.github.mebsic.core.manager.RedisManager;
 import io.github.mebsic.core.util.GameRewardUtil;
 import io.github.mebsic.core.util.HycopyExperienceUtil;
+import io.github.mebsic.core.util.HubFlightUtil;
 import io.github.mebsic.core.util.NetworkLevelUpMessageUtil;
 import io.github.mebsic.core.util.ActionBarUtil;
 import io.github.mebsic.core.util.ProfileStatusUtil;
@@ -713,6 +714,30 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
     @EventHandler
     public void onGameModeChange(PlayerGameModeChangeEvent event) {
         enforceAdventureMode(event.getNewGameMode(), event.getPlayer());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onGameModeFlightChange(PlayerGameModeChangeEvent event) {
+        if (!isHubServer()) {
+            return;
+        }
+        GameMode mode = event.getNewGameMode();
+        if (mode != GameMode.SURVIVAL && mode != GameMode.ADVENTURE) {
+            return;
+        }
+        Player player = event.getPlayer();
+        Bukkit.getScheduler().runTask(this, () -> {
+            if (event.isCancelled() || !player.isOnline() || player.getGameMode() != mode) {
+                return;
+            }
+            Profile profile = getProfile(player.getUniqueId());
+            if (profile == null || profile.getRank() == null || !profile.getRank().isAtLeast(Rank.VIP)) {
+                return;
+            }
+            if (setFlightEnabled(player.getUniqueId(), true)) {
+                HubFlightUtil.applyActivationVelocityIfFlightEnabled(player);
+            }
+        });
     }
 
     @EventHandler
@@ -1792,24 +1817,8 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
         if (player == null || !isHubServer()) {
             return;
         }
-        boolean enabled = isHubFlightEnabled(profile);
-        player.setAllowFlight(enabled);
-        if (!enabled) {
-            player.setFlying(false);
-            return;
-        }
-        player.setFlying(true);
-    }
-
-    private boolean isHubFlightEnabled(Profile profile) {
-        if (profile == null) {
-            return false;
-        }
-        Rank rank = profile.getRank();
-        if (rank == null) {
-            rank = Rank.DEFAULT;
-        }
-        return profile.isFlightEnabled() && rank.isAtLeast(Rank.VIP);
+        Rank rank = profile == null ? Rank.DEFAULT : profile.getRank();
+        HubFlightUtil.applyFlight(player, rank, profile != null && profile.isFlightEnabled());
     }
 
     private void applyHubSpeedState(Player player, Rank rank) {

@@ -1,7 +1,9 @@
 package io.github.mebsic.core.command;
 
 import io.github.mebsic.core.CorePlugin;
+import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.core.util.CommonMessages;
+import io.github.mebsic.core.util.HubFlightUtil;
 import io.github.mebsic.game.util.LocationUtil;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
@@ -37,8 +39,14 @@ public final class SpawnCommand implements TabExecutor {
         }
 
         Location spawn = LocationUtil.deserialize(plugin.getConfig().getString("hub.spawn", ""));
-        if (spawn != null) {
-            ((Player) sender).teleport(spawn);
+        Player player = (Player) sender;
+        if (spawn == null || !player.teleport(spawn)) {
+            return true;
+        }
+        Profile profile = plugin.getProfile(player.getUniqueId());
+        if (profile != null && profile.isFlightEnabled()
+                && HubFlightUtil.applyFlight(player, profile.getRank())) {
+            HubFlightUtil.applyVelocityIfFlightEnabled(player);
         }
         return true;
     }
