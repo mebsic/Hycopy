@@ -4,7 +4,6 @@ import io.github.mebsic.core.util.CommonMessages;
 import io.github.mebsic.core.CorePlugin;
 import io.github.mebsic.core.model.Profile;
 import io.github.mebsic.core.model.Rank;
-import io.github.mebsic.core.util.HubFlightUtil;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -41,7 +40,6 @@ public class FlyCommand implements CommandExecutor {
         boolean enabled = !profile.isFlightEnabled();
         plugin.setFlightEnabled(player.getUniqueId(), enabled);
         if (enabled) {
-            HubFlightUtil.applyActivationVelocityIfFlightEnabled(player);
             player.sendMessage(ChatColor.GREEN + "Toggled on flight!");
         } else {
             player.sendMessage(ChatColor.GREEN + "Toggled off flight!");

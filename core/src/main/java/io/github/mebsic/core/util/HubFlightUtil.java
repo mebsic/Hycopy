@@ -5,8 +5,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.util.Vector;
 
 public final class HubFlightUtil {
-    private static final double MIN_UPWARD_VELOCITY = 0.2D;
-    private static final double FLIGHT_ACTIVATION_UPWARD_VELOCITY = 1.0D;
+    private static final double MIN_UPWARD_VELOCITY = 0.5D;
 
     private HubFlightUtil() {
     }
@@ -33,14 +32,6 @@ public final class HubFlightUtil {
     }
 
     public static boolean applyVelocityIfFlightEnabled(Player player) {
-        return applyVelocityIfFlightEnabled(player, MIN_UPWARD_VELOCITY);
-    }
-
-    public static boolean applyActivationVelocityIfFlightEnabled(Player player) {
-        return applyVelocityIfFlightEnabled(player, FLIGHT_ACTIVATION_UPWARD_VELOCITY);
-    }
-
-    private static boolean applyVelocityIfFlightEnabled(Player player, double minUpwardVelocity) {
         if (player == null) {
             return false;
         }
@@ -51,7 +42,7 @@ public final class HubFlightUtil {
         if (velocity == null) {
             return false;
         }
-        double y = Math.max(minUpwardVelocity, velocity.getY());
+        double y = Math.max(MIN_UPWARD_VELOCITY, velocity.getY());
         player.setVelocity(new Vector(velocity.getX(), y, velocity.getZ()));
         return true;
     }

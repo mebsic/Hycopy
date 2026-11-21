@@ -734,9 +734,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
             if (profile == null || profile.getRank() == null || !profile.getRank().isAtLeast(Rank.VIP)) {
                 return;
             }
-            if (setFlightEnabled(player.getUniqueId(), true)) {
-                HubFlightUtil.applyActivationVelocityIfFlightEnabled(player);
-            }
+            setFlightEnabled(player.getUniqueId(), true);
         });
     }
 
