@@ -83,7 +83,7 @@ public class HubListener implements Listener {
         String mvpPlusPlusPrefixColor = profile == null ? null : profile.getMvpPlusPlusPrefixColor();
         teleportToHubSpawn(player, true);
         plugin.handleHubJoin(player);
-        boolean flightEnabled = HubFlightUtil.applyFlight(player, rank);
+        boolean flightEnabled = HubFlightUtil.applyFlight(player, rank, profile != null && profile.isFlightEnabled());
         boolean immediateVelocityApplied = !flightEnabled || HubFlightUtil.applyVelocityIfFlightEnabled(player);
         if (flightEnabled && !immediateVelocityApplied) {
             scheduleJoinFlightAndVelocityApply(uuid, JOIN_FLIGHT_REAPPLY_DELAY_TICKS);
@@ -157,7 +157,7 @@ public class HubListener implements Listener {
             if (refreshed == null) {
                 refreshed = Rank.DEFAULT;
             }
-            HubFlightUtil.applyFlight(online, refreshed);
+            HubFlightUtil.applyFlight(online, refreshed, refreshedProfile != null && refreshedProfile.isFlightEnabled());
             applySpeed(online, refreshed);
             sendStatusJoinReminderIfNeeded(online, refreshedProfile);
             if (!pendingJoinAnnouncements.remove(uuid)) {
@@ -187,6 +187,10 @@ public class HubListener implements Listener {
         Bukkit.getScheduler().runTaskLater((Plugin) plugin, () -> {
             Player player = Bukkit.getPlayer(uuid);
             if (player == null || !player.isOnline()) {
+                return;
+            }
+            Profile profile = coreApi.getProfile(uuid);
+            if (profile == null || !profile.isFlightEnabled()) {
                 return;
             }
             HubFlightUtil.applyVelocityIfFlightEnabled(player);

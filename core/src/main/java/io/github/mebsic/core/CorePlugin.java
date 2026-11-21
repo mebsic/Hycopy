@@ -182,6 +182,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
     private final Map<UUID, Integer> queuedPostGameNetworkLevelUps = new ConcurrentHashMap<>();
     private final Map<UUID, Integer> protocolVersionByPlayer = new ConcurrentHashMap<>();
     private final Set<UUID> statusActionBarPlayers = ConcurrentHashMap.newKeySet();
+    private final Set<UUID> restoringGameModes = ConcurrentHashMap.newKeySet();
 
     @Override
     public void onEnable() {
@@ -656,14 +657,14 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
         forceHotbarSlotOne(player);
         profileService.handleJoin(player);
         ensureFriendDocumentAsync(player.getUniqueId(), player.getName());
-        enforceAdventureMode(player.getGameMode(), player);
+        restoreGameMode(player, () -> enforceAdventureMode(player.getGameMode(), player));
         UUID playerUuid = player.getUniqueId();
         Bukkit.getScheduler().runTaskLater(this, () -> {
             Player online = Bukkit.getPlayer(playerUuid);
             if (online == null || !online.isOnline()) {
                 return;
             }
-            enforceAdventureMode(online.getGameMode(), online);
+            restoreGameMode(online, () -> enforceAdventureMode(online.getGameMode(), online));
         }, 1L);
     }
 
@@ -718,7 +719,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onGameModeFlightChange(PlayerGameModeChangeEvent event) {
-        if (!isHubServer()) {
+        if (!isHubServer() || restoringGameModes.contains(event.getPlayer().getUniqueId())) {
             return;
         }
         GameMode mode = event.getNewGameMode();
@@ -736,6 +737,18 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
             }
             setFlightEnabled(player.getUniqueId(), true);
         });
+    }
+
+    private void restoreGameMode(Player player, Runnable restoreState) {
+        UUID uuid = player.getUniqueId();
+        boolean added = restoringGameModes.add(uuid);
+        try {
+            restoreState.run();
+        } finally {
+            if (added) {
+                restoringGameModes.remove(uuid);
+            }
+        }
     }
 
     @EventHandler
@@ -1295,7 +1308,7 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
             if (player == null) {
                 return;
             }
-            applyBuildModeState(player, profile, true);
+            restoreGameMode(player, () -> applyBuildModeState(player, profile, true));
             applyHubFlightState(player, profile);
             applyHubSpeedState(player, profile.getRank());
             applyStatusActionBar(player, profile);

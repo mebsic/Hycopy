@@ -327,6 +327,10 @@ public class TablistService {
         } else if (hidden.contains(targetId) && viewer.canSee(target)
                 && sendPlayerListEntry(viewer, target, "ADD_PLAYER")) {
             hidden.remove(targetId);
+            if (!viewer.getUniqueId().equals(targetId)) {
+                viewer.hidePlayer(target);
+                viewer.showPlayer(target);
+            }
         }
     }
 
