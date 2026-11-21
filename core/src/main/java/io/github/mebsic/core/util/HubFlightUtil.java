@@ -5,7 +5,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.util.Vector;
 
 public final class HubFlightUtil {
-    private static final double MIN_UPWARD_VELOCITY = 0.5D;
+    private static final double MIN_UPWARD_VELOCITY = 0.1D;
 
     private HubFlightUtil() {
     }
