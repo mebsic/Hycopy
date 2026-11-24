@@ -66,7 +66,6 @@ function setMenu(open) {
   document.body.classList.toggle('nav-open', open);
   menuButton.setAttribute('aria-expanded', String(open));
   menuButton.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
-  if (open) document.querySelector('.sidebar a[aria-current], .sidebar a').focus();
 }
 menuButton.addEventListener('click', () => setMenu(!document.body.classList.contains('nav-open')));
 document.querySelector('.nav-overlay').addEventListener('click', () => { setMenu(false); menuButton.focus(); });
