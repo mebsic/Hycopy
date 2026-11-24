@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createDocumentationServer } from '../server.mjs';
 import { loadDocumentation, renderMarkdown } from '../lib/content.mjs';
+import { discordUrl } from '../lib/views.mjs';
 
 let server;
 let base;
@@ -29,6 +30,21 @@ test('overview is served at the root without redirecting', async () => {
   const trailing = await fetch(base + '/configuration/?ref=github', { redirect: 'manual' });
   assert.equal(trailing.status, 308);
   assert.equal(trailing.headers.get('location'), '/configuration?ref=github');
+});
+
+test('Discord entry routes and HEAD redirect to the same destination as the navigation link', async () => {
+  for (const path of ['/discord', '/discord/', '/discord?next=https://example.invalid']) {
+    const response = await fetch(base + path, { redirect: 'manual' });
+    assert.equal(response.status, 302, path);
+    assert.equal(response.headers.get('location'), discordUrl, path);
+    await response.text();
+  }
+  const head = await fetch(base + '/discord', { method: 'HEAD', redirect: 'manual' });
+  assert.equal(head.status, 302);
+  assert.equal(head.headers.get('location'), discordUrl);
+  assert.equal(await head.text(), '');
+  const home = await (await fetch(base)).text();
+  assert.ok(home.includes(`href="${discordUrl}"`));
 });
 
 test('old documentation URLs redirect to direct routes and preserve query strings', async () => {
@@ -98,7 +114,7 @@ test('every guide renders directly, its links resolve, and only external links o
 });
 
 test('unknown routes and private files are not exposed; HEAD and unsupported methods behave correctly', async () => {
-  for (const path of ['/missing', '/__proto__', '/constructor', '/.env', '/website/server.mjs', '/assets/%2e%2e%2f%2e%2e%2fpackage.json', '/docs/missing', '/docs//example.com']) {
+  for (const path of ['/missing', '/__proto__', '/constructor', '/.env', '/website/server.mjs', '/private/discord-bot/config.json', '/private/injector/src/main/resources/config.yml', '/assets/%2e%2e%2f%2e%2e%2fpackage.json', '/docs/missing', '/docs//example.com']) {
     const response = await fetch(base + path);
     assert.equal(response.status, 404, path);
     assert.match(await response.text(), /<h1>404<\/h1><p>Page not found<\/p>/);

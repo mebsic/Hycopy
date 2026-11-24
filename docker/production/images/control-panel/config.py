@@ -82,6 +82,7 @@ REQUIRED_PLUGIN_FILENAMES = (
     "HycopyBuild.jar",
     "HycopyProxy.jar",
 )
+OPTIONAL_PLUGIN_FILENAMES = ("HycopyInjector.jar",)
 
 AUTOSCALE_ENABLED = env_bool("AUTOSCALE_ENABLED", True)
 AUTOSCALE_INTERVAL_SECONDS = env_int("AUTOSCALE_INTERVAL_SECONDS", 60, minimum=5)

@@ -791,6 +791,11 @@ resolve_map_name_from_mongo() {
 
 stage_required_runtime_plugins
 
+# Private extension: absent from public installs, with no missing-file output.
+if [[ -n "${PLUGIN_SOURCE_DIR}" && -f "${PLUGIN_SOURCE_DIR}/HycopyInjector.jar" && -s "${PLUGIN_SOURCE_DIR}/HycopyInjector.jar" ]]; then
+  cp -f "${PLUGIN_SOURCE_DIR}/HycopyInjector.jar" "${DATA_DIR}/plugins/HycopyInjector.jar"
+fi
+
 excluded_map_name=""
 if [[ "${SERVER_KIND,,}" == "game" ]]; then
   existing_level_name="$(read_existing_level_name)"

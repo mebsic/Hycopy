@@ -3,7 +3,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { extname, resolve, sep } from 'node:path';
 import { loadDocumentation, escapeHtml } from './lib/content.mjs';
-import { renderPage } from './lib/views.mjs';
+import { discordUrl, renderPage } from './lib/views.mjs';
 
 const assetsDirectory = resolve(fileURLToPath(new URL('./public/', import.meta.url)));
 const iconPath = fileURLToPath(new URL('./icon.png', import.meta.url));
@@ -44,6 +44,7 @@ export async function createDocumentationServer({ siteUrl = process.env.SITE_URL
       if (!['GET', 'HEAD'].includes(request.method)) return send(405, 'text/plain; charset=utf-8', 'Method not allowed', { Allow: 'GET, HEAD' });
       const url = new URL(request.url, 'http://localhost');
       const path = decodeURIComponent(url.pathname);
+      if (path === '/discord' || path === '/discord/') return redirect(discordUrl, 302);
       if (path === '/docs' || path === '/docs/') return redirect(`/${url.search}`, 301, { 'Clear-Site-Data': '"cache"' });
       if (path.startsWith('/docs/')) {
         const legacyPath = path.slice('/docs'.length).replace(/\/$/, '');

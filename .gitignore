@@ -52,6 +52,9 @@ bin/
 .env
 .env.*
 
+### Local private extensions and Discord bot ###
+/private/
+
 ### Docker development maps ###
 docker/development/maps/*
 !docker/development/maps/README.md

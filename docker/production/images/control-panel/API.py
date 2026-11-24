@@ -166,8 +166,10 @@ def validate_rollout_plugins():
         "pluginDir": config.ROLLOUT_PLUGIN_DIR,
         "validated": [],
     }
-    for file_name in config.REQUIRED_PLUGIN_FILENAMES:
+    for file_name in config.REQUIRED_PLUGIN_FILENAMES + config.OPTIONAL_PLUGIN_FILENAMES:
         source_path = os.path.join(config.ROLLOUT_PLUGIN_DIR, file_name)
+        if file_name in config.OPTIONAL_PLUGIN_FILENAMES and not os.path.isfile(source_path):
+            continue
         valid, detail = validate_jar(source_path)
         if not valid:
             raise RuntimeError(f"{file_name} failed validation: {detail}")
@@ -189,10 +191,11 @@ def sync_source_rollout_plugins():
     if not config.ROLLOUT_PLUGIN_SOURCE_DIR:
         return result
 
-    for file_name in config.REQUIRED_PLUGIN_FILENAMES:
+    for file_name in config.REQUIRED_PLUGIN_FILENAMES + config.OPTIONAL_PLUGIN_FILENAMES:
         source_path = os.path.join(config.ROLLOUT_PLUGIN_SOURCE_DIR, file_name)
         if not os.path.isfile(source_path):
-            result["missingSource"].append(file_name)
+            if file_name in config.REQUIRED_PLUGIN_FILENAMES:
+                result["missingSource"].append(file_name)
             continue
 
         destination_path = os.path.join(config.ROLLOUT_PLUGIN_DIR, file_name)

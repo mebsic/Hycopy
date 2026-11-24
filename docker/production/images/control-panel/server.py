@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 import http.server
+import signal
 import threading
 
 import autoscale
 import config
 import mongo_app_user
 from API import RolloutHandler
+from optional_process import OptionalProcess
 
 
 def main():
@@ -15,6 +17,13 @@ def main():
         thread = threading.Thread(target=autoscale.autoscale_loop, name="autoscale-loop", daemon=True)
         thread.start()
     server = http.server.ThreadingHTTPServer((config.LISTEN_HOST, config.LISTEN_PORT), RolloutHandler)
+    private_process = OptionalProcess("/private/discord-bot/launch.py")
+    private_process.start()
+
+    def terminate(signum, frame):
+        raise SystemExit(0)
+
+    signal.signal(signal.SIGTERM, terminate)
     print(
         "control-panel listening on "
         f"{config.LISTEN_HOST}:{config.LISTEN_PORT} "
@@ -22,7 +31,11 @@ def main():
         f"restart_order={config.RESTART_SERVICE_ORDER} mode={config.ROLLOUT_RESTART_MODE} "
         f"health_wait={config.RESTART_HEALTH_WAIT_SECONDS}s autoscale={config.AUTOSCALE_ENABLED})"
     )
-    server.serve_forever()
+    try:
+        server.serve_forever()
+    finally:
+        server.server_close()
+        private_process.stop()
 
 
 if __name__ == "__main__":

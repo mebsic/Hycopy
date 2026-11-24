@@ -6,16 +6,17 @@
       <GradleProjectSettings>
         <option name="externalProjectPath" value="$PROJECT_DIR$" />
         <option name="gradleJvm" value="17" />
-        <option name="useQualifiedModuleNames" value="false" />
         <option name="modules">
           <set>
             <option value="$PROJECT_DIR$" />
             <option value="$PROJECT_DIR$/build" />
             <option value="$PROJECT_DIR$/core" />
             <option value="$PROJECT_DIR$/murdermystery" />
+            <option value="$PROJECT_DIR$/private/injector" />
             <option value="$PROJECT_DIR$/proxy" />
           </set>
         </option>
+        <option name="useQualifiedModuleNames" value="false" />
       </GradleProjectSettings>
     </option>
   </component>
