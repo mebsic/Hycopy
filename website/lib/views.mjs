@@ -1,6 +1,6 @@
 import { escapeHtml as e } from './content.mjs';
 
-export const discordUrl = 'https://discord.gg/QkYYVzDYnU';
+export const discordUrl = 'https://discord.gg/cd5wQ2KsF5';
 
 const paths = {
   home: '<path d="m3 10 9-7 9 7v10H3z"/><path d="M9 20v-7h6v7"/>',

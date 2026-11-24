@@ -5,7 +5,7 @@ plugins {
 rootProject.name = "Hycopy"
 include("core", "murdermystery", "proxy", "build")
 
-if (file("private/injector/build.gradle.kts").isFile) {
+if (file("injector/build.gradle.kts").isFile) {
     include("injector")
-    project(":injector").projectDir = file("private/injector")
+    project(":injector").projectDir = file("injector")
 }

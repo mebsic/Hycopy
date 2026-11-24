@@ -114,7 +114,7 @@ test('every guide renders directly, its links resolve, and only external links o
 });
 
 test('unknown routes and private files are not exposed; HEAD and unsupported methods behave correctly', async () => {
-  for (const path of ['/missing', '/__proto__', '/constructor', '/.env', '/website/server.mjs', '/private/discord-bot/config.json', '/private/injector/src/main/resources/config.yml', '/assets/%2e%2e%2f%2e%2e%2fpackage.json', '/docs/missing', '/docs//example.com']) {
+  for (const path of ['/missing', '/__proto__', '/constructor', '/.env', '/website/server.mjs', '/private/discord-bot/config.json', '/injector/src/main/resources/config.yml', '/assets/%2e%2e%2f%2e%2e%2fpackage.json', '/docs/missing', '/docs//example.com']) {
     const response = await fetch(base + path);
     assert.equal(response.status, 404, path);
     assert.match(await response.text(), /<h1>404<\/h1><p>Page not found<\/p>/);

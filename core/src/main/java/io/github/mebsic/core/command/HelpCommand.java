@@ -29,7 +29,7 @@ public class HelpCommand implements CommandExecutor {
     private static final String RANK_INFO_PATH = "/hc/en-us/articles/360019646559-Hycopy-Ranks-and-How-to-Obtain-Them";
     private static final String CREATOR_PROGRAM_PATH = "/hc/en-us/categories/360003024319-Creators";
     private static final String DISCORD_LINK_PATH = "/hc/en-us/articles/360019646539-How-to-join-the-Hycopy-Discord";
-    private static final String FORUM_LINK_PATH = "/hc/en-us/articles/360019647059-Linking-Your-Minecraft-Account-to-Copy-net";
+    private static final String FORUM_LINK_PATH = "/hc/en-us/articles/360019647059-Linking-Your-Minecraft-Account-to-Hycopy-net";
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {

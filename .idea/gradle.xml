@@ -12,7 +12,7 @@
             <option value="$PROJECT_DIR$/build" />
             <option value="$PROJECT_DIR$/core" />
             <option value="$PROJECT_DIR$/murdermystery" />
-            <option value="$PROJECT_DIR$/private/injector" />
+            <option value="$PROJECT_DIR$/injector" />
             <option value="$PROJECT_DIR$/proxy" />
           </set>
         </option>
