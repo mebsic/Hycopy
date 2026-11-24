@@ -91,6 +91,9 @@ button { border: 0; }
 .server-address { width: 100%; margin-top: 10px; background: var(--background); border: 1px solid var(--border); border-radius: 6px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 11px; font: 11px/1.6 ui-monospace, monospace; white-space: nowrap; }
 .server-address:hover { background: var(--active); }
 .server-address .icon { width: 13px; height: 13px; color: var(--muted); }
+.sidebar-discord { display: none; margin-top: 15px; }
+.discord-invite { justify-content: flex-start; font-family: var(--font); }
+.discord-invite .icon:last-child { margin-left: auto; }
 .sidebar-source { display: flex; align-items: center; gap: 7px; margin: 28px 10px 0; padding-top: 19px; border-top: 1px solid var(--border); font-size: 10px; color: var(--muted); }
 .sidebar-source .icon { width: 12px; height: 12px; }
 .sidebar-source .icon:last-child { margin-left: auto; }
@@ -268,13 +271,15 @@ code, pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospac
   .header-actions { gap: 6px; }
   .theme-toggle { border: 0; }
   .menu-toggle { display: flex; }
+  .sidebar-intro { padding-bottom: 20px; }
+  .sidebar-discord { display: block; }
   .search-trigger { width: 33px; height: 33px; padding: 7px; background: transparent; border: 0; }
   .search-trigger span { display: none; }
   .search-shortcuts, .search-close-label { display: none; }
   .search-close { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 44px; height: 44px; padding: 0; background: transparent; }
   .search-close-icon { display: block; }
   main { margin-left: 0; }
-  .sidebar { left: auto; right: 0; border-left: 1px solid var(--border); border-right: 0; transform: translateX(100%); visibility: hidden; transition: transform .18s; }
+  .sidebar { left: auto; right: 0; padding-top: 18px; border-left: 1px solid var(--border); border-right: 0; transform: translateX(100%); visibility: hidden; transition: transform .18s; }
   body.nav-open .sidebar { transform: translateX(0); visibility: visible; }
   body.nav-open { overflow: hidden; }
   body.nav-open .nav-overlay { display: block; position: fixed; inset: var(--header-height) 0 0 0; background: #0005; z-index: 14; }
