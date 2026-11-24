@@ -97,7 +97,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./:/workspace:ro
-      - ./private:/private
+      - ./discord:/discord
       - ./docker/development/plugins:/workspace/docker/development/plugins:ro
       - ./docker/production/plugins:/workspace/docker/production/plugins
       - "${PWD}:${PWD}:ro"

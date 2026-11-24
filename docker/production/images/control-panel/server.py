@@ -17,8 +17,8 @@ def main():
         thread = threading.Thread(target=autoscale.autoscale_loop, name="autoscale-loop", daemon=True)
         thread.start()
     server = http.server.ThreadingHTTPServer((config.LISTEN_HOST, config.LISTEN_PORT), RolloutHandler)
-    private_process = OptionalProcess("/private/discord-bot/launch.py")
-    private_process.start()
+    discord_process = OptionalProcess("/discord/launch.py")
+    discord_process.start()
 
     def terminate(signum, frame):
         raise SystemExit(0)
@@ -35,7 +35,7 @@ def main():
         server.serve_forever()
     finally:
         server.server_close()
-        private_process.stop()
+        discord_process.stop()
 
 
 if __name__ == "__main__":
