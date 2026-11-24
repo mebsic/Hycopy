@@ -348,43 +348,32 @@ public class CosmeticService {
 
     private String pickRandomKnife(Profile profile, boolean favoritesOnly) {
         Set<String> unlocked = normalizeIdSet(profile.getUnlocked().get(CosmeticType.KNIFE));
-        if (unlocked == null || unlocked.isEmpty()) {
+        if (unlocked.isEmpty()) {
             return DEFAULT_KNIFE_ID;
         }
+        Set<String> source = favoritesOnly
+                ? normalizeIdSet(profile.getFavorites().get(CosmeticType.KNIFE))
+                : unlocked;
         List<String> candidates = new ArrayList<>();
-        if (favoritesOnly) {
-            Set<String> favorites = profile.getFavorites().get(CosmeticType.KNIFE);
-            if (favorites != null) {
-                for (String id : favorites) {
-                    String normalized = normalizeId(id);
-                    if (normalized.isEmpty() || isSpecialKnifeId(normalized)) {
-                        continue;
-                    }
-                    if (unlocked.contains(normalized)) {
-                        candidates.add(normalized);
-                    }
-                }
+        for (String id : source) {
+            if (isSpecialKnifeId(id) || !unlocked.contains(id) || !knifeSkins.containsKey(id)) {
+                continue;
             }
-            if (candidates.isEmpty()) {
-                return pickRandomKnife(profile, false);
-            }
-        } else {
-            for (String id : unlocked) {
-                String normalized = normalizeId(id);
-                if (normalized.isEmpty() || isSpecialKnifeId(normalized)) {
-                    continue;
-                }
-                if (!knifeSkins.containsKey(normalized)) {
-                    continue;
-                }
-                candidates.add(normalized);
-            }
+            candidates.add(id);
+        }
+        if (candidates.isEmpty() && favoritesOnly) {
+            return pickRandomKnife(profile, false);
         }
         if (candidates.isEmpty()) {
             return DEFAULT_KNIFE_ID;
         }
+        if (candidates.size() > 1) {
+            candidates.remove(profile.getLastRandomKnifeSkin());
+        }
         int index = ThreadLocalRandom.current().nextInt(candidates.size());
-        return candidates.get(index);
+        String selected = candidates.get(index);
+        profile.setLastRandomKnifeSkin(selected);
+        return selected;
     }
 
     private boolean containsNormalized(Set<String> values, String targetNormalized) {

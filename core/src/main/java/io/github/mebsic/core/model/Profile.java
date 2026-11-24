@@ -35,6 +35,7 @@ public class Profile {
     private boolean spectatorFirstPersonEnabled;
     private boolean murderMysteryWinsChatEnabled;
     private boolean murderMysteryTenTimesModeEnabled;
+    private String lastRandomKnifeSkin;
     private final Stats stats;
     private final Set<Rank> unlockedRanks;
     private final Map<CosmeticType, String> selected;
@@ -304,6 +305,14 @@ public class Profile {
         if (rank != null && rank != Rank.DEFAULT) {
             unlockedRanks.add(rank);
         }
+    }
+
+    public String getLastRandomKnifeSkin() {
+        return lastRandomKnifeSkin;
+    }
+
+    public void setLastRandomKnifeSkin(String lastRandomKnifeSkin) {
+        this.lastRandomKnifeSkin = lastRandomKnifeSkin;
     }
 
     public Map<CosmeticType, String> getSelected() {

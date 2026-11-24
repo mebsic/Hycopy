@@ -174,6 +174,7 @@ public class ProfileStore {
         }
         profile.setFirstLogin(doc.getString(MongoManager.PROFILE_FIRST_LOGIN_KEY));
         profile.setLastLogin(doc.getString(MongoManager.PROFILE_LAST_LOGIN_KEY));
+        profile.setLastRandomKnifeSkin(doc.getString("lastRandomKnifeSkin"));
         Boolean online = doc.getBoolean(MongoManager.PROFILE_ONLINE_KEY);
         profile.setOnline(online != null && online);
         ProfileStatus status = ProfileStatus.fromStoredName(doc.getString(MongoManager.PROFILE_STATUS_KEY));
@@ -423,6 +424,7 @@ public class ProfileStore {
                 .append("spectatorNightVisionEnabled", profile.isSpectatorNightVisionEnabled())
                 .append("spectatorHideOtherSpectatorsEnabled", profile.isSpectatorHideOtherSpectatorsEnabled())
                 .append("spectatorFirstPersonEnabled", profile.isSpectatorFirstPersonEnabled())
+                .append("lastRandomKnifeSkin", profile.getLastRandomKnifeSkin())
                 .append("stats", stats)
                 .append(MongoManager.PROFILE_COSMETICS_KEY, cosmetics);
         collection.replaceOne(eq("uuid", profile.getUuid().toString()), doc, new ReplaceOptions().upsert(true));

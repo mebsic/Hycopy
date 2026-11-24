@@ -123,6 +123,7 @@ import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.HashMap;
 import java.util.Set;
 import java.util.UUID;
@@ -1890,7 +1891,12 @@ public class CorePlugin extends JavaPlugin implements CoreApi, Listener, PluginM
         if (profile == null) {
             return cosmetics.createKnife(new Profile(uuid, "Player"));
         }
-        return cosmetics.createKnife(profile);
+        String previousSkin = profile.getLastRandomKnifeSkin();
+        ItemStack knife = cosmetics.createKnife(profile);
+        if (!Objects.equals(previousSkin, profile.getLastRandomKnifeSkin())) {
+            profileService.saveProfile(profile);
+        }
+        return knife;
     }
 
     @Override

@@ -21,7 +21,6 @@ import io.github.mebsic.game.service.ScoreboardService;
 import io.github.mebsic.murdermystery.game.MurderMysteryGamePlayer;
 import io.github.mebsic.murdermystery.game.MurderMysteryGameResult;
 import io.github.mebsic.murdermystery.game.MurderMysteryRole;
-import io.github.mebsic.murdermystery.registry.KnifeSkinRegistry;
 import io.github.mebsic.murdermystery.service.ActionBarService;
 import io.github.mebsic.murdermystery.service.MurderMysteryMinimapService;
 import io.github.mebsic.murdermystery.stats.MurderMysteryStats;
@@ -2669,12 +2668,7 @@ public class MurderMysteryGameManager extends GameManager {
     private ItemStack createMurdererKnife(CoreApi coreApi, Player player) {
         ItemStack knife = null;
         if (player != null && coreApi != null) {
-            KnifeSkinRegistry registry = KnifeSkinRegistry.fromCoreApi(coreApi);
-            Profile profile = coreApi.getProfile(player.getUniqueId());
-            if (profile == null) {
-                profile = new Profile(player.getUniqueId(), player.getName());
-            }
-            knife = registry.createKnife(profile);
+            knife = coreApi.createKnife(player.getUniqueId());
         }
         return applyCombatItemDescription(
                 knife,
