@@ -18,6 +18,7 @@ def main():
         thread.start()
     server = http.server.ThreadingHTTPServer((config.LISTEN_HOST, config.LISTEN_PORT), RolloutHandler)
     discord_process = OptionalProcess("/discord/launch.py")
+    server.optional_process = discord_process
     discord_process.start()
 
     def terminate(signum, frame):

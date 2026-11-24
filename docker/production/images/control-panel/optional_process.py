@@ -9,15 +9,28 @@ class OptionalProcess:
         self.launcher = Path(launcher)
         self.stopping = threading.Event()
         self.lock = threading.Lock()
+        self.lifecycle_lock = threading.Lock()
         self.process = None
         self.thread = None
 
     def start(self):
+        with self.lifecycle_lock:
+            return self._start()
+
+    def _start(self):
+        if self.thread is not None and self.thread.is_alive():
+            return False
         if not self.launcher.is_file():
             return False
+        self.stopping.clear()
         self.thread = threading.Thread(target=self._run, name="optional-private-process", daemon=True)
         self.thread.start()
         return True
+
+    def restart(self):
+        with self.lifecycle_lock:
+            self._stop()
+            return self._start()
 
     def _run(self):
         retry_seconds = 2
@@ -52,6 +65,10 @@ class OptionalProcess:
             retry_seconds = min(retry_seconds * 2, 60)
 
     def stop(self):
+        with self.lifecycle_lock:
+            self._stop()
+
+    def _stop(self):
         self.stopping.set()
         with self.lock:
             process = self.process

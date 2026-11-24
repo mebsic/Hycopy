@@ -619,6 +619,12 @@ class RolloutHandler(http.server.BaseHTTPRequestHandler):
 
                         project_containers = docker.list_project_containers(compose_project, include_all=True)
 
+                optional_process_restarted = False
+                if not failed and requested_server_ids is None and (not requested_services or "velocity" in target_services):
+                    optional_process = getattr(self.server, "optional_process", None)
+                    if optional_process is not None:
+                        optional_process_restarted = optional_process.restart()
+
                 status_code = 200 if not failed else 500
                 target_server_ids = sorted(
                     {
@@ -641,6 +647,7 @@ class RolloutHandler(http.server.BaseHTTPRequestHandler):
                         "restartMode": restart_mode,
                         "targets": [target["name"] for target in targets],
                         "restarted": restarted,
+                        "optionalProcessRestarted": optional_process_restarted,
                         "failed": failed,
                         "pluginSync": plugin_sync,
                         "pluginValidation": plugin_validation,
