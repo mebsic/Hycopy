@@ -156,7 +156,7 @@ test('search contains guide text; assets, health, canonical URLs and sitemap are
   const assetUrls = new Set([...home.matchAll(/(?:href|src)="(\/assets\/[^"<>]+)"/g)].map(match => match[1]));
   assetUrls.add('/assets/network.svg');
   for (const assetUrl of assetUrls) assert.equal((await fetch(base + assetUrl)).status, 200, assetUrl);
-  const discordPosition = home.indexOf('href="https://discord.com"');
+  const discordPosition = home.indexOf(`href="${discordUrl}"`);
   const githubPosition = home.indexOf('>GitHub ');
   assert.ok(discordPosition >= 0 && githubPosition > discordPosition);
   const sitemap = await (await fetch(base + '/sitemap.xml')).text();
