@@ -10,6 +10,7 @@ import org.bson.Document;
 
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -41,6 +42,7 @@ public class ChatChannelService {
 
     private final MongoCollection<Document> collection;
     private final Map<UUID, ChatChannel> channelByPlayer = new ConcurrentHashMap<UUID, ChatChannel>();
+    private final Set<UUID> pendingPartyChannelNotices = ConcurrentHashMap.newKeySet();
 
     public ChatChannelService() {
         this(null);
@@ -83,19 +85,38 @@ public class ChatChannelService {
             clear(playerId);
             return;
         }
-        if (channel == ChatChannel.ALL) {
-            channelByPlayer.remove(playerId);
-        } else {
-            channelByPlayer.put(playerId, channel);
-        }
+        channelByPlayer.compute(playerId, (uuid, current) -> {
+            pendingPartyChannelNotices.remove(uuid);
+            return channel == ChatChannel.ALL ? null : channel;
+        });
         persistChannel(playerId, channel);
+    }
+
+    public void resetAfterPartyRemoval(UUID playerId) {
+        if (playerId == null) {
+            return;
+        }
+        channelByPlayer.compute(playerId, (uuid, current) -> {
+            if (current == ChatChannel.PARTY) {
+                pendingPartyChannelNotices.add(uuid);
+            }
+            return null;
+        });
+        persistChannel(playerId, ChatChannel.ALL);
+    }
+
+    public boolean consumePartyChannelNotice(UUID playerId) {
+        return playerId != null && pendingPartyChannelNotices.remove(playerId);
     }
 
     public void clear(UUID playerId) {
         if (playerId == null) {
             return;
         }
-        channelByPlayer.remove(playerId);
+        channelByPlayer.compute(playerId, (uuid, current) -> {
+            pendingPartyChannelNotices.remove(uuid);
+            return null;
+        });
     }
 
     private void ensurePlayerRecord(UUID playerId) {

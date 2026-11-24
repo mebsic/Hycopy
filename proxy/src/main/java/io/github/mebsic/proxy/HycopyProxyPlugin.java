@@ -220,7 +220,7 @@ public class HycopyProxyPlugin {
             this.partyService = new PartyService(proxy, rankResolver);
             this.partyService.setMemberRemovedFromPartyListener(memberId -> {
                 if (chatChannelService != null) {
-                    chatChannelService.setChannel(memberId, ChatChannelService.ChatChannel.ALL);
+                    chatChannelService.resetAfterPartyRemoval(memberId);
                 }
             });
             subscribeProfileStatusUpdates();
@@ -730,6 +730,12 @@ public class HycopyProxyPlugin {
         boolean muted = chatRestrictionService != null && chatRestrictionService.isMuted(playerId);
         ChatChannelService.ChatChannel channel = chatChannelService.getChannel(playerId);
         if (channel != ChatChannelService.ChatChannel.PARTY) {
+            if (!message.trim().isEmpty() && chatChannelService.consumePartyChannelNotice(playerId)
+                    && !partyService.isInParty(playerId)) {
+                sendPartyChannelResetMessage(player);
+                denyPlayerChat(event);
+                return;
+            }
             if (!muted) {
                 storeChatMessage(player, message, ChatChannelService.ChatChannel.ALL);
             }
@@ -742,10 +748,7 @@ public class HycopyProxyPlugin {
 
         if (!partyService.isInParty(playerId)) {
             chatChannelService.setChannel(playerId, ChatChannelService.ChatChannel.ALL);
-            sendPartyChatFramed(player, Component.text(
-                    "You are not in a party. Your chat channel has been set to ALL.",
-                    NamedTextColor.RED
-            ));
+            sendPartyChannelResetMessage(player);
             denyPlayerChat(event);
             return;
         }
@@ -1971,6 +1974,13 @@ public class HycopyProxyPlugin {
         } catch (Throwable ignored) {
             return "§7" + fallback;
         }
+    }
+
+    private void sendPartyChannelResetMessage(Player player) {
+        sendPartyChatFramed(player, Component.text(
+                "You are not in a party and were moved to the ALL channel.",
+                NamedTextColor.RED
+        ));
     }
 
     private void sendPartyChatFramed(Player player, Component line) {

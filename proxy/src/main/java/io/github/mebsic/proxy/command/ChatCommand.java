@@ -47,6 +47,7 @@ public class ChatCommand implements SimpleCommand {
         }
 
         if (channels.getChannel(player.getUniqueId()) == channel) {
+            channels.consumePartyChannelNotice(player.getUniqueId());
             sendFramed(player, Component.text("You're already in this channel!", NamedTextColor.RED));
             return;
         }
