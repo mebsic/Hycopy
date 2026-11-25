@@ -103,7 +103,7 @@ main { margin-left: var(--sidebar-width); min-height: calc(100vh - var(--header-
 .eyebrow { display: flex; align-items: center; gap: 8px; font-size: 9px; font-weight: 650; letter-spacing: 1.8px; color: var(--muted); }
 .hero h1 { margin: 0 0 19px; font-size: clamp(34px, 3.4vw, 50px); font-weight: 650; line-height: 1.13; letter-spacing: -2.1px; }
 .hero-description { max-width: 680px; color: var(--muted); font-size: 15px; line-height: 1.9; margin: 0; }
-.hero-actions { display: flex; align-items: center; gap: 16px; margin-top: 25px; position: relative; z-index: 1; }
+.hero-actions { display: flex; align-items: center; gap: 16px 28px; margin-top: 25px; position: relative; z-index: 1; }
 .button { display: inline-flex; align-items: center; justify-content: center; gap: 13px; padding: 11px 17px; border-radius: 6px; font-size: 13px; font-weight: 550; }
 .button-primary { background: var(--text); color: var(--background); border: 1px solid var(--text); }
 .button-primary:hover { opacity: .88; }
@@ -250,7 +250,7 @@ code, pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospac
   .search-trigger { width: 33px; height: 33px; padding: 7px; background: transparent; border: 0; }
   .search-trigger span, .search-trigger kbd { display: none; }
   .hero h1 { font-size: 36px; }
-  .hero-actions { flex-wrap: wrap; gap: 7px; }
+  .hero-actions { flex-wrap: wrap; gap: 7px 28px; }
   .hero-meta { gap: 13px; font-size: 9px; }
   .guide-cards { grid-template-columns: 1fr; }
   .guide-card { display: grid; grid-template-columns: 40px 1fr; column-gap: 17px; padding: 20px; }
